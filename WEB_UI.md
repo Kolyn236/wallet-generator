@@ -24,6 +24,19 @@ python3 web_app.py --port 9000 --open
 
 The server deliberately binds to `127.0.0.1`, not `0.0.0.0`.
 
+## Languages
+
+The web UI supports:
+
+- Russian (`ru`)
+- English (`en`)
+
+Use the `RU / EN` switch in the header. The selected language is saved in browser `localStorage` under a non-secret preference key so it survives page reloads.
+
+If there is no saved preference, the UI uses Russian when the browser language starts with `ru`; otherwise it defaults to English.
+
+Only the language preference may be stored in browser storage. WIF/private keys are never written to `localStorage` or `sessionStorage`.
+
 ## Screens
 
 ### Wallet
@@ -93,7 +106,8 @@ browser -> 127.0.0.1 -> local Python process
 The web app:
 
 - does not store WIF/private keys on disk;
-- does not use localStorage/sessionStorage;
+- stores only the selected `ru/en` language preference in `localStorage`;
+- does not store secrets in `localStorage` or `sessionStorage`;
 - sends `Cache-Control: no-store`;
 - requires a random per-process local API token for POST requests;
 - denies framing;

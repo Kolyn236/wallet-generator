@@ -1,21 +1,28 @@
 #!/usr/bin/env python3
 """
-Educational Dogecoin mainnet wallet generator.
+Educational Dogecoin mainnet wallet + raw P2PKH transaction tool.
 
-Generates a secp256k1 private key locally, derives the compressed public key,
-encodes a Dogecoin P2PKH address, and exports the private key in compressed WIF.
-
-No network requests and no third-party Python packages are used.
+The private key and transaction signature are created locally. No third-party
+Python packages are required. Network access is only used by explicit broadcast
+commands.
 """
 
 from __future__ import annotations
 
 import argparse
+import getpass
 import hashlib
+import hmac
+import json
+import math
 import secrets
 import struct
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 
 # secp256k1 domain parameters.
 P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
@@ -28,7 +35,13 @@ G = (GX, GY)
 DOGE_P2PKH_PREFIX = 0x1E
 DOGE_WIF_PREFIX = 0x9E
 
+KOINU_PER_DOGE = 100_000_000
+RECOMMENDED_FEE_RATE_KOINU_PER_KB = 1_000_000  # 0.01 DOGE/kB.
+SOFT_DUST_KOINU = 1_000_000  # 0.01 DOGE.
+SIGHASH_ALL = 0x01
+
 BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+BASE58_INDEX = {char: index for index, char in enumerate(BASE58_ALPHABET)}
 
 Point = tuple[int, int] | None
 
@@ -39,6 +52,25 @@ class Wallet:
     public_key_compressed: bytes
     address: str
     wif: str
+
+
+@dataclass(frozen=True)
+class TxOutput:
+    value: int
+    script_pubkey: bytes
+
+
+@dataclass(frozen=True)
+class BuiltTransaction:
+    raw: bytes
+    txid: str
+    size: int
+    fee: int
+    sent: int
+    change: int
+    source_address: str
+    destination_address: str
+    change_address: str | None
 
 
 def sha256(data: bytes) -> bytes:
@@ -203,7 +235,6 @@ def hash160(data: bytes) -> bytes:
 
 
 def base58_encode(data: bytes) -> str:
-    """Encode bytes using the Bitcoin/Dogecoin Base58 alphabet."""
     number = int.from_bytes(data, byteorder="big")
     encoded = ""
 
@@ -212,22 +243,48 @@ def base58_encode(data: bytes) -> str:
         encoded = BASE58_ALPHABET[remainder] + encoded
 
     leading_zeroes = len(data) - len(data.lstrip(b"\x00"))
-    return ("1" * leading_zeroes) + (encoded or "")
+    return ("1" * leading_zeroes) + encoded
+
+
+def base58_decode(text: str) -> bytes:
+    if not text:
+        raise ValueError("Base58 value cannot be empty.")
+
+    number = 0
+    for char in text:
+        try:
+            digit = BASE58_INDEX[char]
+        except KeyError as exc:
+            raise ValueError(f"Invalid Base58 character: {char!r}") from exc
+        number = number * 58 + digit
+
+    body = b"" if number == 0 else number.to_bytes((number.bit_length() + 7) // 8, "big")
+    leading_zeroes = len(text) - len(text.lstrip("1"))
+    return (b"\x00" * leading_zeroes) + body
 
 
 def base58check(payload: bytes) -> str:
-    """Base58Check = payload + first 4 bytes of double-SHA256(payload)."""
     checksum = double_sha256(payload)[:4]
     return base58_encode(payload + checksum)
 
 
-def mod_inverse(value: int) -> int:
-    """Multiplicative inverse modulo the secp256k1 field prime."""
+def base58check_decode(text: str) -> bytes:
+    decoded = base58_decode(text)
+    if len(decoded) < 5:
+        raise ValueError("Base58Check value is too short.")
+
+    payload, checksum = decoded[:-4], decoded[-4:]
+    expected = double_sha256(payload)[:4]
+    if not hmac.compare_digest(checksum, expected):
+        raise ValueError("Invalid Base58Check checksum.")
+    return payload
+
+
+def mod_inverse_field(value: int) -> int:
     return pow(value, P - 2, P)
 
 
 def point_add(left: Point, right: Point) -> Point:
-    """Add two points on y^2 = x^3 + 7 over the secp256k1 finite field."""
     if left is None:
         return right
     if right is None:
@@ -240,9 +297,11 @@ def point_add(left: Point, right: Point) -> Point:
         return None
 
     if left == right:
-        slope = (3 * x1 * x1) * mod_inverse(2 * y1 % P) % P
+        if y1 == 0:
+            return None
+        slope = (3 * x1 * x1) * mod_inverse_field(2 * y1 % P) % P
     else:
-        slope = (y2 - y1) * mod_inverse((x2 - x1) % P) % P
+        slope = (y2 - y1) * mod_inverse_field((x2 - x1) % P) % P
 
     x3 = (slope * slope - x1 - x2) % P
     y3 = (slope * (x1 - x3) - y1) % P
@@ -250,9 +309,8 @@ def point_add(left: Point, right: Point) -> Point:
 
 
 def scalar_multiply(scalar: int, point: Point = G) -> Point:
-    """Double-and-add scalar multiplication on secp256k1."""
     if not 1 <= scalar < N:
-        raise ValueError("Private key must be in the range 1..n-1.")
+        raise ValueError("Scalar must be in the range 1..n-1.")
 
     result: Point = None
     addend = point
@@ -283,13 +341,27 @@ def public_key_to_address(public_key: bytes) -> str:
 
 
 def private_key_to_wif(private_key: int) -> str:
-    # Trailing 0x01 means the corresponding public key is compressed.
     payload = (
         bytes([DOGE_WIF_PREFIX])
         + private_key.to_bytes(32, byteorder="big")
         + b"\x01"
     )
     return base58check(payload)
+
+
+def wif_to_private_key(wif: str) -> int:
+    payload = base58check_decode(wif.strip())
+    if len(payload) != 34:
+        raise ValueError("Only compressed Dogecoin mainnet WIF keys are supported.")
+    if payload[0] != DOGE_WIF_PREFIX:
+        raise ValueError("WIF is not a Dogecoin mainnet private key.")
+    if payload[-1] != 0x01:
+        raise ValueError("Only compressed WIF keys are supported.")
+
+    private_key = int.from_bytes(payload[1:33], "big")
+    if not 1 <= private_key < N:
+        raise ValueError("WIF contains an invalid secp256k1 private key.")
+    return private_key
 
 
 def wallet_from_private_key(private_key: int) -> Wallet:
@@ -302,37 +374,382 @@ def wallet_from_private_key(private_key: int) -> Wallet:
     )
 
 
+def wallet_from_wif(wif: str) -> Wallet:
+    return wallet_from_private_key(wif_to_private_key(wif))
+
+
 def generate_wallet() -> Wallet:
     private_key = secrets.randbelow(N - 1) + 1
     return wallet_from_private_key(private_key)
 
 
-def self_test() -> None:
+def doge_to_koinu(value: str | Decimal) -> int:
+    try:
+        amount = Decimal(value)
+    except InvalidOperation as exc:
+        raise ValueError(f"Invalid DOGE amount: {value!r}") from exc
+
+    if not amount.is_finite() or amount < 0:
+        raise ValueError("DOGE amount must be a non-negative finite number.")
+
+    quantized = amount.quantize(Decimal("0.00000001"), rounding=ROUND_DOWN)
+    if quantized != amount:
+        raise ValueError("DOGE supports at most 8 decimal places.")
+    return int(quantized * KOINU_PER_DOGE)
+
+
+def format_doge(koinu: int) -> str:
+    sign = "-" if koinu < 0 else ""
+    value = abs(koinu)
+    whole, fraction = divmod(value, KOINU_PER_DOGE)
+    return f"{sign}{whole}.{fraction:08d}"
+
+
+def address_to_pubkey_hash(address: str) -> bytes:
+    payload = base58check_decode(address.strip())
+    if len(payload) != 21:
+        raise ValueError("Expected a legacy Dogecoin P2PKH address.")
+    if payload[0] != DOGE_P2PKH_PREFIX:
+        raise ValueError("Address is not a Dogecoin mainnet P2PKH address.")
+    return payload[1:]
+
+
+def p2pkh_script_pubkey(address: str) -> bytes:
+    pubkey_hash = address_to_pubkey_hash(address)
+    return b"\x76\xa9\x14" + pubkey_hash + b"\x88\xac"
+
+
+def encode_varint(value: int) -> bytes:
+    if value < 0:
+        raise ValueError("Varint cannot be negative.")
+    if value < 0xFD:
+        return bytes([value])
+    if value <= 0xFFFF:
+        return b"\xfd" + struct.pack("<H", value)
+    if value <= 0xFFFFFFFF:
+        return b"\xfe" + struct.pack("<I", value)
+    if value <= 0xFFFFFFFFFFFFFFFF:
+        return b"\xff" + struct.pack("<Q", value)
+    raise ValueError("Varint is too large.")
+
+
+def push_data(data: bytes) -> bytes:
+    length = len(data)
+    if length < 0x4C:
+        return bytes([length]) + data
+    if length <= 0xFF:
+        return b"\x4c" + bytes([length]) + data
+    if length <= 0xFFFF:
+        return b"\x4d" + struct.pack("<H", length) + data
+    raise ValueError("Pushdata is too large for this educational tool.")
+
+
+def serialize_input(prev_txid: str, vout: int, script_sig: bytes, sequence: int = 0xFFFFFFFF) -> bytes:
+    try:
+        txid_bytes = bytes.fromhex(prev_txid)
+    except ValueError as exc:
+        raise ValueError("UTXO txid must be 64 hexadecimal characters.") from exc
+    if len(txid_bytes) != 32:
+        raise ValueError("UTXO txid must be exactly 32 bytes / 64 hex characters.")
+    if not 0 <= vout <= 0xFFFFFFFF:
+        raise ValueError("UTXO vout is outside uint32 range.")
+    if not 0 <= sequence <= 0xFFFFFFFF:
+        raise ValueError("Sequence is outside uint32 range.")
+
+    return (
+        txid_bytes[::-1]
+        + struct.pack("<I", vout)
+        + encode_varint(len(script_sig))
+        + script_sig
+        + struct.pack("<I", sequence)
+    )
+
+
+def serialize_output(output: TxOutput) -> bytes:
+    if not 0 <= output.value <= 0x7FFFFFFFFFFFFFFF:
+        raise ValueError("Output value is outside int64 range.")
+    return (
+        struct.pack("<Q", output.value)
+        + encode_varint(len(output.script_pubkey))
+        + output.script_pubkey
+    )
+
+
+def serialize_transaction(
+    prev_txid: str,
+    vout: int,
+    script_sig: bytes,
+    outputs: list[TxOutput],
+    *,
+    version: int = 1,
+    locktime: int = 0,
+    sequence: int = 0xFFFFFFFF,
+) -> bytes:
+    return (
+        struct.pack("<I", version)
+        + encode_varint(1)
+        + serialize_input(prev_txid, vout, script_sig, sequence)
+        + encode_varint(len(outputs))
+        + b"".join(serialize_output(output) for output in outputs)
+        + struct.pack("<I", locktime)
+    )
+
+
+def deterministic_k(private_key: int, message_hash: bytes) -> int:
+    """RFC6979 deterministic nonce generation with HMAC-SHA256."""
+    if len(message_hash) != 32:
+        raise ValueError("ECDSA message hash must be exactly 32 bytes.")
+
+    x = private_key.to_bytes(32, "big")
+    h1 = (int.from_bytes(message_hash, "big") % N).to_bytes(32, "big")
+
+    v = b"\x01" * 32
+    k = b"\x00" * 32
+
+    k = hmac.new(k, v + b"\x00" + x + h1, hashlib.sha256).digest()
+    v = hmac.new(k, v, hashlib.sha256).digest()
+    k = hmac.new(k, v + b"\x01" + x + h1, hashlib.sha256).digest()
+    v = hmac.new(k, v, hashlib.sha256).digest()
+
+    while True:
+        v = hmac.new(k, v, hashlib.sha256).digest()
+        candidate = int.from_bytes(v, "big")
+        if 1 <= candidate < N:
+            return candidate
+        k = hmac.new(k, v + b"\x00", hashlib.sha256).digest()
+        v = hmac.new(k, v, hashlib.sha256).digest()
+
+
+def der_integer(value: int) -> bytes:
+    if value <= 0:
+        raise ValueError("DER integer must be positive.")
+    raw = value.to_bytes((value.bit_length() + 7) // 8, "big")
+    if raw[0] & 0x80:
+        raw = b"\x00" + raw
+    return b"\x02" + bytes([len(raw)]) + raw
+
+
+def der_signature(r: int, s: int) -> bytes:
+    body = der_integer(r) + der_integer(s)
+    return b"\x30" + bytes([len(body)]) + body
+
+
+def ecdsa_sign(private_key: int, message_hash: bytes) -> tuple[int, int]:
+    z = int.from_bytes(message_hash, "big")
+    nonce = deterministic_k(private_key, message_hash)
+
+    point = scalar_multiply(nonce)
+    if point is None:
+        raise RuntimeError("ECDSA nonce produced point at infinity.")
+
+    r = point[0] % N
+    if r == 0:
+        raise RuntimeError("ECDSA produced r=0.")
+
+    s = (pow(nonce, -1, N) * (z + r * private_key)) % N
+    if s == 0:
+        raise RuntimeError("ECDSA produced s=0.")
+
+    # Standard low-S form.
+    if s > N // 2:
+        s = N - s
+    return r, s
+
+
+def ecdsa_verify(public_key_point: Point, message_hash: bytes, r: int, s: int) -> bool:
+    """Small self-test verifier; transaction creation does not depend on it."""
+    if public_key_point is None or not (1 <= r < N and 1 <= s < N):
+        return False
+
+    z = int.from_bytes(message_hash, "big")
+    w = pow(s, -1, N)
+    u1 = (z * w) % N
+    u2 = (r * w) % N
+    point = point_add(scalar_multiply(u1), scalar_multiply(u2, public_key_point))
+    return point is not None and point[0] % N == r
+
+
+def signature_hash(
+    prev_txid: str,
+    vout: int,
+    prev_script_pubkey: bytes,
+    outputs: list[TxOutput],
+) -> bytes:
+    unsigned = serialize_transaction(
+        prev_txid,
+        vout,
+        prev_script_pubkey,
+        outputs,
+    )
+    return double_sha256(unsigned + struct.pack("<I", SIGHASH_ALL))
+
+
+def sign_p2pkh_transaction(
+    private_key: int,
+    prev_txid: str,
+    vout: int,
+    outputs: list[TxOutput],
+) -> tuple[bytes, bytes, tuple[int, int]]:
+    public_key = compressed_public_key(private_key)
+    source_address = public_key_to_address(public_key)
+    prev_script_pubkey = p2pkh_script_pubkey(source_address)
+
+    digest = signature_hash(prev_txid, vout, prev_script_pubkey, outputs)
+    r, s = ecdsa_sign(private_key, digest)
+    signature = der_signature(r, s) + bytes([SIGHASH_ALL])
+    script_sig = push_data(signature) + push_data(public_key)
+
+    raw = serialize_transaction(prev_txid, vout, script_sig, outputs)
+    return raw, digest, (r, s)
+
+
+def build_signed_transaction(
+    *,
+    private_key: int,
+    source_address: str,
+    prev_txid: str,
+    vout: int,
+    input_value: int,
+    destination_address: str,
+    send_value: int,
+    fee_rate_koinu_per_kb: int = RECOMMENDED_FEE_RATE_KOINU_PER_KB,
+    change_address: str | None = None,
+) -> BuiltTransaction:
+    if input_value <= 0:
+        raise ValueError("UTXO amount must be greater than zero.")
+    if send_value <= 0:
+        raise ValueError("Send amount must be greater than zero.")
+    if send_value < SOFT_DUST_KOINU:
+        raise ValueError("Send amount is below 0.01 DOGE; this tool avoids soft-dust outputs.")
+    if fee_rate_koinu_per_kb <= 0:
+        raise ValueError("Fee rate must be greater than zero.")
+
+    wallet = wallet_from_private_key(private_key)
+    if wallet.address != source_address:
+        raise ValueError(
+            "The WIF/private key does not match --source. "
+            f"WIF derives {wallet.address}."
+        )
+
+    # Validate addresses before any signing.
+    p2pkh_script_pubkey(source_address)
+    destination_script = p2pkh_script_pubkey(destination_address)
+    if change_address is None:
+        change_address = source_address
+    change_script = p2pkh_script_pubkey(change_address)
+
+    if send_value >= input_value:
+        raise ValueError("Send amount must leave room for the network fee.")
+
+    # Iterate because exact DER signature length changes the exact tx byte size,
+    # and Dogecoin's recommended fee is calculated over exact transaction size.
+    fee = 0
+
+    for _ in range(8):
+        available_change = input_value - send_value - fee
+        if available_change < 0:
+            raise ValueError("UTXO is too small for send amount plus network fee.")
+
+        outputs = [TxOutput(send_value, destination_script)]
+        if available_change >= SOFT_DUST_KOINU:
+            outputs.append(TxOutput(available_change, change_script))
+
+        raw, _, _ = sign_p2pkh_transaction(private_key, prev_txid, vout, outputs)
+        actual_fee = input_value - sum(output.value for output in outputs)
+        recommended_fee = math.ceil(len(raw) * fee_rate_koinu_per_kb / 1000)
+        new_fee = max(actual_fee, recommended_fee)
+
+        if new_fee == fee:
+            break
+        fee = new_fee
+    else:
+        raise RuntimeError("Fee calculation did not converge.")
+
+    # Rebuild until both exact signed byte size and output amounts agree.
+    for _ in range(8):
+        available_change = input_value - send_value - fee
+        if available_change < 0:
+            raise ValueError("UTXO is too small for send amount plus network fee.")
+
+        outputs = [TxOutput(send_value, destination_script)]
+        if available_change >= SOFT_DUST_KOINU:
+            outputs.append(TxOutput(available_change, change_script))
+            final_change = available_change
+            final_change_address: str | None = change_address
+        else:
+            final_change = 0
+            final_change_address = None
+
+        raw, _, _ = sign_p2pkh_transaction(private_key, prev_txid, vout, outputs)
+        final_fee = input_value - sum(output.value for output in outputs)
+        recommended_fee = math.ceil(len(raw) * fee_rate_koinu_per_kb / 1000)
+
+        if final_fee >= recommended_fee:
+            break
+        fee = recommended_fee
+    else:
+        raise RuntimeError("Final fee calculation did not converge.")
+
+    txid = double_sha256(raw)[::-1].hex()
+
+    return BuiltTransaction(
+        raw=raw,
+        txid=txid,
+        size=len(raw),
+        fee=final_fee,
+        sent=send_value,
+        change=final_change,
+        source_address=source_address,
+        destination_address=destination_address,
+        change_address=final_change_address,
+    )
+
+
+def read_raw_transaction(path: str | None) -> str:
+    if path:
+        with open(path, "r", encoding="utf-8") as handle:
+            raw_hex = handle.read().strip()
+    else:
+        raw_hex = sys.stdin.read().strip()
+
+    try:
+        raw = bytes.fromhex(raw_hex)
+    except ValueError as exc:
+        raise ValueError("Raw transaction must be hexadecimal.") from exc
+
+    if not raw:
+        raise ValueError("Raw transaction is empty.")
+    return raw.hex()
+
+
+def broadcast_dogechain(raw_hex: str) -> dict:
     """
-    Verify RIPEMD-160 and a deterministic Dogecoin vector.
+    Broadcast a signed raw transaction through DogeChain.
 
-    Never use the test private key for real funds.
+    This sends only the already-signed public transaction. The private key/WIF
+    never leaves the local machine.
     """
-    assert ripemd160_python(b"").hex() == (
-        "9c1185a5c5e9fc54612808977ee8f548b2258d31"
+    endpoint = "https://dogechain.info/api/v1/pushtx"
+    body = urllib.parse.urlencode({"tx": raw_hex}).encode("ascii")
+    request = urllib.request.Request(
+        endpoint,
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
     )
-    assert ripemd160_python(b"abc").hex() == (
-        "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc"
-    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            text = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"DogeChain HTTP {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"DogeChain request failed: {exc.reason}") from exc
 
-    wallet = wallet_from_private_key(1)
-
-    expected_public_key = (
-        "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
-    )
-    expected_address = "DFpN6QqFfUm3gKNaxN6tNcab1FArL9cZLE"
-    expected_wif = "QNcdLVw8fHkixm6NNyN6nVwxKek4u7qrioRbQmjxac5TVoTtZuot"
-
-    assert wallet.public_key_compressed.hex() == expected_public_key
-    assert wallet.address == expected_address
-    assert wallet.wif == expected_wif
-
-    print("Self-test passed.")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {"raw_response": text}
 
 
 def print_wallet(wallet: Wallet) -> None:
@@ -349,16 +766,153 @@ def print_wallet(wallet: Wallet) -> None:
     print("- Back up the WIF securely before sending real funds to this address.")
 
 
+def print_built_transaction(tx: BuiltTransaction, output_path: str | None) -> None:
+    print("Signed Dogecoin transaction created locally.")
+    print()
+    print(f"Source:       {tx.source_address}")
+    print(f"Destination:  {tx.destination_address}")
+    print(f"Send:         {format_doge(tx.sent)} DOGE")
+    print(f"Change:       {format_doge(tx.change)} DOGE")
+    if tx.change_address:
+        print(f"Change addr:  {tx.change_address}")
+    else:
+        print("Change addr:  none (small remainder was added to fee)")
+    print(f"Network fee:  {format_doge(tx.fee)} DOGE")
+    print(f"Size:         {tx.size} bytes")
+    print(f"TXID:         {tx.txid}")
+    print()
+    if output_path:
+        print(f"Raw tx saved: {output_path}")
+    else:
+        print("Raw transaction:")
+        print(tx.raw.hex())
+    print()
+    print("NOT BROADCAST.")
+    print("Review the destination, amount, change and fee before broadcasting.")
+
+
+def self_test() -> None:
+    """Verify crypto primitives, wallet vectors and a signed P2PKH transaction."""
+    assert ripemd160_python(b"").hex() == "9c1185a5c5e9fc54612808977ee8f548b2258d31"
+    assert ripemd160_python(b"abc").hex() == "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc"
+
+    wallet = wallet_from_private_key(1)
+    expected_public_key = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    expected_address = "DFpN6QqFfUm3gKNaxN6tNcab1FArL9cZLE"
+    expected_wif = "QNcdLVw8fHkixm6NNyN6nVwxKek4u7qrioRbQmjxac5TVoTtZuot"
+
+    assert wallet.public_key_compressed.hex() == expected_public_key
+    assert wallet.address == expected_address
+    assert wallet.wif == expected_wif
+    assert wallet_from_wif(expected_wif).private_key == 1
+    assert address_to_pubkey_hash(expected_address) == hash160(wallet.public_key_compressed)
+
+    # Build a deterministic dummy spend. The referenced txid need not exist:
+    # this checks local serialization + signing only.
+    destination = wallet_from_private_key(2).address
+    outputs = [
+        TxOutput(doge_to_koinu("1"), p2pkh_script_pubkey(destination)),
+        TxOutput(doge_to_koinu("8.99"), p2pkh_script_pubkey(wallet.address)),
+    ]
+    dummy_prev_txid = "11" * 32
+    raw, digest, (r, s) = sign_p2pkh_transaction(1, dummy_prev_txid, 0, outputs)
+    assert len(raw) in (225, 226, 227)
+    assert len(double_sha256(raw)) == 32
+    assert ecdsa_verify(G, digest, r, s)
+
+    built = build_signed_transaction(
+        private_key=1,
+        source_address=wallet.address,
+        prev_txid=dummy_prev_txid,
+        vout=0,
+        input_value=doge_to_koinu("10"),
+        destination_address=destination,
+        send_value=doge_to_koinu("3"),
+    )
+    assert built.sent == doge_to_koinu("3")
+    assert built.change > 0
+    assert built.fee >= math.ceil(
+        built.size * RECOMMENDED_FEE_RATE_KOINU_PER_KB / 1000
+    )
+    assert built.sent + built.change + built.fee == doge_to_koinu("10")
+
+    print("Self-test passed.")
+
+
+def add_build_tx_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--source", required=True, help="source Dogecoin P2PKH address")
+    parser.add_argument("--utxo-txid", required=True, help="transaction id containing the UTXO")
+    parser.add_argument("--utxo-vout", type=int, required=True, help="UTXO output index")
+    parser.add_argument("--utxo-amount", required=True, help="UTXO amount in DOGE")
+    parser.add_argument("--to", required=True, help="destination Dogecoin P2PKH address")
+    parser.add_argument("--amount", required=True, help="amount to send in DOGE")
+    parser.add_argument(
+        "--change",
+        help="change address; defaults to the source address",
+    )
+    parser.add_argument(
+        "--fee-rate",
+        default="0.01",
+        help="fee rate in DOGE/kB; default: 0.01",
+    )
+    parser.add_argument(
+        "--out",
+        help="write signed raw transaction hex to this file instead of stdout",
+    )
+    parser.add_argument(
+        "--wif-file",
+        help="read the source WIF from a local file instead of prompting",
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a Dogecoin mainnet P2PKH wallet locally."
+        description="Educational Dogecoin mainnet wallet and P2PKH transaction tool."
     )
     parser.add_argument(
         "--self-test",
         action="store_true",
-        help="run deterministic RIPEMD-160/address tests and exit",
+        help="run deterministic local tests and exit",
     )
+
+    subparsers = parser.add_subparsers(dest="command")
+
+    subparsers.add_parser("generate", help="generate a new local wallet")
+
+    build_parser = subparsers.add_parser(
+        "build-tx",
+        help="build and sign a one-input P2PKH transaction locally",
+    )
+    add_build_tx_arguments(build_parser)
+
+    broadcast_parser = subparsers.add_parser(
+        "broadcast",
+        help="broadcast an already-signed raw transaction",
+    )
+    broadcast_parser.add_argument(
+        "--raw-file",
+        help="file containing raw tx hex; if omitted, read from stdin",
+    )
+    broadcast_parser.add_argument(
+        "--provider",
+        choices=("dogechain",),
+        default="dogechain",
+        help="broadcast provider; default: dogechain",
+    )
+    broadcast_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="required acknowledgement that the transaction is ready to broadcast",
+    )
+
     return parser.parse_args()
+
+
+def load_wif(args: argparse.Namespace) -> str:
+    if args.wif_file:
+        with open(args.wif_file, "r", encoding="utf-8") as handle:
+            return handle.read().strip()
+    return getpass.getpass("Source wallet WIF (hidden): ").strip()
 
 
 def main() -> int:
@@ -367,13 +921,52 @@ def main() -> int:
     try:
         if args.self_test:
             self_test()
-        else:
+            return 0
+
+        if args.command in (None, "generate"):
             print_wallet(generate_wallet())
-    except (RuntimeError, ValueError, AssertionError) as exc:
+            return 0
+
+        if args.command == "build-tx":
+            wif = load_wif(args)
+            private_key = wif_to_private_key(wif)
+            input_value = doge_to_koinu(args.utxo_amount)
+            send_value = doge_to_koinu(args.amount)
+            fee_rate = doge_to_koinu(args.fee_rate)
+
+            tx = build_signed_transaction(
+                private_key=private_key,
+                source_address=args.source,
+                prev_txid=args.utxo_txid,
+                vout=args.utxo_vout,
+                input_value=input_value,
+                destination_address=args.to,
+                send_value=send_value,
+                fee_rate_koinu_per_kb=fee_rate,
+                change_address=args.change,
+            )
+
+            if args.out:
+                with open(args.out, "w", encoding="utf-8") as handle:
+                    handle.write(tx.raw.hex() + "\n")
+            print_built_transaction(tx, args.out)
+            return 0
+
+        if args.command == "broadcast":
+            if not args.yes:
+                raise ValueError(
+                    "Broadcast is irreversible. Re-run with --yes after reviewing the signed transaction."
+                )
+            raw_hex = read_raw_transaction(args.raw_file)
+            result = broadcast_dogechain(raw_hex)
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+            return 0
+
+        raise RuntimeError(f"Unsupported command: {args.command}")
+
+    except (RuntimeError, ValueError, AssertionError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-
-    return 0
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import secrets
+import struct
 import sys
 from dataclasses import dataclass
 
@@ -48,15 +49,157 @@ def double_sha256(data: bytes) -> bytes:
     return sha256(sha256(data))
 
 
+# RIPEMD-160 permutation/rotation tables.
+_R = (
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    7, 4, 13, 1, 10, 6, 15, 3, 12, 0, 9, 5, 2, 14, 11, 8,
+    3, 10, 14, 4, 9, 15, 8, 1, 2, 7, 0, 6, 13, 11, 5, 12,
+    1, 9, 11, 10, 0, 8, 12, 4, 13, 3, 7, 15, 14, 5, 6, 2,
+    4, 0, 5, 9, 7, 12, 2, 10, 14, 1, 3, 8, 11, 6, 15, 13,
+)
+
+_R_PRIME = (
+    5, 14, 7, 0, 9, 2, 11, 4, 13, 6, 15, 8, 1, 10, 3, 12,
+    6, 11, 3, 7, 0, 13, 5, 10, 14, 15, 8, 12, 4, 9, 1, 2,
+    15, 5, 1, 3, 7, 14, 6, 9, 11, 8, 12, 2, 10, 0, 4, 13,
+    8, 6, 4, 1, 3, 11, 15, 0, 5, 12, 2, 13, 9, 7, 10, 14,
+    12, 15, 10, 4, 1, 5, 8, 7, 6, 2, 13, 14, 0, 3, 9, 11,
+)
+
+_S = (
+    11, 14, 15, 12, 5, 8, 7, 9, 11, 13, 14, 15, 6, 7, 9, 8,
+    7, 6, 8, 13, 11, 9, 7, 15, 7, 12, 15, 9, 11, 7, 13, 12,
+    11, 13, 6, 7, 14, 9, 13, 15, 14, 8, 13, 6, 5, 12, 7, 5,
+    11, 12, 14, 15, 14, 15, 9, 8, 9, 14, 5, 6, 8, 6, 5, 12,
+    9, 15, 5, 11, 6, 8, 13, 12, 5, 12, 13, 14, 11, 8, 5, 6,
+)
+
+_S_PRIME = (
+    8, 9, 9, 11, 13, 15, 15, 5, 7, 7, 8, 11, 14, 14, 12, 6,
+    9, 13, 15, 7, 12, 8, 9, 11, 7, 7, 12, 7, 6, 15, 13, 11,
+    9, 7, 15, 11, 8, 6, 6, 14, 12, 13, 5, 14, 13, 13, 7, 5,
+    15, 5, 8, 11, 14, 14, 6, 14, 6, 9, 12, 9, 12, 5, 15, 8,
+    8, 5, 12, 9, 12, 5, 14, 6, 8, 13, 6, 5, 15, 13, 11, 11,
+)
+
+
+def _rol32(value: int, bits: int) -> int:
+    return ((value << bits) | (value >> (32 - bits))) & 0xFFFFFFFF
+
+
+def _ripemd_f(round_index: int, x: int, y: int, z: int) -> int:
+    if round_index < 16:
+        return x ^ y ^ z
+    if round_index < 32:
+        return (x & y) | (~x & z)
+    if round_index < 48:
+        return (x | ~y) ^ z
+    if round_index < 64:
+        return (x & z) | (y & ~z)
+    return x ^ (y | ~z)
+
+
+def _ripemd_k(round_index: int) -> int:
+    if round_index < 16:
+        return 0x00000000
+    if round_index < 32:
+        return 0x5A827999
+    if round_index < 48:
+        return 0x6ED9EBA1
+    if round_index < 64:
+        return 0x8F1BBCDC
+    return 0xA953FD4E
+
+
+def _ripemd_k_prime(round_index: int) -> int:
+    if round_index < 16:
+        return 0x50A28BE6
+    if round_index < 32:
+        return 0x5C4DD124
+    if round_index < 48:
+        return 0x6D703EF3
+    if round_index < 64:
+        return 0x7A6D76E9
+    return 0x00000000
+
+
+def ripemd160_python(data: bytes) -> bytes:
+    """Pure-Python RIPEMD-160 fallback for builds where OpenSSL omits it."""
+    message = bytearray(data)
+    bit_length = len(message) * 8
+
+    message.append(0x80)
+    while len(message) % 64 != 56:
+        message.append(0)
+
+    message.extend(struct.pack("<Q", bit_length))
+
+    h0 = 0x67452301
+    h1 = 0xEFCDAB89
+    h2 = 0x98BADCFE
+    h3 = 0x10325476
+    h4 = 0xC3D2E1F0
+
+    for offset in range(0, len(message), 64):
+        words = struct.unpack("<16I", message[offset:offset + 64])
+
+        a, b, c, d, e = h0, h1, h2, h3, h4
+        ap, bp, cp, dp, ep = h0, h1, h2, h3, h4
+
+        for j in range(80):
+            t = (
+                _rol32(
+                    (
+                        a
+                        + _ripemd_f(j, b, c, d)
+                        + words[_R[j]]
+                        + _ripemd_k(j)
+                    )
+                    & 0xFFFFFFFF,
+                    _S[j],
+                )
+                + e
+            ) & 0xFFFFFFFF
+
+            a, e, d, c, b = e, d, _rol32(c, 10), b, t
+
+            tp = (
+                _rol32(
+                    (
+                        ap
+                        + _ripemd_f(79 - j, bp, cp, dp)
+                        + words[_R_PRIME[j]]
+                        + _ripemd_k_prime(j)
+                    )
+                    & 0xFFFFFFFF,
+                    _S_PRIME[j],
+                )
+                + ep
+            ) & 0xFFFFFFFF
+
+            ap, ep, dp, cp, bp = ep, dp, _rol32(cp, 10), bp, tp
+
+        t = (h1 + c + dp) & 0xFFFFFFFF
+        h1 = (h2 + d + ep) & 0xFFFFFFFF
+        h2 = (h3 + e + ap) & 0xFFFFFFFF
+        h3 = (h4 + a + bp) & 0xFFFFFFFF
+        h4 = (h0 + b + cp) & 0xFFFFFFFF
+        h0 = t
+
+    return struct.pack("<5I", h0, h1, h2, h3, h4)
+
+
+def ripemd160(data: bytes) -> bytes:
+    """Use OpenSSL RIPEMD-160 when available, otherwise the local fallback."""
+    try:
+        return hashlib.new("ripemd160", data).digest()
+    except (ValueError, TypeError):
+        return ripemd160_python(data)
+
+
 def hash160(data: bytes) -> bytes:
     """SHA-256 followed by RIPEMD-160."""
-    digest = sha256(data)
-    try:
-        return hashlib.new("ripemd160", digest).digest()
-    except ValueError as exc:
-        raise RuntimeError(
-            "RIPEMD-160 is not available in this Python/OpenSSL build."
-        ) from exc
+    return ripemd160(sha256(data))
 
 
 def base58_encode(data: bytes) -> str:
@@ -166,10 +309,17 @@ def generate_wallet() -> Wallet:
 
 def self_test() -> None:
     """
-    Deterministic vector for private key = 1.
+    Verify RIPEMD-160 and a deterministic Dogecoin vector.
 
-    Never use this test key for real funds.
+    Never use the test private key for real funds.
     """
+    assert ripemd160_python(b"").hex() == (
+        "9c1185a5c5e9fc54612808977ee8f548b2258d31"
+    )
+    assert ripemd160_python(b"abc").hex() == (
+        "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc"
+    )
+
     wallet = wallet_from_private_key(1)
 
     expected_public_key = (
@@ -206,7 +356,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--self-test",
         action="store_true",
-        help="run a deterministic derivation test and exit",
+        help="run deterministic RIPEMD-160/address tests and exit",
     )
     return parser.parse_args()
 
@@ -219,7 +369,7 @@ def main() -> int:
             self_test()
         else:
             print_wallet(generate_wallet())
-    except (RuntimeError, ValueError) as exc:
+    except (RuntimeError, ValueError, AssertionError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

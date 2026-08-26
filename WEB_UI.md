@@ -52,20 +52,24 @@ Secrets are visually hidden until explicitly revealed.
 
 ### Send DOGE
 
-Builds and signs a one-input P2PKH transaction.
+Builds and signs a one-input P2PKH transaction with automatic confirmed-UTXO discovery and selection.
 
-The UI asks for:
+The normal send form now asks only for:
 
 - source WIF;
-- UTXO txid;
-- UTXO vout;
-- UTXO amount;
 - recipient (`To`) address;
 - send amount;
-- fee rate;
-- optional change address.
+- fee rate.
 
-There is intentionally no manual source-address field. The source address is derived from the WIF so the private key and source cannot silently disagree.
+The source address is derived locally from the WIF. The local Python process then sends only that **public address** to BlockCypher and requests confirmed unspent outputs. The WIF/private key is never sent to BlockCypher.
+
+When the WIF field loses focus, the UI shows the derived source address, confirmed balance, and count of spendable confirmed UTXOs.
+
+When building a transaction, the backend fetches the UTXOs again and chooses the smallest confirmed UTXO that can cover the send amount plus the exact serialized transaction fee. This selection happens on the backend rather than trusting hidden browser fields.
+
+Change is returned automatically to the source address.
+
+The current transaction engine still supports exactly one input. If the total confirmed balance is sufficient but is split across multiple UTXOs and no individual UTXO can cover the amount plus fee, the UI reports that limitation instead of silently combining inputs.
 
 Building does **not** broadcast. The result shows:
 
@@ -112,20 +116,22 @@ The web app:
 - requires a random per-process local API token for POST requests;
 - denies framing;
 - has no permissive CORS configuration;
-- only performs external network access during explicit broadcast.
+- sends only the derived public Dogecoin address externally for balance/UTXO lookup;
+- sends only already-signed public transaction bytes externally during explicit broadcast.
 
 Treat this as educational software for small test amounts, not an audited production wallet.
 
 ## Current limitations
 
-The web UI exposes the same core limitations as the CLI:
+The web UI currently has these main limitations:
 
 - Dogecoin mainnet only;
 - legacy P2PKH only;
 - one input UTXO per normal transaction;
-- no automatic UTXO discovery or coin selection;
+- automatic selection cannot yet combine multiple small UTXOs;
+- only confirmed UTXOs are selected for ordinary sends;
 - no live fee estimator;
 - no RBF controls yet;
-- third-party broadcast provider instead of our own Dogecoin Core node.
+- UTXO lookup and broadcast currently depend on BlockCypher rather than our own Dogecoin Core node.
 
-Natural next steps are automatic UTXO lookup/selection, RBF-by-default, live fee estimation, transaction decoding/review, and optional Dogecoin Core JSON-RPC integration.
+Natural next steps are multi-input coin selection, RBF-by-default, live fee estimation, transaction decoding/review, and optional Dogecoin Core JSON-RPC integration.

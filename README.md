@@ -37,10 +37,9 @@ The same private key is also encoded as a compressed WIF using Dogecoin mainnet'
 ## Requirements
 
 - Python 3.10+
-- A Python/OpenSSL build with RIPEMD-160 available
 - No `pip install` required
 
-On Ubuntu 22.04+ the system Python is sufficient.
+RIPEMD-160 is used through Python/OpenSSL when available. If the local Python/OpenSSL build does not expose RIPEMD-160, the script automatically uses its bundled pure-Python RIPEMD-160 implementation.
 
 ## Run
 
@@ -51,7 +50,13 @@ git clone https://github.com/Kolyn236/doge-wallet-generator.git
 cd doge-wallet-generator
 ```
 
-Run the deterministic self-test first:
+If you already cloned it, update first:
+
+```bash
+git pull
+```
+
+Run the deterministic self-test:
 
 ```bash
 python3 doge_wallet.py --self-test
@@ -117,7 +122,7 @@ The DOGE address and public key are not secrets.
 
 ## Self-test vector
 
-The `--self-test` command intentionally derives a wallet from private key `1` and checks the result against fixed values:
+The `--self-test` command checks standard RIPEMD-160 vectors and intentionally derives a wallet from private key `1`:
 
 ```text
 Compressed public key:
@@ -153,7 +158,7 @@ To keep the project educational, the script implements the important derivation 
 - secp256k1 scalar multiplication using double-and-add;
 - compressed public-key serialization;
 - SHA-256;
-- RIPEMD-160 through Python `hashlib`;
+- RIPEMD-160, including a pure-Python fallback;
 - Base58 encoding;
 - Base58Check checksum;
 - Dogecoin P2PKH address encoding;

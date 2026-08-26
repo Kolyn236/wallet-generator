@@ -61,6 +61,8 @@ def build_with_automatic_utxo(
         raise ValueError("No confirmed spendable UTXOs were found for this wallet.")
 
     for utxo in snapshot.utxos:
+        if utxo.value <= send_value:
+            continue
         try:
             tx = build_signed_transaction(
                 private_key=private_key,

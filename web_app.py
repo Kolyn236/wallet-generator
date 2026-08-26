@@ -128,6 +128,29 @@ button.danger { background:#522231; color:#ffdbe1; }
 .secret { filter:blur(7px); user-select:none; transition:.15s; }
 .secret.reveal { filter:none; user-select:text; }
 h2 { margin:0 0 16px; font-size:23px; }
+.title-with-help { display:flex; align-items:center; gap:9px; margin:0 0 16px; }
+.title-with-help h2 { margin:0; }
+.tooltip { position:relative; display:inline-flex; align-items:center; }
+.tooltip-trigger {
+  width:24px; height:24px; padding:0; display:inline-grid; place-items:center;
+  border:1px solid #4b5d7e; border-radius:50%; background:#18233d; color:#dce6fb;
+  font:800 13px/1 ui-sans-serif,system-ui,sans-serif; cursor:help;
+}
+.tooltip-trigger:hover, .tooltip-trigger:focus-visible {
+  border-color:var(--accent); color:var(--accent2); outline:none;
+  box-shadow:0 0 0 3px rgba(245,185,66,.10);
+}
+.tooltip-content {
+  position:absolute; z-index:30; top:calc(100% + 10px); left:50%; transform:translate(-50%, -4px);
+  width:min(370px, calc(100vw - 48px)); padding:13px 14px; border:1px solid #394a6b;
+  border-radius:12px; background:#0a1224; color:#d7e0f3; box-shadow:0 14px 40px rgba(0,0,0,.38);
+  font-size:13px; line-height:1.5; font-weight:500; text-align:left;
+  opacity:0; visibility:hidden; pointer-events:none; transition:opacity .14s ease, transform .14s ease, visibility .14s;
+}
+.tooltip:hover .tooltip-content,
+.tooltip:focus-within .tooltip-content {
+  opacity:1; visibility:visible; transform:translate(-50%, 0); pointer-events:auto;
+}
 .small { font-size:12px; color:var(--muted); }
 .check { display:flex; gap:10px; align-items:flex-start; margin-top:14px; color:#c9d3e8; }
 .check input { width:auto; margin-top:3px; }
@@ -137,6 +160,9 @@ a { color:#ffd16c; }
   .header-actions { justify-content:flex-start; }
   .grid { grid-template-columns:1fr; }
   .kv { grid-template-columns:1fr; }
+  .tooltip-content { left:0; transform:translate(0, -4px); width:min(330px, calc(100vw - 52px)); }
+  .tooltip:hover .tooltip-content,
+  .tooltip:focus-within .tooltip-content { transform:translate(0, 0); }
 }
 </style>
 </head>
@@ -215,7 +241,13 @@ a { color:#ffd16c; }
   </section>
 
   <section id="cpfp" class="panel">
-    <h2 data-i18n="cpfpTitle">CPFP rescue</h2>
+    <div class="title-with-help">
+      <h2 data-i18n="cpfpTitle">CPFP rescue</h2>
+      <span class="tooltip">
+        <button class="tooltip-trigger" type="button" aria-describedby="cpfp-tooltip-content" data-i18n-aria-label="cpfpTooltipAria">?</button>
+        <span class="tooltip-content" id="cpfp-tooltip-content" role="tooltip" data-i18n="cpfpTooltip">CPFP (Child Pays For Parent) creates a higher-fee child transaction that spends an unconfirmed output from the parent. A miner must include the parent before the child, making the combined package more attractive to confirm.</span>
+      </span>
+    </div>
     <p class="small" data-i18n="cpfpHelp">Parent TXID and byte size are computed from the signed parent raw transaction to avoid manual TXID mistakes.</p>
     <div class="grid">
       <div class="full">
@@ -286,6 +318,8 @@ const I18N = {
     feeRateHelp: "0.01 DOGE/kB is the documented Dogecoin Core recommendation, not a live fee estimate.",
     changeAddress: "Change address · optional", buildSigned: "Build signed transaction",
     cpfpTitle: "CPFP rescue",
+    cpfpTooltipAria: "What is CPFP?",
+    cpfpTooltip: "CPFP (Child Pays For Parent) is a way to speed up a pending transaction. It creates a higher-fee child transaction that spends an unconfirmed output from the parent, usually its change. A miner must include the parent before the child, so the combined package becomes more attractive to confirm.",
     cpfpHelp: "Parent TXID and byte size are computed from the signed parent raw transaction to avoid manual TXID mistakes.",
     parentRaw: "Parent signed raw transaction", parentVout: "Parent output vout to spend",
     parentOutputAmount: "Parent output amount · DOGE", parentFee: "Parent fee · DOGE",
@@ -327,6 +361,8 @@ const I18N = {
     feeRateHelp: "0.01 DOGE/kB — документированная рекомендация Dogecoin Core, а не актуальная оценка комиссии сети.",
     changeAddress: "Адрес сдачи · необязательно", buildSigned: "Собрать подписанную транзакцию",
     cpfpTitle: "Ускорение CPFP",
+    cpfpTooltipAria: "Что такое CPFP?",
+    cpfpTooltip: "CPFP (Child Pays For Parent) — способ ускорить зависшую неподтверждённую транзакцию. Создаётся дочерняя транзакция с повышенной комиссией, которая тратит неподтверждённый выход parent — обычно сдачу. Чтобы включить child, майнеру нужно сначала включить parent, поэтому общий пакет становится выгоднее для подтверждения.",
     cpfpHelp: "TXID и размер родительской транзакции вычисляются из её signed raw bytes, чтобы исключить ошибки ручного копирования TXID.",
     parentRaw: "Подписанная raw-транзакция родителя", parentVout: "vout родительского выхода для траты",
     parentOutputAmount: "Сумма родительского выхода · DOGE", parentFee: "Комиссия родителя · DOGE",
@@ -394,6 +430,9 @@ function applyLanguage() {
   });
   document.querySelectorAll("[data-i18n-placeholder]").forEach(el => {
     el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll("[data-i18n-aria-label]").forEach(el => {
+    el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel));
   });
   document.querySelectorAll(".lang-btn").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.lang === currentLang);

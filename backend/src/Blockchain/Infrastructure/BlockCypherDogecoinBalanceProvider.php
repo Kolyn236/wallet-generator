@@ -19,17 +19,10 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
 
     public function getConfirmedBalance(DogecoinAddress $address): AddressBalance
     {
-        $lookupId = bin2hex(random_bytes(4));
         $startedAt = hrtime(true);
         $maskedAddress = ProviderRequestLogger::maskedAddress($address->value);
         $url = \sprintf(self::ENDPOINT, rawurlencode($address->value));
         $http_response_header = [];
-
-        $this->logger->info('dogecoin_balance_request_started', [
-            'provider' => 'blockcypher',
-            'lookup_id' => $lookupId,
-            'address' => $maskedAddress,
-        ]);
 
         $context = stream_context_create([
             'http' => [
@@ -45,9 +38,10 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
         $durationMs = self::durationMs($startedAt);
 
         if (false === $payload) {
-            $this->logger->error('dogecoin_balance_transport_failed', [
+            $this->logger->error([
                 'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
+                'operation' => 'balance',
+                'reason' => 'provider_transport_failed',
                 'address' => $maskedAddress,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
@@ -59,9 +53,10 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
         try {
             $decoded = json_decode($payload, true, 512, \JSON_THROW_ON_ERROR);
         } catch (\JsonException $exception) {
-            $this->logger->error('dogecoin_balance_invalid_json', [
+            $this->logger->error([
                 'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
+                'operation' => 'balance',
+                'reason' => 'provider_invalid_json',
                 'address' => $maskedAddress,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
@@ -71,15 +66,6 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
         }
 
         if (404 === $status && self::isUnseenAddressResponse($decoded)) {
-            $this->logger->info('dogecoin_balance_address_unseen', [
-                'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
-                'address' => $maskedAddress,
-                'http_status' => $status,
-                'duration_ms' => $durationMs,
-                'balance_smallest_unit' => 0,
-            ]);
-
             return new AddressBalance($address->value, 0);
         }
 
@@ -87,9 +73,10 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
             $reason = 429 === $status ? 'provider_rate_limited' : 'provider_http_error';
             $providerError = self::providerError($decoded);
 
-            $this->logger->warning('dogecoin_balance_provider_http_error', [
+            $this->logger->warning([
                 'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
+                'operation' => 'balance',
+                'reason' => $reason,
                 'address' => $maskedAddress,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
@@ -100,9 +87,10 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
         }
 
         if (!\is_array($decoded) || ($decoded['address'] ?? null) !== $address->value) {
-            $this->logger->error('dogecoin_balance_unexpected_response', [
+            $this->logger->error([
                 'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
+                'operation' => 'balance',
+                'reason' => 'provider_unexpected_response',
                 'address' => $maskedAddress,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
@@ -113,9 +101,10 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
 
         $balance = $decoded['balance'] ?? null;
         if (!\is_int($balance) || $balance < 0) {
-            $this->logger->error('dogecoin_balance_invalid_balance', [
+            $this->logger->error([
                 'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
+                'operation' => 'balance',
+                'reason' => 'provider_invalid_balance',
                 'address' => $maskedAddress,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
@@ -123,15 +112,6 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
 
             throw new BalanceLookupFailed('provider_invalid_balance', $status);
         }
-
-        $this->logger->info('dogecoin_balance_request_succeeded', [
-            'provider' => 'blockcypher',
-            'lookup_id' => $lookupId,
-            'address' => $maskedAddress,
-            'http_status' => $status,
-            'duration_ms' => $durationMs,
-            'balance_smallest_unit' => $balance,
-        ]);
 
         return new AddressBalance($address->value, $balance);
     }

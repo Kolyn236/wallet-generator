@@ -19,17 +19,10 @@ final readonly class BlockCypherDogecoinUtxoProvider implements DogecoinUtxoProv
 
     public function getConfirmedUtxos(DogecoinAddress $address): array
     {
-        $lookupId = bin2hex(random_bytes(4));
         $startedAt = hrtime(true);
         $maskedAddress = ProviderRequestLogger::maskedAddress($address->value);
         $url = \sprintf(self::ENDPOINT, rawurlencode($address->value));
         $http_response_header = [];
-
-        $this->logger->info('dogecoin_utxo_request_started', [
-            'provider' => 'blockcypher',
-            'lookup_id' => $lookupId,
-            'address' => $maskedAddress,
-        ]);
 
         $context = stream_context_create([
             'http' => [
@@ -45,9 +38,10 @@ final readonly class BlockCypherDogecoinUtxoProvider implements DogecoinUtxoProv
         $durationMs = self::durationMs($startedAt);
 
         if (false === $payload) {
-            $this->logger->error('dogecoin_utxo_transport_failed', [
+            $this->logger->error([
                 'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
+                'operation' => 'utxo_lookup',
+                'reason' => 'provider_transport_failed',
                 'address' => $maskedAddress,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
@@ -59,9 +53,10 @@ final readonly class BlockCypherDogecoinUtxoProvider implements DogecoinUtxoProv
         try {
             $decoded = json_decode($payload, true, 512, \JSON_THROW_ON_ERROR);
         } catch (\JsonException $exception) {
-            $this->logger->error('dogecoin_utxo_invalid_json', [
+            $this->logger->error([
                 'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
+                'operation' => 'utxo_lookup',
+                'reason' => 'provider_invalid_json',
                 'address' => $maskedAddress,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
@@ -71,24 +66,16 @@ final readonly class BlockCypherDogecoinUtxoProvider implements DogecoinUtxoProv
         }
 
         if (404 === $status && self::isUnseenAddressResponse($decoded)) {
-            $this->logger->info('dogecoin_utxo_address_unseen', [
-                'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
-                'address' => $maskedAddress,
-                'http_status' => $status,
-                'duration_ms' => $durationMs,
-                'utxo_count' => 0,
-            ]);
-
             return [];
         }
 
         if (null !== $status && $status >= 400) {
             $reason = 429 === $status ? 'provider_rate_limited' : 'provider_http_error';
 
-            $this->logger->warning('dogecoin_utxo_provider_http_error', [
+            $this->logger->warning([
                 'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
+                'operation' => 'utxo_lookup',
+                'reason' => $reason,
                 'address' => $maskedAddress,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
@@ -103,9 +90,10 @@ final readonly class BlockCypherDogecoinUtxoProvider implements DogecoinUtxoProv
         }
 
         if (($decoded['hasMore'] ?? false) === true) {
-            $this->logger->warning('dogecoin_utxo_result_truncated', [
+            $this->logger->warning([
                 'provider' => 'blockcypher',
-                'lookup_id' => $lookupId,
+                'operation' => 'utxo_lookup',
+                'reason' => 'provider_utxo_limit_exceeded',
                 'address' => $maskedAddress,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
@@ -152,15 +140,6 @@ final readonly class BlockCypherDogecoinUtxoProvider implements DogecoinUtxoProv
                 throw new UtxoLookupFailed('provider_invalid_utxos', $status, $exception);
             }
         }
-
-        $this->logger->info('dogecoin_utxo_request_succeeded', [
-            'provider' => 'blockcypher',
-            'lookup_id' => $lookupId,
-            'address' => $maskedAddress,
-            'http_status' => $status,
-            'duration_ms' => $durationMs,
-            'utxo_count' => \count($utxos),
-        ]);
 
         return $utxos;
     }

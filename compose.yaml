@@ -4,9 +4,14 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile
     working_dir: /app/backend
-    command: sh -c "composer install --no-interaction --prefer-dist && php-fpm"
+    command: >-
+      sh -c "composer install --no-interaction --prefer-dist
+      && mkdir -p var/cache var/log
+      && chown -R www-data:www-data var
+      && php-fpm"
     volumes:
       - ./:/app
+      - backend-var:/app/backend/var
     environment:
       APP_ENV: dev
       APP_DEBUG: '1'
@@ -20,3 +25,6 @@ services:
       - '8080:80'
     depends_on:
       - php
+
+volumes:
+  backend-var:

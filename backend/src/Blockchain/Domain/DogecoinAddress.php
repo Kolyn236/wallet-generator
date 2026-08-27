@@ -7,7 +7,7 @@ namespace App\Blockchain\Domain;
 final readonly class DogecoinAddress
 {
     private const string BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-    private const int P2PKH_VERSION = 0x1e;
+    private const int P2PKH_VERSION = 0x1E;
     private const int DECODED_LENGTH = 25;
     private const int PAYLOAD_LENGTH = 21;
 
@@ -17,7 +17,7 @@ final readonly class DogecoinAddress
 
     public static function fromString(string $address): self
     {
-        if ('' === $address || 1 !== \preg_match('/^[1-9A-HJ-NP-Za-km-z]{26,35}$/', $address)) {
+        if ('' === $address || 1 !== preg_match('/^[1-9A-HJ-NP-Za-km-z]{26,35}$/', $address)) {
             throw new \InvalidArgumentException('Invalid Dogecoin address format.');
         }
 
@@ -26,15 +26,15 @@ final readonly class DogecoinAddress
             throw new \InvalidArgumentException('Invalid Dogecoin address version.');
         }
 
-        $payload = \substr($decoded, 0, self::PAYLOAD_LENGTH);
-        $checksum = \substr($decoded, self::PAYLOAD_LENGTH, 4);
-        $expectedChecksum = \substr(
-            \hash('sha256', \hash('sha256', $payload, true), true),
+        $payload = substr($decoded, 0, self::PAYLOAD_LENGTH);
+        $checksum = substr($decoded, self::PAYLOAD_LENGTH, 4);
+        $expectedChecksum = substr(
+            hash('sha256', hash('sha256', $payload, true), true),
             0,
             4,
         );
 
-        if (!\hash_equals($expectedChecksum, $checksum)) {
+        if (!hash_equals($expectedChecksum, $checksum)) {
             throw new \InvalidArgumentException('Invalid Dogecoin address checksum.');
         }
 
@@ -46,8 +46,8 @@ final readonly class DogecoinAddress
         /** @var list<int> $bytes Little-endian byte array. */
         $bytes = [0];
 
-        foreach (\str_split($value) as $character) {
-            $digit = \strpos(self::BASE58_ALPHABET, $character);
+        foreach (str_split($value) as $character) {
+            $digit = strpos(self::BASE58_ALPHABET, $character);
             if (false === $digit) {
                 throw new \InvalidArgumentException('Invalid Base58 character.');
             }
@@ -56,12 +56,12 @@ final readonly class DogecoinAddress
             $count = \count($bytes);
             for ($index = 0; $index < $count; ++$index) {
                 $carry += $bytes[$index] * 58;
-                $bytes[$index] = $carry & 0xff;
+                $bytes[$index] = $carry & 0xFF;
                 $carry >>= 8;
             }
 
             while ($carry > 0) {
-                $bytes[] = $carry & 0xff;
+                $bytes[] = $carry & 0xFF;
                 $carry >>= 8;
             }
         }

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { assets, getAsset, type AssetId } from './assets';
 import { getDogecoinBalance, getHealth } from './api';
+import { DogecoinTransferPanel } from './DogecoinTransferPanel';
 import { type Language, messages } from './i18n';
 import {
   createDogecoinWallet,
@@ -12,15 +13,6 @@ type HealthState = 'checking' | 'online' | 'offline';
 type BalanceState = 'idle' | 'loading' | 'loaded' | 'error';
 type DogecoinWalletMode = 'none' | 'created' | 'watch-only';
 type CopyState = 'none' | 'seed' | 'wif';
-
-type TransferPreview = {
-  from: string;
-  recipient: string;
-  amount: string;
-  asset: string;
-  network: string;
-  standard: string;
-};
 
 const LANGUAGE_KEY = 'wallet-platform-language';
 
@@ -44,11 +36,6 @@ export function App() {
   const [addressError, setAddressError] = useState<'invalid' | 'balance' | null>(null);
   const [showBackupSecrets, setShowBackupSecrets] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('none');
-  const [from, setFrom] = useState('');
-  const [recipient, setRecipient] = useState('');
-  const [amount, setAmount] = useState('');
-  const [formError, setFormError] = useState(false);
-  const [preview, setPreview] = useState<TransferPreview | null>(null);
   const createdWalletRef = useRef<CreatedDogecoinWallet | null>(null);
 
   const copy = messages[language];
@@ -83,9 +70,6 @@ export function App() {
     const nextAsset = getAsset(nextAssetId);
     setAssetId(nextAssetId);
     setNetworkId(nextAsset.networks[0].id);
-    setPreview(null);
-    setFormError(false);
-    setFrom(nextAssetId === 'doge' && connectedDoge ? dogeAddress : '');
   }
 
   async function refreshDogecoinBalance(address: string): Promise<boolean> {
@@ -96,7 +80,6 @@ export function App() {
       const result = await getDogecoinBalance(address);
       setDogeBalance(result.balance);
       setDogeAddress(result.address);
-      setFrom(result.address);
       setBalanceState('loaded');
       return true;
     } catch {
@@ -113,13 +96,12 @@ export function App() {
     setDogeAddress(wallet.address);
     setDogeBalance('0.00000000');
     setBalanceState('loaded');
-    setFrom(wallet.address);
     setExistingAddress('');
     setShowExistingForm(false);
     setShowBackupSecrets(false);
     setCopyState('none');
     setAddressError(null);
-    setPreview(null);
+    void refreshDogecoinBalance(wallet.address);
   }
 
   async function specifyExistingWallet(event: FormEvent<HTMLFormElement>) {
@@ -152,27 +134,6 @@ export function App() {
     } catch {
       setCopyState('none');
     }
-  }
-
-  function submitTransfer(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const numericAmount = Number(amount);
-
-    if (!from.trim() || !recipient.trim() || !Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setFormError(true);
-      setPreview(null);
-      return;
-    }
-
-    setFormError(false);
-    setPreview({
-      from: from.trim(),
-      recipient: recipient.trim(),
-      amount,
-      asset: asset.symbol,
-      network: network.name,
-      standard: network.standard,
-    });
   }
 
   const dogeModeLabel = dogeWalletMode === 'created'
@@ -341,7 +302,7 @@ export function App() {
               <div><span className="muted-label">{copy.route}</span><h3>{network.name}</h3><p>{copy.routeHint}</p></div>
               <label className="network-select">
                 <span>{copy.network}</span>
-                <select value={network.id} onChange={(event) => { setNetworkId(event.target.value); setPreview(null); }}>
+                <select value={network.id} onChange={(event) => setNetworkId(event.target.value)}>
                   {asset.networks.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} · {candidate.standard}</option>)}
                 </select>
               </label>
@@ -385,31 +346,17 @@ export function App() {
           </section>
         )}
 
-        <section className="transfer-card" id="transfer">
-          <div className="transfer-copy"><span className="muted-label">{asset.symbol} · {network.standard}</span><h2>{copy.transferTitle}</h2><p>{copy.transferText}</p></div>
-          <form className="transfer-form" onSubmit={submitTransfer}>
-            <label><span>{copy.from}</span><input value={from} onChange={(event) => setFrom(event.target.value)} placeholder={copy.fromPlaceholder} autoComplete="off" readOnly={assetId === 'doge' && connectedDoge} /></label>
-            <label><span>{copy.recipient}</span><input value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder={copy.recipientPlaceholder} autoComplete="off" /></label>
-            <div className="form-row">
-              <label><span>{copy.amount}</span><div className="amount-field"><input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder={copy.amountPlaceholder} autoComplete="off" /><strong>{asset.symbol}</strong></div></label>
-              <label><span>{copy.fee}</span><div className="readonly-field">{copy.automatic}</div></label>
-            </div>
-            {formError && <p className="form-error">{copy.formError}</p>}
-            <button className="submit-button" type="submit">{copy.previewTransfer}</button>
-          </form>
-          {preview && (
-            <div className="transfer-preview">
-              <div className="preview-header"><strong>{copy.preview}</strong><span>{preview.standard}</span></div>
-              <dl>
-                <div><dt>{copy.from}</dt><dd>{preview.from}</dd></div>
-                <div><dt>{copy.recipient}</dt><dd>{preview.recipient}</dd></div>
-                <div><dt>{copy.amount}</dt><dd>{preview.amount} {preview.asset}</dd></div>
-                <div><dt>{copy.network}</dt><dd>{preview.network}</dd></div>
-              </dl>
-              <small>{copy.previewNotBroadcast}</small>
-            </div>
-          )}
-        </section>
+        <DogecoinTransferPanel
+          key={`${assetId}:${network.id}:${dogeAddress}:${dogeWalletMode}`}
+          language={language}
+          assetId={assetId}
+          assetSymbol={asset.symbol}
+          networkName={network.name}
+          networkStandard={network.standard}
+          sourceAddress={assetId === 'doge' ? dogeAddress : ''}
+          walletMode={assetId === 'doge' ? dogeWalletMode : 'none'}
+          createdWallet={assetId === 'doge' ? createdWallet : null}
+        />
 
         <section className="security-card" id="security">
           <div className="security-icon">✓</div>

@@ -10,7 +10,6 @@ const DOGECOIN_WIF_VERSION = 0x9e;
 const SIGHASH_ALL = 0x01;
 const SEQUENCE_FINAL = 0xffffffff;
 const KOINU_PER_DOGE = 100_000_000n;
-const FEE_RATE_KOINU_PER_KB = 1_000_000n;
 const SOFT_DUST_KOINU = 1_000_000n;
 const MAX_INPUTS = 2000;
 const base58check = createBase58check(sha256);
@@ -33,6 +32,8 @@ export type SignedDogecoinTransfer = {
   amountDoge: string;
   feeKoinu: string;
   feeDoge: string;
+  feeRateKoinuPerKb: string;
+  feeRateDogePerKb: string;
   changeKoinu: string;
   changeDoge: string;
 };
@@ -50,24 +51,17 @@ type TxOutput = {
 };
 
 export function parseDogeAmount(value: string): bigint {
-  const normalized = value.trim();
-  const match = /^(0|[1-9]\d*)(?:\.(\d{1,8}))?$/.exec(normalized);
-  if (!match) {
-    throw new Error('invalid_amount');
-  }
+  const koinu = parsePositiveDogeValue(value, 'invalid_amount');
 
-  const whole = BigInt(match[1]);
-  const fraction = (match[2] ?? '').padEnd(8, '0');
-  const koinu = whole * KOINU_PER_DOGE + BigInt(fraction || '0');
-
-  if (koinu <= 0n) {
-    throw new Error('invalid_amount');
-  }
   if (koinu < SOFT_DUST_KOINU) {
     throw new Error('amount_below_dust');
   }
 
   return koinu;
+}
+
+export function parseDogeFeeRate(value: string): bigint {
+  return parsePositiveDogeValue(value, 'invalid_fee_rate');
 }
 
 export function formatDoge(koinu: bigint): string {
@@ -81,6 +75,7 @@ export function buildSignedDogecoinTransfer(params: {
   sourceAddress: string;
   recipientAddress: string;
   amount: string;
+  feeRateDogePerKb: string;
   utxos: DogecoinUtxo[];
 }): SignedDogecoinTransfer {
   const { wif, sourceAddress, recipientAddress } = params;
@@ -93,6 +88,7 @@ export function buildSignedDogecoinTransfer(params: {
   }
 
   const amount = parseDogeAmount(params.amount);
+  const feeRateKoinuPerKb = parseDogeFeeRate(params.feeRateDogePerKb);
   const privateKey = privateKeyFromWif(wif);
 
   try {
@@ -116,6 +112,7 @@ export function buildSignedDogecoinTransfer(params: {
         sourceScript,
         recipientScript,
         amount,
+        feeRateKoinuPerKb,
         selected,
       });
 
@@ -128,6 +125,24 @@ export function buildSignedDogecoinTransfer(params: {
   } finally {
     privateKey.fill(0);
   }
+}
+
+function parsePositiveDogeValue(value: string, errorCode: string): bigint {
+  const normalized = value.trim();
+  const match = /^(0|[1-9]\d*)(?:\.(\d{1,8}))?$/.exec(normalized);
+  if (!match) {
+    throw new Error(errorCode);
+  }
+
+  const whole = BigInt(match[1]);
+  const fraction = (match[2] ?? '').padEnd(8, '0');
+  const koinu = whole * KOINU_PER_DOGE + BigInt(fraction || '0');
+
+  if (koinu <= 0n) {
+    throw new Error(errorCode);
+  }
+
+  return koinu;
 }
 
 function normalizeUtxos(utxos: DogecoinUtxo[], expectedScriptHex: string): SelectedUtxo[] {
@@ -174,11 +189,20 @@ function tryBuildSignedTransaction(params: {
   sourceScript: Uint8Array;
   recipientScript: Uint8Array;
   amount: bigint;
+  feeRateKoinuPerKb: bigint;
   selected: SelectedUtxo[];
 }): SignedDogecoinTransfer | null {
-  const { privateKey, publicKey, sourceScript, recipientScript, amount, selected } = params;
+  const {
+    privateKey,
+    publicKey,
+    sourceScript,
+    recipientScript,
+    amount,
+    feeRateKoinuPerKb,
+    selected,
+  } = params;
   const totalInput = selected.reduce((sum, utxo) => sum + utxo.value, 0n);
-  let fee = recommendedFee(10 + selected.length * 148 + 2 * 34);
+  let fee = calculateFee(10 + selected.length * 148 + 2 * 34, feeRateKoinuPerKb);
 
   for (let attempt = 0; attempt < 12; attempt += 1) {
     if (totalInput <= amount + fee) {
@@ -206,7 +230,7 @@ function tryBuildSignedTransaction(params: {
     });
 
     const raw = serializeTransaction(selected, outputs, scriptSigs);
-    const requiredFee = recommendedFee(raw.length);
+    const requiredFee = calculateFee(raw.length, feeRateKoinuPerKb);
     const actualFee = totalInput - outputs.reduce((sum, output) => sum + output.value, 0n);
 
     if (actualFee >= requiredFee) {
@@ -221,6 +245,8 @@ function tryBuildSignedTransaction(params: {
         amountDoge: formatDoge(amount),
         feeKoinu: actualFee.toString(),
         feeDoge: formatDoge(actualFee),
+        feeRateKoinuPerKb: feeRateKoinuPerKb.toString(),
+        feeRateDogePerKb: formatDoge(feeRateKoinuPerKb),
         changeKoinu: change.toString(),
         changeDoge: formatDoge(change),
       };
@@ -312,8 +338,8 @@ function publicKeyToDogecoinAddress(publicKey: Uint8Array): string {
   return base58check.encode(concatBytes(Uint8Array.of(DOGECOIN_P2PKH_VERSION), publicKeyHash));
 }
 
-function recommendedFee(sizeBytes: number): bigint {
-  return (BigInt(sizeBytes) * FEE_RATE_KOINU_PER_KB + 999n) / 1000n;
+function calculateFee(sizeBytes: number, feeRateKoinuPerKb: bigint): bigint {
+  return (BigInt(sizeBytes) * feeRateKoinuPerKb + 999n) / 1000n;
 }
 
 function pushData(data: Uint8Array): Uint8Array {

@@ -58,17 +58,28 @@ jobs:
         working-directory: .
         run: |
           set -eu
-          docker compose up -d --build
+          DOGE_RECOMMENDED_FEE_RATE=0.01234567 docker compose up -d --build
           trap 'docker compose down -v' EXIT
 
           for attempt in $(seq 1 30); do
             if docker compose exec -T --user www-data php sh -c 'test -w var/cache && test -w var/log' \
-              && curl --fail --silent --show-error http://localhost:8080/api/health >/dev/null; then
+              && docker compose exec -T php php bin/console debug:router api_dogecoin_fee_policy >/dev/null 2>&1 \
+              && curl --fail --silent --show-error -H 'Accept: application/json' http://localhost:8080/api/health >/dev/null \
+              && curl --fail --silent --show-error -H 'Accept: application/json' -D /tmp/doge-fee-policy.headers -o /tmp/doge-fee-policy.json http://localhost:8080/api/chains/dogecoin/mainnet/fee-policy \
+              && python3 -c "import json; data=json.load(open('/tmp/doge-fee-policy.json')); assert data['recommendedRate'] == '0.01234567'; assert data['unit'] == 'DOGE/kB'"; then
               exit 0
             fi
             sleep 1
           done
 
+          echo '--- Symfony route ---'
+          docker compose exec -T php php bin/console debug:router api_dogecoin_fee_policy || true
+          echo '--- Fee policy headers ---'
+          cat /tmp/doge-fee-policy.headers 2>/dev/null || true
+          echo '--- Fee policy body ---'
+          head -c 2000 /tmp/doge-fee-policy.json 2>/dev/null || true
+          echo
+          echo '--- Containers ---'
           docker compose logs
           exit 1
       - name: Build platform Nginx image

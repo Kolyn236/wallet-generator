@@ -13,6 +13,7 @@ services:
       APP_DEBUG: '1'
       APP_SECRET: local-development-only-change-me
       DEFAULT_URI: http://localhost:8080
+      DOGE_RECOMMENDED_FEE_RATE: ${DOGE_RECOMMENDED_FEE_RATE:-0.01}
 
   nginx:
     build:

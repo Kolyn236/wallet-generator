@@ -23,6 +23,8 @@ final readonly class DogecoinFeePolicyController
             'kind' => DogecoinFeePolicy::KIND,
             'recommendedRate' => $this->feePolicy->recommendedRateDogePerKb,
             'unit' => DogecoinFeePolicy::UNIT,
+        ], headers: [
+            'Cache-Control' => 'no-store, private',
         ]);
     }
 }

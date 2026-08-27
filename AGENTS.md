@@ -20,6 +20,39 @@ The primary goal is **understandability and correctness**, not production-wallet
 
 This repository currently targets Dogecoin **mainnet legacy P2PKH (`D...`)** transactions.
 
+## Target architecture and migration
+
+The repository is now being migrated incrementally toward a production-oriented multi-chain wallet platform implemented as a Symfony modular monolith.
+
+Before making migration-related changes, read:
+
+- `docs/architecture/ADR-001-modular-monolith.md`;
+- `docs/architecture/MIGRATION_PLAN.md`;
+- the relevant prompt under `docs/agent-prompts/`.
+
+Target stack:
+
+- PHP 8.4;
+- Symfony 7.4 LTS;
+- PostgreSQL;
+- Redis;
+- RabbitMQ through Symfony Messenger;
+- React + TypeScript + Vite;
+- Nginx + PHP-FPM.
+
+Migration rules are mandatory:
+
+1. **No big-bang rewrite.** Keep the working Python implementation until equivalent Symfony behavior is covered by parity tests.
+2. **Do not delete Python reference code as part of bootstrap/refactoring work.** Runtime retirement requires an explicit migration step.
+3. **One monolith may have multiple processes.** PHP-FPM and Messenger consumers use the same Symfony codebase and deployable image; separate worker processes do not imply microservices.
+4. **Keep module boundaries explicit.** Initial modules are `Wallet`, `Asset`, `Transaction`, `Blockchain`, `Signer`, and `Indexer`.
+5. **Domain code is framework-agnostic.** It must not depend directly on Symfony, Doctrine, Redis, RabbitMQ, HTTP clients, or provider SDKs.
+6. **PostgreSQL is authoritative for financial workflow state.** RabbitMQ is transport, not the source of truth.
+7. **Use explicit concurrency controls.** UTXO reservation, idempotency, transaction state transitions, and later nonce management must be designed for multiple concurrent workers.
+8. **Do not store plaintext WIF/private keys/seed phrases in production persistence.** Any future custodial signing model requires a dedicated signing boundary and an explicit architecture/security decision.
+9. **Do not blindly port educational custom cryptography into the production path.** Preserve it as reference/test material until trusted cryptographic dependencies and signing boundaries are deliberately selected.
+10. **Normal reads stay synchronous.** Do not route ordinary wallet/balance reads through RabbitMQ; use Redis/PostgreSQL read models and asynchronous synchronization behind them.
+
 ## Important files
 
 - `doge_wallet.py` — crypto primitives, wallet generation, transaction building/signing.
@@ -124,16 +157,18 @@ When working on a requested task:
 
 ## Dependencies
 
-The project currently aims to work with Python 3.10+ and the standard library only.
+The current Python reference implementation aims to work with Python 3.10+ and the standard library only.
 
-Do not introduce a new runtime dependency unless it provides a clear benefit that cannot reasonably be achieved with the current architecture. If adding one:
+Do not introduce a new Python runtime dependency unless it provides a clear benefit that cannot reasonably be achieved with the current architecture. If adding one:
 
 - explain why it is needed;
 - pin/document it;
 - update setup instructions;
 - keep security-sensitive signing code local.
 
-Do not replace educational crypto code with a library merely to shorten the source unless the project direction explicitly changes.
+The new Symfony backend has its own dependency policy defined by ADR-001 and migration prompts.
+
+Do not replace educational crypto code with a library merely to shorten the reference source unless the project direction explicitly changes.
 
 ## Testing requirements
 
@@ -164,6 +199,8 @@ and manually check:
 
 For cryptographic changes, add or extend deterministic test vectors instead of relying only on a live mainnet transaction.
 
+When Symfony is introduced, its PHPUnit/static-analysis checks must be added to CI without removing the Python self-test until migration parity is complete.
+
 ## Secret/file hygiene
 
 Keep secret and generated transaction files out of Git. Existing ignore rules for `*.wif` and `*.tx` must not be removed without a strong reason.
@@ -191,15 +228,18 @@ Longer term, a local Dogecoin Core JSON-RPC backend is preferred for independent
 
 ## Current roadmap
 
-Likely next iterations include:
+The active migration roadmap is `docs/architecture/MIGRATION_PLAN.md`.
 
-1. RU/EN localization of the web UI;
-2. lighter modern visual redesign and workflow carousel;
-3. automatic UTXO lookup and selection;
-4. transaction decoding/review from raw bytes;
-5. RBF enabled intentionally for new transactions;
-6. live fee estimation with conservative fallbacks;
-7. Dogecoin Core JSON-RPC integration;
-8. testnet support.
+Near-term order:
+
+1. Symfony bootstrap beside Python;
+2. modular boundaries;
+3. PostgreSQL/Redis/RabbitMQ foundations;
+4. Dogecoin adapter;
+5. transaction engine and concurrency guarantees;
+6. React UI migration;
+7. Dogecoin Core/indexer;
+8. load testing and production hardening;
+9. Bitcoin, then Ethereum/EVM.
 
 Roadmap items are guidance, not permission to bundle unrelated work into the current task.

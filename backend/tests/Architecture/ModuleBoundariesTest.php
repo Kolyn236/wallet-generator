@@ -45,6 +45,7 @@ final class ModuleBoundariesTest extends TestCase
         self::assertDirectoryExists(self::sourceRoot().'/'.$module);
     }
 
+    /** @return iterable<string, array{string}> */
     public static function moduleProvider(): iterable
     {
         foreach (self::MODULES as $module) {
@@ -54,6 +55,8 @@ final class ModuleBoundariesTest extends TestCase
 
     public function testDomainCodeIsFrameworkAgnostic(): void
     {
+        self::addToAssertionCount(1);
+
         foreach (self::phpFilesBelowLayer('Domain') as $file) {
             $contents = self::read($file);
 
@@ -69,6 +72,8 @@ final class ModuleBoundariesTest extends TestCase
 
     public function testModulesDoNotImportOtherModulesInfrastructureOrPresentation(): void
     {
+        self::addToAssertionCount(1);
+
         foreach (self::modulePhpFiles() as $file) {
             $contents = self::read($file);
             $currentModule = self::moduleFor($file);
@@ -92,6 +97,8 @@ final class ModuleBoundariesTest extends TestCase
 
     public function testPresentationDoesNotImportInfrastructureDirectly(): void
     {
+        self::addToAssertionCount(1);
+
         foreach (self::phpFilesBelowLayer('Presentation') as $file) {
             $module = self::moduleFor($file);
             $forbiddenReference = sprintf('App\\%s\\Infrastructure\\', $module);

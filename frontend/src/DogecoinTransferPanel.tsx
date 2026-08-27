@@ -14,7 +14,7 @@ import {
 
 type DogecoinWalletMode = 'none' | 'created' | 'connected' | 'watch-only';
 type TransferState = 'idle' | 'preparing' | 'prepared' | 'broadcasting' | 'broadcasted';
-type TransferError = 'form' | 'sender-invalid' | 'recipient-invalid' | 'wif-required' | 'wif-invalid' | 'wif-mismatch' | 'unavailable' | 'utxo' | 'insufficient-funds' | 'amount-below-dust' | 'same-address' | 'signing' | 'broadcast';
+type TransferError = 'form' | 'recipient-invalid' | 'watch-only' | 'unavailable' | 'utxo' | 'insufficient-funds' | 'amount-below-dust' | 'same-address' | 'signing' | 'broadcast';
 
 type Props = {
   language: Language;
@@ -29,8 +29,6 @@ type Props = {
 
 export function DogecoinTransferPanel({ language, assetId, assetSymbol, networkName, networkStandard, sourceAddress, walletMode, signingWallet }: Props) {
   const copy = messages[language];
-  const [sender, setSender] = useState(sourceAddress);
-  const [wif, setWif] = useState(signingWallet?.wif ?? '');
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [state, setState] = useState<TransferState>('idle');
@@ -38,16 +36,13 @@ export function DogecoinTransferPanel({ language, assetId, assetSymbol, networkN
   const [signedTransfer, setSignedTransfer] = useState<SignedDogecoinTransfer | null>(null);
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null);
   const busy = state === 'preparing' || state === 'broadcasting';
-  const canPrepare = assetId === 'doge';
+  const canSign = assetId === 'doge' && (walletMode === 'created' || walletMode === 'connected') && signingWallet !== null;
 
   const errorMessage = useMemo(() => {
     switch (error) {
       case 'form': return copy.formError;
-      case 'sender-invalid': return copy.senderInvalid;
       case 'recipient-invalid': return copy.recipientInvalid;
-      case 'wif-required': return copy.wifRequired;
-      case 'wif-invalid': return copy.wifInvalid;
-      case 'wif-mismatch': return copy.wifMismatch;
+      case 'watch-only': return copy.transferWatchOnly;
       case 'unavailable': return copy.transferUnavailable;
       case 'utxo': return copy.utxoError;
       case 'insufficient-funds': return copy.insufficientFunds;
@@ -70,28 +65,21 @@ export function DogecoinTransferPanel({ language, assetId, assetSymbol, networkN
     event.preventDefault();
     resetResult();
     if (assetId !== 'doge') { setError('unavailable'); return; }
-
-    const source = sender.trim();
+    if (!canSign || !signingWallet) { setError('watch-only'); return; }
     const destination = recipient.trim();
-    const signingWif = wif.trim();
-    if (!source || !destination || !amount.trim()) { setError('form'); return; }
-    if (!signingWif) { setError('wif-required'); return; }
-    if (!isDogecoinMainnetAddress(source)) { setError('sender-invalid'); return; }
+    if (!destination || !amount.trim()) { setError('form'); return; }
     if (!isDogecoinMainnetAddress(destination)) { setError('recipient-invalid'); return; }
-
     setState('preparing');
     try {
-      const response = await getDogecoinUtxos(source);
-      const built = buildSignedDogecoinTransfer({ wif: signingWif, sourceAddress: source, recipientAddress: destination, amount, utxos: response.utxos });
+      const response = await getDogecoinUtxos(signingWallet.address);
+      const built = buildSignedDogecoinTransfer({ wif: signingWallet.wif, sourceAddress: signingWallet.address, recipientAddress: destination, amount, utxos: response.utxos });
       setSignedTransfer(built);
       setState('prepared');
     } catch (caught: unknown) {
       setState('idle');
       if (caught instanceof WalletApiError) { setError('utxo'); return; }
       if (caught instanceof Error) {
-        if (caught.message === 'invalid_wif') setError('wif-invalid');
-        else if (caught.message === 'wallet_key_mismatch') setError('wif-mismatch');
-        else if (caught.message === 'invalid_address') setError('sender-invalid');
+        if (caught.message === 'invalid_address') setError('recipient-invalid');
         else if (caught.message === 'invalid_amount') setError('form');
         else if (caught.message === 'amount_below_dust') setError('amount-below-dust');
         else if (caught.message === 'same_address') setError('same-address');
@@ -127,31 +115,23 @@ export function DogecoinTransferPanel({ language, assetId, assetSymbol, networkN
         {assetId === 'doge' && <small className="transfer-policy">{copy.confirmedOnly}</small>}
       </div>
       <form className="transfer-form" onSubmit={prepareTransfer}>
-        <label><span>{copy.from}</span><input value={sender} onChange={(e) => { setSender(e.target.value); resetResult(); }} placeholder={copy.fromPlaceholder} autoComplete="off" spellCheck={false} disabled={busy} /></label>
-        <label><span>{copy.wifInput}</span><input type="password" value={wif} onChange={(e) => { setWif(e.target.value); resetResult(); }} placeholder={copy.wifPlaceholder} autoComplete="off" spellCheck={false} disabled={busy} /><small className="transfer-policy">{copy.wifHint}</small></label>
-        <label><span>{copy.recipient}</span><input value={recipient} onChange={(e) => { setRecipient(e.target.value); resetResult(); }} placeholder={copy.recipientPlaceholder} autoComplete="off" spellCheck={false} disabled={busy} /></label>
+        <label><span>{copy.from}</span><input value={sourceAddress} placeholder={copy.fromPlaceholder} autoComplete="off" readOnly /></label>
+        <label><span>{copy.recipient}</span><input value={recipient} onChange={(event) => { setRecipient(event.target.value); resetResult(); }} placeholder={copy.recipientPlaceholder} autoComplete="off" disabled={busy} /></label>
         <div className="form-row">
-          <label><span>{copy.amount}</span><div className="amount-field"><input value={amount} onChange={(e) => { setAmount(e.target.value); resetResult(); }} inputMode="decimal" placeholder={copy.amountPlaceholder} autoComplete="off" disabled={busy} /><strong>{assetSymbol}</strong></div></label>
+          <label><span>{copy.amount}</span><div className="amount-field"><input value={amount} onChange={(event) => { setAmount(event.target.value); resetResult(); }} inputMode="decimal" placeholder={copy.amountPlaceholder} autoComplete="off" disabled={busy} /><strong>{assetSymbol}</strong></div></label>
           <label><span>{copy.fee}</span><div className="readonly-field">{signedTransfer ? `${signedTransfer.feeDoge} DOGE` : copy.automatic}</div></label>
         </div>
-        {assetId === 'doge' && walletMode === 'watch-only' && <p className="transfer-notice">{copy.transferWatchOnly}</p>}
-        {assetId === 'doge' && walletMode === 'none' && <p className="transfer-notice">{copy.transferAnySender}</p>}
+        {!canSign && assetId === 'doge' && walletMode === 'watch-only' && <p className="transfer-notice">{copy.transferWatchOnly}</p>}
+        {!canSign && assetId === 'doge' && walletMode === 'none' && <p className="transfer-notice">{copy.walletEmpty}</p>}
         {assetId !== 'doge' && <p className="transfer-notice">{copy.transferUnavailable}</p>}
         {errorMessage && <p className="form-error">{errorMessage}</p>}
-        <button className="submit-button" type="submit" disabled={busy || !canPrepare}>{state === 'preparing' ? copy.preparingTransfer : copy.previewTransfer}</button>
+        <button className="submit-button" type="submit" disabled={busy || !canSign}>{state === 'preparing' ? copy.preparingTransfer : copy.previewTransfer}</button>
       </form>
       {signedTransfer && (
         <div className="transfer-preview">
           <div className="preview-header"><strong>{copy.preview}</strong><span>{networkStandard}</span></div>
           <dl>
-            <div><dt>{copy.from}</dt><dd>{sender.trim()}</dd></div>
-            <div><dt>{copy.recipient}</dt><dd>{recipient.trim()}</dd></div>
-            <div><dt>{copy.amount}</dt><dd>{signedTransfer.amountDoge} DOGE</dd></div>
-            <div><dt>{copy.fee}</dt><dd>{signedTransfer.feeDoge} DOGE</dd></div>
-            <div><dt>{copy.change}</dt><dd>{signedTransfer.changeDoge} DOGE</dd></div>
-            <div><dt>{copy.inputCount}</dt><dd>{signedTransfer.inputCount}</dd></div>
-            <div className="preview-txid"><dt>{copy.txid}</dt><dd>{signedTransfer.txid}</dd></div>
-            <div><dt>{copy.network}</dt><dd>{networkName}</dd></div>
+            <div><dt>{copy.from}</dt><dd>{sourceAddress}</dd></div><div><dt>{copy.recipient}</dt><dd>{recipient.trim()}</dd></div><div><dt>{copy.amount}</dt><dd>{signedTransfer.amountDoge} DOGE</dd></div><div><dt>{copy.fee}</dt><dd>{signedTransfer.feeDoge} DOGE</dd></div><div><dt>{copy.change}</dt><dd>{signedTransfer.changeDoge} DOGE</dd></div><div><dt>{copy.inputCount}</dt><dd>{signedTransfer.inputCount}</dd></div><div className="preview-txid"><dt>{copy.txid}</dt><dd>{signedTransfer.txid}</dd></div><div><dt>{copy.network}</dt><dd>{networkName}</dd></div>
           </dl>
           <small>{copy.previewSignedLocal}</small>
           <div className="broadcast-actions">

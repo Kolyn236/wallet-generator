@@ -3,10 +3,9 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes } from '@noble/hashes/utils.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
 import { createBase58check } from '@scure/base';
-import { isDogecoinMainnetAddress } from './dogecoin';
+import { decodeDogecoinWif, isDogecoinMainnetAddress } from './dogecoin';
 
 const DOGECOIN_P2PKH_VERSION = 0x1e;
-const DOGECOIN_WIF_VERSION = 0x9e;
 const SIGHASH_ALL = 0x01;
 const SEQUENCE_FINAL = 0xffffffff;
 const KOINU_PER_DOGE = 100_000_000n;
@@ -93,10 +92,11 @@ export function buildSignedDogecoinTransfer(params: {
   }
 
   const amount = parseDogeAmount(params.amount);
-  const privateKey = privateKeyFromWif(wif);
+  const decodedWif = decodeDogecoinWif(wif);
+  const privateKey = decodedWif.privateKey;
 
   try {
-    const publicKey = secp256k1.getPublicKey(privateKey, true);
+    const publicKey = secp256k1.getPublicKey(privateKey, decodedWif.compressed);
     const derivedAddress = publicKeyToDogecoinAddress(publicKey);
     if (derivedAddress !== sourceAddress) {
       throw new Error('wallet_key_mismatch');
@@ -287,24 +287,6 @@ function p2pkhScriptPubKey(address: string): Uint8Array {
     decoded.slice(1),
     Uint8Array.of(0x88, 0xac),
   );
-}
-
-function privateKeyFromWif(wif: string): Uint8Array {
-  let decoded: Uint8Array;
-  try {
-    decoded = base58check.decode(wif.trim());
-  } catch {
-    throw new Error('invalid_wif');
-  }
-
-  if (decoded.length !== 34
-    || decoded[0] !== DOGECOIN_WIF_VERSION
-    || decoded[33] !== 0x01
-  ) {
-    throw new Error('invalid_wif');
-  }
-
-  return decoded.slice(1, 33);
 }
 
 function publicKeyToDogecoinAddress(publicKey: Uint8Array): string {

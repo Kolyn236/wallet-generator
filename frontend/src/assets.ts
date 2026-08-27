@@ -2,7 +2,6 @@ export type AssetId = 'doge' | 'btc' | 'eth' | 'usdt';
 
 export type UtxoRatePerKbFeePolicy = {
   kind: 'utxo-rate-per-kb';
-  recommendedRate: string;
   unit: string;
 };
 
@@ -38,7 +37,6 @@ export const assets: AssetDefinition[] = [
         standard: 'DOGE mainnet',
         feePolicy: {
           kind: 'utxo-rate-per-kb',
-          recommendedRate: '0.01',
           unit: 'DOGE/kB',
         },
       },

@@ -5,3 +5,11 @@ venv/
 .env
 *.wif
 *.tx
+
+# Symfony backend
+backend/.env.local
+backend/.env.*.local
+backend/vendor/
+backend/var/
+backend/.phpunit.cache/
+backend/.php-cs-fixer.cache

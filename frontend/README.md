@@ -5,7 +5,7 @@ The primary web UI for the wallet platform.
 ## Local development
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 

@@ -137,7 +137,7 @@ final class ModuleBoundariesTest extends TestCase
     {
         foreach (self::MODULES as $module) {
             $moduleRoot = self::sourceRoot().'/'.$module;
-            if (!\is_dir($moduleRoot)) {
+            if (!is_dir($moduleRoot)) {
                 continue;
             }
 
@@ -150,7 +150,7 @@ final class ModuleBoundariesTest extends TestCase
     {
         foreach (self::MODULES as $module) {
             $layerRoot = self::sourceRoot().'/'.$module.'/'.$layer;
-            if (!\is_dir($layerRoot)) {
+            if (!is_dir($layerRoot)) {
                 continue;
             }
 
@@ -174,8 +174,8 @@ final class ModuleBoundariesTest extends TestCase
 
     private static function moduleFor(\SplFileInfo $file): string
     {
-        $relative = \substr($file->getPathname(), \strlen(self::sourceRoot()) + 1);
-        $module = \strtok($relative, \DIRECTORY_SEPARATOR);
+        $relative = substr($file->getPathname(), \strlen(self::sourceRoot()) + 1);
+        $module = strtok($relative, \DIRECTORY_SEPARATOR);
 
         self::assertIsString($module);
 
@@ -184,7 +184,7 @@ final class ModuleBoundariesTest extends TestCase
 
     private static function read(\SplFileInfo $file): string
     {
-        $contents = \file_get_contents($file->getPathname());
+        $contents = file_get_contents($file->getPathname());
         self::assertIsString($contents);
 
         return $contents;

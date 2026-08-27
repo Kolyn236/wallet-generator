@@ -7,6 +7,7 @@ venv/
 *.tx
 
 # Symfony backend
+!backend/.env
 backend/.env.local
 backend/.env.*.local
 backend/vendor/

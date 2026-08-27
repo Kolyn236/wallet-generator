@@ -8,6 +8,10 @@ services:
     App\:
         resource: '../src/'
 
+    App\Blockchain\Application\DogecoinFeePolicy:
+        arguments:
+            $recommendedRateDogePerKb: '%env(string:DOGE_RECOMMENDED_FEE_RATE)%'
+
     App\Blockchain\Application\DogecoinBalanceProvider:
         alias: App\Blockchain\Infrastructure\BlockCypherDogecoinBalanceProvider
 

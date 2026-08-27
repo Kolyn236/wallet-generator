@@ -6,7 +6,6 @@ namespace App\Blockchain\Presentation\Http;
 
 use App\Blockchain\Application\BalanceLookupFailed;
 use App\Blockchain\Application\GetDogecoinAddressBalance;
-use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -21,7 +20,7 @@ final readonly class DogecoinBalanceController
     {
         try {
             $balance = ($this->getBalance)($address);
-        } catch (InvalidArgumentException) {
+        } catch (\InvalidArgumentException) {
             return new JsonResponse(['error' => 'invalid_address'], 400);
         } catch (BalanceLookupFailed) {
             return new JsonResponse(['error' => 'provider_unavailable'], 502);

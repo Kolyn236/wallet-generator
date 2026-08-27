@@ -36,7 +36,7 @@ final class ProviderRequestLogger
             return $address;
         }
 
-        return \substr($address, 0, 6).'…'.\substr($address, -4);
+        return substr($address, 0, 6).'…'.substr($address, -4);
     }
 
     /**
@@ -48,11 +48,11 @@ final class ProviderRequestLogger
             'channel' => 'blockchain_provider',
             'level' => $level,
             'event' => $event,
-            'timestamp' => \gmdate('c'),
+            'timestamp' => gmdate('c'),
             ...$context,
         ];
 
-        $encoded = \json_encode($record, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
-        \error_log(false === $encoded ? '[blockchain_provider] log_encoding_failed' : $encoded);
+        $encoded = json_encode($record, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE);
+        error_log(false === $encoded ? '[blockchain_provider] log_encoding_failed' : $encoded);
     }
 }

@@ -31,7 +31,7 @@ The React UI currently verifies that the Symfony backend is online and shows the
 
 Requirements:
 
-- Docker with Compose support;
+- Docker with Compose support.
 
 Start the complete local platform:
 
@@ -133,7 +133,7 @@ composer cs:check
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -145,7 +145,7 @@ Production-like local build:
 docker compose up --build
 ```
 
-The Nginx container builds the React frontend and serves it as static assets while forwarding `/api/*` to Symfony.
+The Nginx container builds the React frontend from the committed npm lock file and serves it as static assets while forwarding `/api/*` to Symfony.
 
 ## Python Dogecoin wallet lab
 
@@ -165,7 +165,7 @@ python3 web_app.py --open
 
 It is no longer the target application architecture and will be retired only after equivalent Symfony/React behavior is covered by parity tests.
 
-Detailed historical Python wallet documentation remains in the existing Python source and `WEB_UI.md` while the migration is in progress.
+The original detailed guide is preserved in `docs/PYTHON_WALLET_LAB.md`; the older browser-flow notes remain in `WEB_UI.md` while migration is in progress.
 
 ## Security invariants
 

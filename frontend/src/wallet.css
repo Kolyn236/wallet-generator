@@ -19,6 +19,31 @@
   line-height: 1.5;
 }
 
+.existing-access-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .05);
+}
+
+.existing-access-switch button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #aaa69b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.existing-access-switch button.active {
+  background: #f4ca55;
+  color: #171713;
+}
+
 .connect-form-footer {
   display: flex;
   align-items: center;
@@ -265,6 +290,10 @@
 
   .backup-toggle {
     width: 100%;
+  }
+
+  .existing-access-switch {
+    grid-template-columns: 1fr;
   }
 
   .connect-form-footer,

@@ -19,10 +19,10 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
 
     public function getConfirmedBalance(DogecoinAddress $address): AddressBalance
     {
-        $lookupId = \bin2hex(\random_bytes(4));
-        $startedAt = \hrtime(true);
+        $lookupId = bin2hex(random_bytes(4));
+        $startedAt = hrtime(true);
         $maskedAddress = ProviderRequestLogger::maskedAddress($address->value);
-        $url = \sprintf(self::ENDPOINT, \rawurlencode($address->value));
+        $url = \sprintf(self::ENDPOINT, rawurlencode($address->value));
         $http_response_header = [];
 
         $this->logger->info('dogecoin_balance_request_started', [
@@ -31,7 +31,7 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
             'address' => $maskedAddress,
         ]);
 
-        $context = \stream_context_create([
+        $context = stream_context_create([
             'http' => [
                 'method' => 'GET',
                 'timeout' => 10,
@@ -40,7 +40,7 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
             ],
         ]);
 
-        $payload = @\file_get_contents($url, false, $context);
+        $payload = @file_get_contents($url, false, $context);
         $status = self::statusCode($http_response_header);
         $durationMs = self::durationMs($startedAt);
 
@@ -57,7 +57,7 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
         }
 
         try {
-            $decoded = \json_decode($payload, true, 512, \JSON_THROW_ON_ERROR);
+            $decoded = json_decode($payload, true, 512, \JSON_THROW_ON_ERROR);
         } catch (\JsonException $exception) {
             $this->logger->error('dogecoin_balance_invalid_json', [
                 'provider' => 'blockcypher',
@@ -142,7 +142,7 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
     private static function statusCode(array $headers): ?int
     {
         $statusLine = $headers[0] ?? null;
-        if (null === $statusLine || 1 !== \preg_match('/^HTTP\/\S+\s+(\d{3})/', $statusLine, $matches)) {
+        if (null === $statusLine || 1 !== preg_match('/^HTTP\/\S+\s+(\d{3})/', $statusLine, $matches)) {
             return null;
         }
 
@@ -151,7 +151,7 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
 
     private static function durationMs(int $startedAt): float
     {
-        return \round((\hrtime(true) - $startedAt) / 1_000_000, 2);
+        return round((hrtime(true) - $startedAt) / 1_000_000, 2);
     }
 
     private static function isUnseenAddressResponse(mixed $decoded): bool
@@ -161,10 +161,10 @@ final readonly class BlockCypherDogecoinBalanceProvider implements DogecoinBalan
             return false;
         }
 
-        $normalized = \strtolower($error);
+        $normalized = strtolower($error);
 
-        return \str_contains($normalized, 'address')
-            && (\str_contains($normalized, 'not found') || \str_contains($normalized, 'unsupported'));
+        return str_contains($normalized, 'address')
+            && (str_contains($normalized, 'not found') || str_contains($normalized, 'unsupported'));
     }
 
     private static function providerError(mixed $decoded): ?string

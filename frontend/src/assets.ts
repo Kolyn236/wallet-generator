@@ -1,9 +1,18 @@
 export type AssetId = 'doge' | 'btc' | 'eth' | 'usdt';
 
+export type UtxoRatePerKbFeePolicy = {
+  kind: 'utxo-rate-per-kb';
+  recommendedRate: string;
+  unit: string;
+};
+
+export type NetworkFeePolicy = UtxoRatePerKbFeePolicy;
+
 export type NetworkDefinition = {
   id: string;
   name: string;
   standard: string;
+  feePolicy: NetworkFeePolicy | null;
 };
 
 export type AssetDefinition = {
@@ -22,7 +31,18 @@ export const assets: AssetDefinition[] = [
     name: 'Dogecoin',
     mark: 'Ð',
     status: 'ready-next',
-    networks: [{ id: 'dogecoin-mainnet', name: 'Dogecoin', standard: 'DOGE mainnet' }],
+    networks: [
+      {
+        id: 'dogecoin-mainnet',
+        name: 'Dogecoin',
+        standard: 'DOGE mainnet',
+        feePolicy: {
+          kind: 'utxo-rate-per-kb',
+          recommendedRate: '0.01',
+          unit: 'DOGE/kB',
+        },
+      },
+    ],
   },
   {
     id: 'btc',
@@ -30,7 +50,14 @@ export const assets: AssetDefinition[] = [
     name: 'Bitcoin',
     mark: '₿',
     status: 'planned',
-    networks: [{ id: 'bitcoin-mainnet', name: 'Bitcoin', standard: 'BTC mainnet' }],
+    networks: [
+      {
+        id: 'bitcoin-mainnet',
+        name: 'Bitcoin',
+        standard: 'BTC mainnet',
+        feePolicy: null,
+      },
+    ],
   },
   {
     id: 'eth',
@@ -38,7 +65,14 @@ export const assets: AssetDefinition[] = [
     name: 'Ethereum',
     mark: 'Ξ',
     status: 'planned',
-    networks: [{ id: 'ethereum-mainnet', name: 'Ethereum', standard: 'EVM mainnet' }],
+    networks: [
+      {
+        id: 'ethereum-mainnet',
+        name: 'Ethereum',
+        standard: 'EVM mainnet',
+        feePolicy: null,
+      },
+    ],
   },
   {
     id: 'usdt',
@@ -47,8 +81,18 @@ export const assets: AssetDefinition[] = [
     mark: '₮',
     status: 'planned',
     networks: [
-      { id: 'usdt-erc20', name: 'Ethereum', standard: 'ERC-20' },
-      { id: 'usdt-trc20', name: 'TRON', standard: 'TRC-20' },
+      {
+        id: 'usdt-erc20',
+        name: 'Ethereum',
+        standard: 'ERC-20',
+        feePolicy: null,
+      },
+      {
+        id: 'usdt-trc20',
+        name: 'TRON',
+        standard: 'TRC-20',
+        feePolicy: null,
+      },
     ],
   },
 ];

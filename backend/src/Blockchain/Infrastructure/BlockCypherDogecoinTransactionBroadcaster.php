@@ -97,8 +97,8 @@ final readonly class BlockCypherDogecoinTransactionBroadcaster implements Dogeco
             throw new BroadcastFailed('provider_unexpected_response', $status);
         }
 
-        $providerTxid = $decoded['hash'] ?? null;
-        if (!\is_string($providerTxid) || 1 !== preg_match('/^[0-9a-fA-F]{64}$/', $providerTxid)) {
+        $providerTxid = BlockCypherBroadcastResponse::txid($decoded);
+        if (null === $providerTxid) {
             $this->logger->error([
                 'provider' => 'blockcypher',
                 'operation' => 'broadcast',
@@ -112,7 +112,23 @@ final readonly class BlockCypherDogecoinTransactionBroadcaster implements Dogeco
             throw new BroadcastFailed('provider_invalid_txid', $status);
         }
 
-        return strtolower($providerTxid);
+        $expectedTxid = strtolower($transaction->txid);
+        if ($providerTxid !== $expectedTxid) {
+            $this->logger->error([
+                'provider' => 'blockcypher',
+                'operation' => 'broadcast',
+                'reason' => 'provider_txid_mismatch',
+                'txid' => $expectedTxid,
+                'provider_txid' => $providerTxid,
+                'http_status' => $status,
+                'duration_ms' => $durationMs,
+                'response_body' => self::loggableResponse($payload),
+            ]);
+
+            throw new BroadcastFailed('provider_txid_mismatch', $status);
+        }
+
+        return $providerTxid;
     }
 
     /**

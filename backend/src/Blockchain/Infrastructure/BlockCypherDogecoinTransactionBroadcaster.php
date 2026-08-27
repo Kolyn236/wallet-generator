@@ -89,12 +89,30 @@ final readonly class BlockCypherDogecoinTransactionBroadcaster implements Dogeco
             throw new BroadcastFailed('provider_unexpected_response', $status);
         }
 
-        $providerTxid = $decoded['hash'] ?? null;
+        $providerTx = $decoded['tx'] ?? null;
+        $providerTxid = \is_array($providerTx) ? ($providerTx['hash'] ?? null) : null;
+        $providerTxid ??= $decoded['hash'] ?? null;
+
         if (!\is_string($providerTxid) || 1 !== preg_match('/^[0-9a-fA-F]{64}$/', $providerTxid)) {
             throw new BroadcastFailed('provider_invalid_txid', $status);
         }
 
         $providerTxid = strtolower($providerTxid);
+        $expectedTxid = strtolower($transaction->txid);
+
+        if ($providerTxid !== $expectedTxid) {
+            $this->logger->error('dogecoin_broadcast_txid_mismatch', [
+                'provider' => 'blockcypher',
+                'broadcast_id' => $broadcastId,
+                'txid' => $expectedTxid,
+                'provider_txid' => $providerTxid,
+                'http_status' => $status,
+                'duration_ms' => $durationMs,
+            ]);
+
+            throw new BroadcastFailed('provider_txid_mismatch', $status);
+        }
+
         $this->logger->info('dogecoin_broadcast_succeeded', [
             'provider' => 'blockcypher',
             'broadcast_id' => $broadcastId,

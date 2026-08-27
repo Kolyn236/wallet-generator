@@ -4,11 +4,7 @@ services:
       context: .
       dockerfile: docker/php/Dockerfile
     working_dir: /app/backend
-    command: >-
-      sh -c "composer install --no-interaction --prefer-dist
-      && mkdir -p var/cache var/log
-      && chown -R www-data:www-data var
-      && php-fpm"
+    command: sh /app/docker/php/start-dev.sh
     volumes:
       - ./:/app
       - backend-var:/app/backend/var

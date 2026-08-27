@@ -4,12 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Architecture;
 
-use FilesystemIterator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use SplFileInfo;
 
 final class ModuleBoundariesTest extends TestCase
 {
@@ -64,7 +60,7 @@ final class ModuleBoundariesTest extends TestCase
                 self::assertStringNotContainsString(
                     $forbiddenReference,
                     $contents,
-                    sprintf('%s must not reference %s from Domain.', $file->getPathname(), $forbiddenReference),
+                    \sprintf('%s must not reference %s from Domain.', $file->getPathname(), $forbiddenReference),
                 );
             }
         }
@@ -84,11 +80,11 @@ final class ModuleBoundariesTest extends TestCase
                 }
 
                 foreach (['Infrastructure', 'Presentation'] as $privateLayer) {
-                    $forbiddenReference = sprintf('App\\%s\\%s\\', $otherModule, $privateLayer);
+                    $forbiddenReference = \sprintf('App\\%s\\%s\\', $otherModule, $privateLayer);
                     self::assertStringNotContainsString(
                         $forbiddenReference,
                         $contents,
-                        sprintf('%s must not import another module private layer %s.', $file->getPathname(), $forbiddenReference),
+                        \sprintf('%s must not import another module private layer %s.', $file->getPathname(), $forbiddenReference),
                     );
                 }
             }
@@ -101,21 +97,21 @@ final class ModuleBoundariesTest extends TestCase
 
         foreach (self::phpFilesBelowLayer('Presentation') as $file) {
             $module = self::moduleFor($file);
-            $forbiddenReference = sprintf('App\\%s\\Infrastructure\\', $module);
+            $forbiddenReference = \sprintf('App\\%s\\Infrastructure\\', $module);
 
             self::assertStringNotContainsString(
                 $forbiddenReference,
                 self::read($file),
-                sprintf('%s must call Application rather than Infrastructure.', $file->getPathname()),
+                \sprintf('%s must call Application rather than Infrastructure.', $file->getPathname()),
             );
         }
     }
 
     public function testGenericDumpingGroundDirectoriesAreNotIntroduced(): void
     {
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator(self::sourceRoot(), FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::SELF_FIRST,
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator(self::sourceRoot(), \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST,
         );
 
         foreach ($iterator as $entry) {
@@ -126,22 +122,22 @@ final class ModuleBoundariesTest extends TestCase
             self::assertNotContains(
                 $entry->getBasename(),
                 self::FORBIDDEN_DIRECTORY_NAMES,
-                sprintf('Use a capability-specific directory name instead of %s.', $entry->getPathname()),
+                \sprintf('Use a capability-specific directory name instead of %s.', $entry->getPathname()),
             );
         }
     }
 
     private static function sourceRoot(): string
     {
-        return dirname(__DIR__, 2).'/src';
+        return \dirname(__DIR__, 2).'/src';
     }
 
-    /** @return iterable<SplFileInfo> */
+    /** @return iterable<\SplFileInfo> */
     private static function modulePhpFiles(): iterable
     {
         foreach (self::MODULES as $module) {
             $moduleRoot = self::sourceRoot().'/'.$module;
-            if (!is_dir($moduleRoot)) {
+            if (!\is_dir($moduleRoot)) {
                 continue;
             }
 
@@ -149,12 +145,12 @@ final class ModuleBoundariesTest extends TestCase
         }
     }
 
-    /** @return iterable<SplFileInfo> */
+    /** @return iterable<\SplFileInfo> */
     private static function phpFilesBelowLayer(string $layer): iterable
     {
         foreach (self::MODULES as $module) {
             $layerRoot = self::sourceRoot().'/'.$module.'/'.$layer;
-            if (!is_dir($layerRoot)) {
+            if (!\is_dir($layerRoot)) {
                 continue;
             }
 
@@ -162,33 +158,33 @@ final class ModuleBoundariesTest extends TestCase
         }
     }
 
-    /** @return iterable<SplFileInfo> */
+    /** @return iterable<\SplFileInfo> */
     private static function phpFiles(string $root): iterable
     {
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS),
         );
 
         foreach ($iterator as $file) {
-            if ($file instanceof SplFileInfo && $file->isFile() && 'php' === $file->getExtension()) {
+            if ($file instanceof \SplFileInfo && $file->isFile() && 'php' === $file->getExtension()) {
                 yield $file;
             }
         }
     }
 
-    private static function moduleFor(SplFileInfo $file): string
+    private static function moduleFor(\SplFileInfo $file): string
     {
-        $relative = substr($file->getPathname(), strlen(self::sourceRoot()) + 1);
-        $module = strtok($relative, DIRECTORY_SEPARATOR);
+        $relative = \substr($file->getPathname(), \strlen(self::sourceRoot()) + 1);
+        $module = \strtok($relative, \DIRECTORY_SEPARATOR);
 
         self::assertIsString($module);
 
         return $module;
     }
 
-    private static function read(SplFileInfo $file): string
+    private static function read(\SplFileInfo $file): string
     {
-        $contents = file_get_contents($file->getPathname());
+        $contents = \file_get_contents($file->getPathname());
         self::assertIsString($contents);
 
         return $contents;

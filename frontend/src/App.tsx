@@ -1,8 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { assets, getAsset, type AssetId } from './assets';
 import { getHealth } from './api';
 import { type Language, messages } from './i18n';
 
 type HealthState = 'checking' | 'online' | 'offline';
+
+type TransferPreview = {
+  from: string;
+  recipient: string;
+  amount: string;
+  asset: string;
+  network: string;
+  standard: string;
+};
 
 const LANGUAGE_KEY = 'wallet-platform-language';
 
@@ -18,7 +28,17 @@ function initialLanguage(): Language {
 export function App() {
   const [language, setLanguage] = useState<Language>(initialLanguage);
   const [health, setHealth] = useState<HealthState>('checking');
+  const [assetId, setAssetId] = useState<AssetId>('doge');
+  const [networkId, setNetworkId] = useState('dogecoin-mainnet');
+  const [from, setFrom] = useState('');
+  const [recipient, setRecipient] = useState('');
+  const [amount, setAmount] = useState('');
+  const [formError, setFormError] = useState(false);
+  const [preview, setPreview] = useState<TransferPreview | null>(null);
+
   const copy = messages[language];
+  const asset = getAsset(assetId);
+  const network = asset.networks.find((candidate) => candidate.id === networkId) ?? asset.networks[0];
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -46,17 +66,46 @@ export function App() {
     return copy.checking;
   }, [copy, health]);
 
+  function selectAsset(nextAssetId: AssetId) {
+    const nextAsset = getAsset(nextAssetId);
+    setAssetId(nextAssetId);
+    setNetworkId(nextAsset.networks[0].id);
+    setPreview(null);
+    setFormError(false);
+  }
+
+  function submitTransfer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const numericAmount = Number(amount);
+
+    if (!from.trim() || !recipient.trim() || !Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setFormError(true);
+      setPreview(null);
+      return;
+    }
+
+    setFormError(false);
+    setPreview({
+      from: from.trim(),
+      recipient: recipient.trim(),
+      amount,
+      asset: asset.symbol,
+      network: network.name,
+      standard: network.standard,
+    });
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#top" aria-label={copy.brand}>
-          <span className="brand-mark">Ð</span>
+          <span className="brand-mark">W</span>
           <span>{copy.brand}</span>
         </a>
         <nav className="nav" aria-label="Primary">
-          <a href="#overview">{copy.overview}</a>
           <a href="#wallets">{copy.wallets}</a>
-          <a href="#transactions">{copy.transactions}</a>
+          <a href="#transfer">{copy.transfer}</a>
+          <a href="#security">{copy.security}</a>
         </nav>
         <div className="topbar-actions">
           <div className={`health health-${health}`} title={`${copy.backend}: ${healthLabel}`}>
@@ -71,64 +120,151 @@ export function App() {
       </header>
 
       <main id="top">
-        <section className="hero" id="overview">
-          <div className="hero-copy">
-            <p className="eyebrow">{copy.eyebrow}</p>
-            <h1>{copy.title}</h1>
-            <p className="hero-subtitle">{copy.subtitle}</p>
-            <div className="hero-status">
-              <span className="status-label">{copy.backend}</span>
-              <strong>{healthLabel}</strong>
+        <section className="intro">
+          <p className="eyebrow">{copy.eyebrow}</p>
+          <h1>{copy.title}</h1>
+          <p className="intro-copy">{copy.subtitle}</p>
+        </section>
+
+        <section className="wallet-layout" id="wallets">
+          <aside className="asset-panel">
+            <div className="section-heading">
+              <span>{copy.selectAsset}</span>
+              <strong>{assets.length}</strong>
             </div>
-          </div>
-          <div className="chain-orbit" aria-hidden="true">
-            <div className="orbit orbit-one" />
-            <div className="orbit orbit-two" />
-            <div className="coin coin-doge">Ð</div>
-            <div className="coin coin-btc">₿</div>
-            <div className="coin coin-eth">Ξ</div>
-          </div>
-        </section>
-
-        <section className="stage-card">
-          <div>
-            <p className="eyebrow">{copy.activeStage}</p>
-            <p>{copy.activeStageText}</p>
-          </div>
-          <span className="pill">Symfony + React</span>
-        </section>
-
-        <section className="feature-grid">
-          <article className="feature-card" id="wallets">
-            <div className="feature-icon">01</div>
-            <h2>{copy.walletTitle}</h2>
-            <p>{copy.walletText}</p>
-            <button type="button" disabled>{copy.comingSoon}</button>
-          </article>
-
-          <article className="feature-card" id="transactions">
-            <div className="feature-icon">02</div>
-            <h2>{copy.transactionTitle}</h2>
-            <p>{copy.transactionText}</p>
-            <button type="button" disabled>{copy.comingSoon}</button>
-          </article>
-
-          <article className="feature-card" id="infrastructure">
-            <div className="feature-icon">03</div>
-            <h2>{copy.infraTitle}</h2>
-            <p>{copy.infraText}</p>
-            <div className="stack-tags">
-              <span>PostgreSQL</span><span>Redis</span><span>RabbitMQ</span>
+            <div className="asset-list">
+              {assets.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  className={`asset-item ${candidate.id === assetId ? 'active' : ''}`}
+                  onClick={() => selectAsset(candidate.id)}
+                >
+                  <span className="asset-mark">{candidate.mark}</span>
+                  <span className="asset-copy">
+                    <strong>{candidate.symbol}</strong>
+                    <small>{candidate.name}</small>
+                  </span>
+                  <span className={`asset-status status-${candidate.status}`}>
+                    {candidate.status === 'ready-next' ? copy.firstIntegration : copy.planned}
+                  </span>
+                </button>
+              ))}
             </div>
-          </article>
+          </aside>
+
+          <div className="wallet-workspace">
+            <section className="wallet-card">
+              <div className="wallet-card-top">
+                <div className="selected-asset">
+                  <span className="selected-mark">{asset.mark}</span>
+                  <div>
+                    <span className="muted-label">{copy.selectedWallet}</span>
+                    <h2>{asset.name} <span>{asset.symbol}</span></h2>
+                  </div>
+                </div>
+                <span className="session-badge">RAM only</span>
+              </div>
+
+              <div className="wallet-balance-row">
+                <div>
+                  <span className="muted-label">{copy.sessionWallet}</span>
+                  <strong>— {asset.symbol}</strong>
+                </div>
+                <div className="wallet-empty-copy">
+                  <p>{copy.sessionEmpty}</p>
+                  <small>{copy.sessionHint}</small>
+                </div>
+              </div>
+
+              <div className="wallet-actions">
+                <button type="button" className="primary-button" disabled title={copy.signerNext}>{copy.createWallet}</button>
+                <button type="button" className="secondary-button" disabled title={copy.signerNext}>{copy.importWallet}</button>
+                <span>{copy.signerNext}</span>
+              </div>
+            </section>
+
+            <section className="network-card">
+              <div>
+                <span className="muted-label">{copy.route}</span>
+                <h3>{network.name}</h3>
+                <p>{copy.routeHint}</p>
+              </div>
+              <label className="network-select">
+                <span>{copy.network}</span>
+                <select
+                  value={network.id}
+                  onChange={(event) => {
+                    setNetworkId(event.target.value);
+                    setPreview(null);
+                  }}
+                >
+                  {asset.networks.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>{candidate.name} · {candidate.standard}</option>
+                  ))}
+                </select>
+              </label>
+            </section>
+          </div>
         </section>
 
-        <section className="security-card">
+        <section className="transfer-card" id="transfer">
+          <div className="transfer-copy">
+            <span className="muted-label">{asset.symbol} · {network.standard}</span>
+            <h2>{copy.transferTitle}</h2>
+            <p>{copy.transferText}</p>
+          </div>
+
+          <form className="transfer-form" onSubmit={submitTransfer}>
+            <label>
+              <span>{copy.from}</span>
+              <input value={from} onChange={(event) => setFrom(event.target.value)} placeholder={copy.fromPlaceholder} autoComplete="off" />
+            </label>
+            <label>
+              <span>{copy.recipient}</span>
+              <input value={recipient} onChange={(event) => setRecipient(event.target.value)} placeholder={copy.recipientPlaceholder} autoComplete="off" />
+            </label>
+            <div className="form-row">
+              <label>
+                <span>{copy.amount}</span>
+                <div className="amount-field">
+                  <input value={amount} onChange={(event) => setAmount(event.target.value)} inputMode="decimal" placeholder={copy.amountPlaceholder} autoComplete="off" />
+                  <strong>{asset.symbol}</strong>
+                </div>
+              </label>
+              <label>
+                <span>{copy.fee}</span>
+                <div className="readonly-field">{copy.automatic}</div>
+              </label>
+            </div>
+
+            {formError && <p className="form-error">{copy.formError}</p>}
+            <button className="submit-button" type="submit">{copy.previewTransfer}</button>
+          </form>
+
+          {preview && (
+            <div className="transfer-preview">
+              <div className="preview-header">
+                <strong>{copy.preview}</strong>
+                <span>{preview.standard}</span>
+              </div>
+              <dl>
+                <div><dt>{copy.from}</dt><dd>{preview.from}</dd></div>
+                <div><dt>{copy.recipient}</dt><dd>{preview.recipient}</dd></div>
+                <div><dt>{copy.amount}</dt><dd>{preview.amount} {preview.asset}</dd></div>
+                <div><dt>{copy.network}</dt><dd>{preview.network}</dd></div>
+              </dl>
+              <small>{copy.previewNotBroadcast}</small>
+            </div>
+          )}
+        </section>
+
+        <section className="security-card" id="security">
           <div className="security-icon">✓</div>
           <div>
-            <h2>{copy.security}</h2>
+            <h2>{copy.securityTitle}</h2>
             <p>{copy.securityText}</p>
-            <small>{copy.legacy}</small>
+            <small>{copy.noStorage}</small>
           </div>
         </section>
       </main>

@@ -3,4 +3,7 @@ parameters:
     paths:
         - src
         - tests
+    excludePaths:
+        analyse:
+            - tests/bootstrap.php
     tmpDir: var/phpstan

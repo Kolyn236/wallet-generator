@@ -22,8 +22,11 @@ final readonly class DogecoinBalanceController
             $balance = ($this->getBalance)($address);
         } catch (\InvalidArgumentException) {
             return new JsonResponse(['error' => 'invalid_address'], 400);
-        } catch (BalanceLookupFailed) {
-            return new JsonResponse(['error' => 'provider_unavailable'], 502);
+        } catch (BalanceLookupFailed $exception) {
+            return new JsonResponse([
+                'error' => 'provider_unavailable',
+                'reason' => $exception->reason,
+            ], 502);
         }
 
         return new JsonResponse([

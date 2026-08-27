@@ -23,6 +23,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from balance_page import lookup_address_balance, render_balance_page
+from blockcypher_transactions import fetch_cpfp_parent
 from blockcypher_utxos import AddressUtxos, Utxo, fetch_confirmed_utxos
 from broadcast_blockcypher import broadcast as broadcast_blockcypher
 from build_cpfp import build_cpfp
@@ -168,14 +169,11 @@ header{display:flex;justify-content:space-between;gap:28px;align-items:flex-star
     </section>
 
     <section id="cpfp" class="panel" role="tabpanel">
-      <div class="panel-head"><div class="panel-copy"><p class="panel-kicker" data-i18n="stepThree">Step 3</p><div class="title-with-help"><h2 data-i18n="cpfpTitle">CPFP rescue</h2><span class="tooltip"><button class="tooltip-trigger" type="button" aria-describedby="cpfp-tooltip-content" data-i18n-aria-label="cpfpTooltipAria">?</button><span class="tooltip-content" id="cpfp-tooltip-content" role="tooltip" data-i18n="cpfpTooltip">CPFP (Child Pays For Parent) creates a higher-fee child transaction that spends an unconfirmed output from the parent. A miner must include the parent before the child, making the combined package more attractive to confirm.</span></span></div><p class="small" data-i18n="cpfpHelp">Parent TXID and byte size are computed from the signed parent raw transaction to avoid manual TXID mistakes.</p></div></div>
+      <div class="panel-head"><div class="panel-copy"><p class="panel-kicker" data-i18n="stepThree">Step 3</p><div class="title-with-help"><h2 data-i18n="cpfpTitle">CPFP rescue</h2><span class="tooltip"><button class="tooltip-trigger" type="button" aria-describedby="cpfp-tooltip-content" data-i18n-aria-label="cpfpTooltipAria">?</button><span class="tooltip-content" id="cpfp-tooltip-content" role="tooltip" data-i18n="cpfpTooltip">CPFP (Child Pays For Parent) creates a higher-fee child transaction that spends an unconfirmed output from the parent. A miner must include the parent before the child, making the combined package more attractive to confirm.</span></span></div><p class="small" data-i18n="cpfpHelp">Enter the parent TXID. The app fetches and validates the transaction, then resolves vout, output amount, fee and size automatically.</p></div></div>
       <div class="grid">
         <div class="full"><label data-i18n="sourceWif">Source WIF · local secret</label><input id="cpfp-wif" type="password" autocomplete="off" placeholder="Q..."></div>
-        <div class="full"><label data-i18n="parentRaw">Parent signed raw transaction</label><textarea id="cpfp-parent-raw" placeholder="01000000..."></textarea></div>
-        <div><label data-i18n="parentVout">Parent output vout to spend</label><input id="cpfp-vout" type="number" min="0" value="1"></div>
-        <div><label data-i18n="parentOutputAmount">Parent output amount · DOGE</label><input id="cpfp-utxo-amount" inputmode="decimal" placeholder="6.99774000"></div>
-        <div><label data-i18n="parentFee">Parent fee · DOGE</label><input id="cpfp-parent-fee" inputmode="decimal" placeholder="0.00226000"></div>
-        <div><label data-i18n="targetPackageRate">Target package rate · DOGE/kB</label><input id="cpfp-rate" inputmode="decimal" value="0.80"></div>
+        <div class="full"><label data-i18n="parentTxidInput">Parent transaction TXID</label><input id="cpfp-parent-txid" class="mono" autocomplete="off" spellcheck="false" placeholder="64-character TXID"><div class="help" data-i18n="parentTxidHelp">The backend downloads the public parent transaction, verifies its raw bytes and automatically selects the largest unspent output controlled by this WIF.</div></div>
+        <div class="full"><label data-i18n="targetPackageRate">Target package rate · DOGE/kB</label><input id="cpfp-rate" inputmode="decimal" value="0.80"></div>
         <div class="full"><label data-i18n="childDestination">Child destination · optional</label><input id="cpfp-to" class="mono" placeholder="blank = self-transfer back to source" data-i18n-placeholder="placeholderCpfpTo"><div class="help" data-i18n="cpfpDestinationHelp">For a pure CPFP rescue, blank means the remaining output returns to the source wallet.</div></div>
       </div>
       <div class="actions"><button class="primary" onclick="buildCpfp()" data-i18n="buildCpfp">Build CPFP child</button></div><div id="cpfp-result" class="result"></div>
@@ -200,9 +198,9 @@ const I18N={
     walletTitle:"Generate a local wallet",walletHelp:"A new secp256k1 private key is generated locally with Python's cryptographic RNG.",generateWallet:"Generate wallet",
     sendTitle:"Build & sign a transfer",sendAutoHelp:"Source address, confirmed balance and UTXO are resolved automatically. Change returns to the source wallet.",sourceWif:"Source WIF · local secret",sourceWifHelp:"The WIF is processed locally. Only the derived public address is sent to BlockCypher to look up confirmed UTXOs.",sendAmount:"Send amount · DOGE",recipient:"Recipient · To address",feeRate:"Fee rate · DOGE/kB",feeRateHelp:"0.01 DOGE/kB is the documented Dogecoin Core recommendation, not a live fee estimate.",buildSigned:"Build signed transaction",
     walletLoading:"Loading confirmed balance…",sourceAddress:"Source address",confirmedBalance:"Confirmed balance",availableUtxos:"Spendable UTXOs",largestUtxo:"Largest UTXO",
-    cpfpTitle:"CPFP rescue",cpfpTooltipAria:"What is CPFP?",cpfpTooltip:"CPFP (Child Pays For Parent) is a way to speed up a pending transaction. It creates a higher-fee child transaction that spends an unconfirmed output from the parent, usually its change. A miner must include the parent before the child, so the combined package becomes more attractive to confirm.",cpfpHelp:"Parent TXID and byte size are computed from the signed parent raw transaction to avoid manual TXID mistakes.",parentRaw:"Parent signed raw transaction",parentVout:"Parent output vout to spend",parentOutputAmount:"Parent output amount · DOGE",parentFee:"Parent fee · DOGE",targetPackageRate:"Target package rate · DOGE/kB",childDestination:"Child destination · optional",cpfpDestinationHelp:"For a pure CPFP rescue, blank means the remaining output returns to the source wallet.",buildCpfp:"Build CPFP child",
+    cpfpTitle:"CPFP rescue",cpfpTooltipAria:"What is CPFP?",cpfpTooltip:"CPFP (Child Pays For Parent) is a way to speed up a pending transaction. It creates a higher-fee child transaction that spends an unconfirmed output from the parent, usually its change. A miner must include the parent before the child, so the combined package becomes more attractive to confirm.",cpfpHelp:"Enter the parent TXID. The app fetches and validates the transaction, then resolves vout, output amount, fee and size automatically.",parentTxidInput:"Parent transaction TXID",parentTxidHelp:"The backend downloads the public parent transaction, verifies its raw bytes and automatically selects the largest unspent output controlled by this WIF.",targetPackageRate:"Target package rate · DOGE/kB",childDestination:"Child destination · optional",cpfpDestinationHelp:"For a pure CPFP rescue, blank means the remaining output returns to the source wallet.",buildCpfp:"Build CPFP child",
     placeholderCpfpTo:"blank = self-transfer back to source",dogeAddress:"DOGE address",publicKey:"Public key",wif:"WIF",privateKeyHex:"Private key hex",revealSecrets:"Reveal / hide secrets",fromSource:"From / source",toRecipient:"To / recipient",send:"Send",change:"Change",changeAddressResult:"Change address",networkFee:"Network fee",size:"Size",txid:"TXID",none:"none",
-    parentTxid:"Parent TXID",parentSize:"Parent size",childDestinationResult:"Child destination",childOutput:"Child output",childFee:"Child fee",childSize:"Child size",packageRate:"Package rate",childTxid:"Child TXID",provider:"Provider",result:"Result",accepted:"accepted",openBlockchair:"Open in Blockchair ↗",errorPrefix:"Error",
+    parentTxid:"Parent TXID",resolvedVout:"Resolved vout",parentOutput:"Parent output",parentFee:"Parent fee",parentSize:"Parent size",childDestinationResult:"Child destination",childOutput:"Child output",childFee:"Child fee",childSize:"Child size",packageRate:"Package rate",childTxid:"Child TXID",provider:"Provider",result:"Result",accepted:"accepted",openBlockchair:"Open in Blockchair ↗",errorPrefix:"Error",
     broadcastNow:"Broadcast to network",broadcasting:"Broadcasting…",broadcasted:"Broadcasted",broadcastSuccess:"Transaction broadcast successfully",broadcastFailure:"Broadcast failed",broadcastConfirmDialog:"Broadcast this signed transaction to Dogecoin mainnet? This action cannot be undone."
   },
   ru:{
@@ -213,17 +211,17 @@ const I18N={
     walletTitle:"Создать локальный кошелёк",walletHelp:"Новый приватный ключ secp256k1 генерируется локально криптографическим генератором Python.",generateWallet:"Создать кошелёк",
     sendTitle:"Собрать и подписать перевод",sendAutoHelp:"Адрес источника, подтверждённый баланс и UTXO подбираются автоматически. Сдача возвращается на исходный кошелёк.",sourceWif:"WIF источника · локальный секрет",sourceWifHelp:"WIF обрабатывается локально. BlockCypher получает только вычисленный публичный адрес для поиска подтверждённых UTXO.",sendAmount:"Сумма перевода · DOGE",recipient:"Получатель · адрес To",feeRate:"Ставка комиссии · DOGE/kB",feeRateHelp:"0.01 DOGE/kB — документированная рекомендация Dogecoin Core, а не актуальная оценка комиссии сети.",buildSigned:"Собрать подписанную транзакцию",
     walletLoading:"Загружаем подтверждённый баланс…",sourceAddress:"Адрес источника",confirmedBalance:"Подтверждённый баланс",availableUtxos:"Доступные UTXO",largestUtxo:"Крупнейший UTXO",
-    cpfpTitle:"Ускорение CPFP",cpfpTooltipAria:"Что такое CPFP?",cpfpTooltip:"CPFP (Child Pays For Parent) — способ ускорить зависшую неподтверждённую транзакцию. Создаётся дочерняя транзакция с повышенной комиссией, которая тратит неподтверждённый выход parent — обычно сдачу. Чтобы включить child, майнеру нужно сначала включить parent, поэтому общий пакет становится выгоднее для подтверждения.",cpfpHelp:"TXID и размер родительской транзакции вычисляются из её signed raw bytes, чтобы исключить ошибки ручного копирования TXID.",parentRaw:"Подписанная raw-транзакция родителя",parentVout:"vout родительского выхода для траты",parentOutputAmount:"Сумма родительского выхода · DOGE",parentFee:"Комиссия родителя · DOGE",targetPackageRate:"Целевая ставка пакета · DOGE/kB",childDestination:"Адрес child-транзакции · необязательно",cpfpDestinationHelp:"Для обычного CPFP поле можно оставить пустым: остаток вернётся на исходный кошелёк.",buildCpfp:"Собрать CPFP child",
+    cpfpTitle:"Ускорение CPFP",cpfpTooltipAria:"Что такое CPFP?",cpfpTooltip:"CPFP (Child Pays For Parent) — способ ускорить зависшую неподтверждённую транзакцию. Создаётся дочерняя транзакция с повышенной комиссией, которая тратит неподтверждённый выход parent — обычно сдачу. Чтобы включить child, майнеру нужно сначала включить parent, поэтому общий пакет становится выгоднее для подтверждения.",cpfpHelp:"Укажите TXID родительской транзакции. Приложение само загрузит и проверит её, определит vout, сумму выхода, комиссию и размер.",parentTxidInput:"TXID родительской транзакции",parentTxidHelp:"Backend загружает публичную parent-транзакцию, проверяет её raw bytes и автоматически выбирает крупнейший непотраченный выход, принадлежащий этому WIF.",targetPackageRate:"Целевая ставка пакета · DOGE/kB",childDestination:"Адрес child-транзакции · необязательно",cpfpDestinationHelp:"Для обычного CPFP поле можно оставить пустым: остаток вернётся на исходный кошелёк.",buildCpfp:"Собрать CPFP child",
     placeholderCpfpTo:"пусто = self-transfer обратно источнику",dogeAddress:"Адрес DOGE",publicKey:"Публичный ключ",wif:"WIF",privateKeyHex:"Приватный ключ hex",revealSecrets:"Показать / скрыть секреты",fromSource:"Откуда / source",toRecipient:"Куда / получатель",send:"Отправляем",change:"Сдача",changeAddressResult:"Адрес сдачи",networkFee:"Комиссия сети",size:"Размер",txid:"TXID",none:"нет",
-    parentTxid:"TXID родителя",parentSize:"Размер родителя",childDestinationResult:"Адрес child",childOutput:"Выход child",childFee:"Комиссия child",childSize:"Размер child",packageRate:"Ставка пакета",childTxid:"TXID child",provider:"Провайдер",result:"Результат",accepted:"принято",openBlockchair:"Открыть в Blockchair ↗",errorPrefix:"Ошибка",
+    parentTxid:"TXID родителя",resolvedVout:"Определённый vout",parentOutput:"Выход родителя",parentFee:"Комиссия родителя",parentSize:"Размер родителя",childDestinationResult:"Адрес child",childOutput:"Выход child",childFee:"Комиссия child",childSize:"Размер child",packageRate:"Ставка пакета",childTxid:"TXID child",provider:"Провайдер",result:"Результат",accepted:"принято",openBlockchair:"Открыть в Blockchair ↗",errorPrefix:"Ошибка",
     broadcastNow:"Отправить в сеть",broadcasting:"Отправляем…",broadcasted:"Отправлено",broadcastSuccess:"Транзакция успешно отправлена в сеть",broadcastFailure:"Не удалось отправить транзакцию",broadcastConfirmDialog:"Отправить эту подписанную транзакцию в Dogecoin mainnet? Действие необратимо."
   }
 };
 
 const ERROR_TRANSLATIONS_RU={
   "Local UI token mismatch. Reload the page.":"Локальный токен интерфейса не совпал. Перезагрузите страницу.","Not found":"Не найдено","Request body is empty or too large.":"Тело запроса пустое или слишком большое.","Request body must be valid JSON.":"Тело запроса должно содержать корректный JSON.","JSON body must be an object.":"JSON-запрос должен быть объектом.",
-  "Parent raw transaction must be hexadecimal.":"Raw-транзакция родителя должна быть в hex-формате.","Parent raw transaction is empty.":"Raw-транзакция родителя пуста.","Raw transaction must be hexadecimal.":"Raw-транзакция должна быть в hex-формате.","Raw transaction is empty.":"Raw-транзакция пуста.",
-  "Only compressed Dogecoin mainnet WIF keys are supported.":"Поддерживаются только compressed WIF-ключи Dogecoin mainnet.","WIF is not a Dogecoin mainnet private key.":"Этот WIF не является приватным ключом Dogecoin mainnet.","Only compressed WIF keys are supported.":"Поддерживаются только compressed WIF-ключи.","WIF contains an invalid secp256k1 private key.":"WIF содержит некорректный приватный ключ secp256k1.","Invalid Base58Check checksum.":"Некорректная контрольная сумма Base58Check.","Expected a legacy Dogecoin P2PKH address.":"Ожидался legacy P2PKH-адрес Dogecoin.","Address is not a Dogecoin mainnet P2PKH address.":"Адрес не является P2PKH-адресом Dogecoin mainnet.",
+  "Parent TXID must contain exactly 64 hexadecimal characters.":"TXID родительской транзакции должен содержать ровно 64 шестнадцатеричных символа.","Parent TXID must be hexadecimal.":"TXID родительской транзакции должен быть в hex-формате.","The parent transaction is already confirmed; CPFP is no longer needed.":"Родительская транзакция уже подтверждена — CPFP больше не нужен.","The parent transaction is marked as a double spend.":"Родительская транзакция помечена как double spend.","The parent transaction has no unspent output controlled by the source wallet.":"В родительской транзакции нет непотраченного выхода, которым управляет этот исходный кошелёк.",
+  "Raw transaction must be hexadecimal.":"Raw-транзакция должна быть в hex-формате.","Raw transaction is empty.":"Raw-транзакция пуста.","Only compressed Dogecoin mainnet WIF keys are supported.":"Поддерживаются только compressed WIF-ключи Dogecoin mainnet.","WIF is not a Dogecoin mainnet private key.":"Этот WIF не является приватным ключом Dogecoin mainnet.","Only compressed WIF keys are supported.":"Поддерживаются только compressed WIF-ключи.","WIF contains an invalid secp256k1 private key.":"WIF содержит некорректный приватный ключ secp256k1.","Invalid Base58Check checksum.":"Некорректная контрольная сумма Base58Check.","Expected a legacy Dogecoin P2PKH address.":"Ожидался legacy P2PKH-адрес Dogecoin.","Address is not a Dogecoin mainnet P2PKH address.":"Адрес не является P2PKH-адресом Dogecoin mainnet.",
   "No confirmed spendable UTXOs were found for this wallet.":"Для этого кошелька не найдены подтверждённые доступные UTXO.","Insufficient confirmed balance for the amount plus network fee.":"Подтверждённого баланса недостаточно для суммы перевода и комиссии сети."
 };
 
@@ -249,7 +247,7 @@ function broadcastButton(kind,d){const disabled=d.broadcasting||!!d.broadcast;co
 const rendered={wallet:null,send:null,cpfp:null};
 function renderWalletResult(d){rendered.wallet=d;show("wallet-result",kv([[t("dogeAddress"),d.address,"mono"],[t("publicKey"),d.public_key,"mono"],[t("wif"),d.wif,"mono secret"],[t("privateKeyHex"),d.private_key_hex,"mono secret"]])+`<div class="actions"><button class="secondary" id="toggle-wallet-secrets">${esc(t("revealSecrets"))}</button></div>`);document.getElementById("toggle-wallet-secrets").onclick=()=>document.querySelectorAll("#wallet-result .secret").forEach(x=>x.classList.toggle("reveal"))}
 function renderSendResult(d){rendered.send=d;show("send-result",kv([[t("fromSource"),d.source,"mono"],[t("toRecipient"),d.destination,"mono"],[t("send"),d.send+" DOGE"],[t("change"),d.change+" DOGE"],[t("changeAddressResult"),d.change_address||t("none"),"mono"],[t("networkFee"),d.fee+" DOGE"],[t("size"),d.size+" bytes"],[t("txid"),d.txid,"mono"]])+broadcastButton("send",d)+broadcastReceipt(d));const button=document.getElementById("broadcast-send");if(button&&!button.disabled)button.onclick=()=>broadcastBuilt("send")}
-function renderCpfpResult(d){rendered.cpfp=d;show("cpfp-result",kv([[t("parentTxid"),d.parent_txid,"mono"],[t("parentSize"),d.parent_size+" bytes"],[t("childDestinationResult"),d.destination,"mono"],[t("childOutput"),d.child_output+" DOGE"],[t("childFee"),d.child_fee+" DOGE"],[t("childSize"),d.child_size+" bytes"],[t("packageRate"),d.package_rate+" DOGE/kB"],[t("childTxid"),d.txid,"mono"]])+broadcastButton("cpfp",d)+broadcastReceipt(d));const button=document.getElementById("broadcast-cpfp");if(button&&!button.disabled)button.onclick=()=>broadcastBuilt("cpfp")}
+function renderCpfpResult(d){rendered.cpfp=d;show("cpfp-result",kv([[t("parentTxid"),d.parent_txid,"mono"],[t("resolvedVout"),String(d.parent_vout)],[t("parentOutput"),d.parent_output+" DOGE"],[t("parentFee"),d.parent_fee+" DOGE"],[t("parentSize"),d.parent_size+" bytes"],[t("childDestinationResult"),d.destination,"mono"],[t("childOutput"),d.child_output+" DOGE"],[t("childFee"),d.child_fee+" DOGE"],[t("childSize"),d.child_size+" bytes"],[t("packageRate"),d.package_rate+" DOGE/kB"],[t("childTxid"),d.txid,"mono"]])+broadcastButton("cpfp",d)+broadcastReceipt(d));const button=document.getElementById("broadcast-cpfp");if(button&&!button.disabled)button.onclick=()=>broadcastBuilt("cpfp")}
 function refreshRenderedResults(){if(rendered.wallet)renderWalletResult(rendered.wallet);if(rendered.send)renderSendResult(rendered.send);if(rendered.cpfp)renderCpfpResult(rendered.cpfp)}
 
 function renderWalletStatus(d){const el=document.getElementById("send-wallet-status");if(!d){el.className="wallet-status";el.innerHTML="";return}lastWalletStatus=d;if(d.loading){el.className="wallet-status show loading";el.textContent=t("walletLoading");return}if(d.error){el.className="wallet-status show bad";el.textContent=localizedError(d.error);return}el.className="wallet-status show good";el.innerHTML=`<div class="wallet-status-grid"><div><span class="wallet-status-label">${esc(t("sourceAddress"))}</span><span class="wallet-status-value mono">${esc(d.address)}</span></div><div><span class="wallet-status-label">${esc(t("confirmedBalance"))}</span><span class="wallet-status-value">${esc(d.balance)} DOGE</span></div><div><span class="wallet-status-label">${esc(t("availableUtxos"))}</span><span class="wallet-status-value">${esc(d.utxo_count)}</span></div></div>`}
@@ -258,7 +256,7 @@ const sendWif=document.getElementById("send-wif");sendWif.addEventListener("inpu
 
 async function generateWallet(){try{renderWalletResult(await post("/api/generate",{}))}catch(e){showError("wallet-result",e)}}
 async function buildTx(){try{const d=await post("/api/build",{wif:document.getElementById("send-wif").value,to:document.getElementById("send-to").value.trim(),amount:document.getElementById("send-amount").value.trim(),fee_rate:document.getElementById("send-fee-rate").value.trim()});renderSendResult(d);lastWalletStatus={address:d.source,balance:d.confirmed_balance,utxo_count:d.utxo_count};renderWalletStatus(lastWalletStatus)}catch(e){showError("send-result",e)}}
-async function buildCpfp(){try{const d=await post("/api/cpfp",{wif:document.getElementById("cpfp-wif").value,parent_raw:document.getElementById("cpfp-parent-raw").value,parent_vout:document.getElementById("cpfp-vout").value,parent_utxo_amount:document.getElementById("cpfp-utxo-amount").value.trim(),parent_fee:document.getElementById("cpfp-parent-fee").value.trim(),target_rate:document.getElementById("cpfp-rate").value.trim(),to:document.getElementById("cpfp-to").value.trim()});renderCpfpResult(d)}catch(e){showError("cpfp-result",e)}}
+async function buildCpfp(){try{const d=await post("/api/cpfp",{wif:document.getElementById("cpfp-wif").value,parent_txid:document.getElementById("cpfp-parent-txid").value.trim(),target_rate:document.getElementById("cpfp-rate").value.trim(),to:document.getElementById("cpfp-to").value.trim()});renderCpfpResult(d)}catch(e){showError("cpfp-result",e)}}
 async function broadcastBuilt(kind){const d=rendered[kind];if(!d||!d.raw_hex||d.broadcasting||d.broadcast)return;if(!window.confirm(t("broadcastConfirmDialog")))return;d.broadcast_error=null;d.broadcasting=true;kind==="send"?renderSendResult(d):renderCpfpResult(d);try{d.broadcast=await post("/api/broadcast",{raw_hex:d.raw_hex})}catch(e){d.broadcast_error=e&&e.message?e.message:String(e)}finally{d.broadcasting=false;kind==="send"?renderSendResult(d):renderCpfpResult(d)}}
 
 applyLanguage();goToStep(0);
@@ -269,7 +267,7 @@ applyLanguage();goToStep(0);
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "DogeWalletLab/0.6"
+    server_version = "DogeWalletLab/0.7"
 
     def log_message(self, fmt: str, *args: object) -> None:
         sys.stderr.write("[web] " + (fmt % args) + "\n")
@@ -400,30 +398,29 @@ class Handler(BaseHTTPRequestHandler):
     def _api_cpfp(self, body: dict) -> None:
         wif = str(body.get("wif", "")).strip()
         wallet = wallet_from_wif(wif)
-        raw_hex = "".join(str(body.get("parent_raw", "")).split())
-        try:
-            parent_raw = bytes.fromhex(raw_hex)
-        except ValueError as exc:
-            raise ValueError("Parent raw transaction must be hexadecimal.") from exc
-        if not parent_raw:
-            raise ValueError("Parent raw transaction is empty.")
-        parent_txid = txid_from_raw(parent_raw)
-        parent_size = len(parent_raw)
+        parent = fetch_cpfp_parent(
+            str(body.get("parent_txid", "")).strip(),
+            wallet.address,
+            os.environ.get("BLOCKCYPHER_TOKEN"),
+        )
         destination = str(body.get("to", "")).strip() or wallet.address
         raw, child_fee, output_value, child_size, package_rate = build_cpfp(
             wif=wif,
             source_address=wallet.address,
-            parent_txid=parent_txid,
-            parent_vout=int(body.get("parent_vout", 0)),
-            parent_utxo_value=doge_to_koinu(str(body.get("parent_utxo_amount", "")).strip()),
-            parent_fee=doge_to_koinu(str(body.get("parent_fee", "")).strip()),
-            parent_size=parent_size,
+            parent_txid=parent.txid,
+            parent_vout=parent.vout,
+            parent_utxo_value=parent.output_value,
+            parent_fee=parent.fee,
+            parent_size=parent.size,
             destination_address=destination,
             target_package_rate=doge_to_koinu(str(body.get("target_rate", "0.80")).strip()),
         )
         self._json(200, {
-            "parent_txid": parent_txid,
-            "parent_size": parent_size,
+            "parent_txid": parent.txid,
+            "parent_vout": parent.vout,
+            "parent_output": format_doge(parent.output_value),
+            "parent_fee": format_doge(parent.fee),
+            "parent_size": parent.size,
             "destination": destination,
             "child_output": format_doge(output_value),
             "child_fee": format_doge(child_fee),

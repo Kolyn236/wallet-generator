@@ -54,21 +54,22 @@ jobs:
       - name: Validate Compose topology
         working-directory: .
         run: docker compose config --quiet
-      - name: Verify Symfony runtime directory permissions
+      - name: Smoke test local runtime
         working-directory: .
         run: |
           set -eu
-          docker compose up -d --build php
+          docker compose up -d --build
           trap 'docker compose down -v' EXIT
 
           for attempt in $(seq 1 30); do
-            if docker compose exec -T --user www-data php sh -c 'test -w var/cache && test -w var/log'; then
+            if docker compose exec -T --user www-data php sh -c 'test -w var/cache && test -w var/log' \
+              && curl --fail --silent --show-error http://localhost:8080/api/health >/dev/null; then
               exit 0
             fi
             sleep 1
           done
 
-          docker compose logs php
+          docker compose logs
           exit 1
       - name: Build platform Nginx image
         working-directory: .

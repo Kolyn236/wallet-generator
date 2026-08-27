@@ -12,6 +12,7 @@ services:
       APP_ENV: dev
       APP_DEBUG: '1'
       APP_SECRET: local-development-only-change-me
+      DEFAULT_URI: http://localhost:8080
 
   nginx:
     build:

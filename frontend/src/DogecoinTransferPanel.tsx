@@ -6,13 +6,13 @@ import {
 } from './api';
 import { type AssetId } from './assets';
 import { type Language, messages } from './i18n';
-import { isDogecoinMainnetAddress, type CreatedDogecoinWallet } from './wallet/dogecoin';
+import { isDogecoinMainnetAddress, type DogecoinSigningWallet } from './wallet/dogecoin';
 import {
   buildSignedDogecoinTransfer,
   type SignedDogecoinTransfer,
 } from './wallet/dogecoinTransaction';
 
-type DogecoinWalletMode = 'none' | 'created' | 'watch-only';
+type DogecoinWalletMode = 'none' | 'created' | 'connected' | 'watch-only';
 type TransferState = 'idle' | 'preparing' | 'prepared' | 'broadcasting' | 'broadcasted';
 type TransferError =
   | 'form'
@@ -34,7 +34,7 @@ type Props = {
   networkStandard: string;
   sourceAddress: string;
   walletMode: DogecoinWalletMode;
-  createdWallet: CreatedDogecoinWallet | null;
+  signingWallet: DogecoinSigningWallet | null;
 };
 
 export function DogecoinTransferPanel({
@@ -45,7 +45,7 @@ export function DogecoinTransferPanel({
   networkStandard,
   sourceAddress,
   walletMode,
-  createdWallet,
+  signingWallet,
 }: Props) {
   const copy = messages[language];
   const [recipient, setRecipient] = useState('');
@@ -56,7 +56,9 @@ export function DogecoinTransferPanel({
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null);
 
   const busy = state === 'preparing' || state === 'broadcasting';
-  const canSign = assetId === 'doge' && walletMode === 'created' && createdWallet !== null;
+  const canSign = assetId === 'doge'
+    && (walletMode === 'created' || walletMode === 'connected')
+    && signingWallet !== null;
 
   const errorMessage = useMemo(() => {
     switch (error) {
@@ -99,7 +101,7 @@ export function DogecoinTransferPanel({
       setError('unavailable');
       return;
     }
-    if (walletMode !== 'created' || !createdWallet) {
+    if (!canSign || !signingWallet) {
       setError('watch-only');
       return;
     }
@@ -117,10 +119,10 @@ export function DogecoinTransferPanel({
     setState('preparing');
 
     try {
-      const response = await getDogecoinUtxos(createdWallet.address);
+      const response = await getDogecoinUtxos(signingWallet.address);
       const built = buildSignedDogecoinTransfer({
-        wif: createdWallet.wif,
-        sourceAddress: createdWallet.address,
+        wif: signingWallet.wif,
+        sourceAddress: signingWallet.address,
         recipientAddress: destination,
         amount,
         utxos: response.utxos,

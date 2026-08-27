@@ -6,6 +6,7 @@ namespace App\Blockchain\Presentation\Http;
 
 use App\Blockchain\Application\GetDogecoinAddressUtxos;
 use App\Blockchain\Application\UtxoLookupFailed;
+use App\Blockchain\Domain\DogecoinUtxo;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -34,7 +35,7 @@ final readonly class DogecoinUtxoController
             'network' => 'mainnet',
             'address' => $address,
             'utxos' => array_map(
-                static fn ($utxo): array => [
+                static fn (DogecoinUtxo $utxo): array => [
                     'txid' => $utxo->txid,
                     'vout' => $utxo->vout,
                     'valueSmallestUnit' => (string) $utxo->valueSmallestUnit,

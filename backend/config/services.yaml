@@ -12,6 +12,10 @@ services:
         arguments:
             $recommendedRateDogePerKb: '%env(string:DOGE_RECOMMENDED_FEE_RATE)%'
 
+    App\Blockchain\Application\BitcoinFeePolicy:
+        arguments:
+            $recommendedRateBtcPerKb: '%env(string:BTC_RECOMMENDED_FEE_RATE)%'
+
     App\Blockchain\Application\DogecoinBalanceProvider:
         alias: App\Blockchain\Infrastructure\BlockCypherDogecoinBalanceProvider
 
@@ -20,3 +24,12 @@ services:
 
     App\Blockchain\Application\DogecoinTransactionBroadcaster:
         alias: App\Blockchain\Infrastructure\BlockCypherDogecoinTransactionBroadcaster
+
+    App\Blockchain\Application\BitcoinBalanceProvider:
+        alias: App\Blockchain\Infrastructure\BlockCypherBitcoinBalanceProvider
+
+    App\Blockchain\Application\BitcoinUtxoProvider:
+        alias: App\Blockchain\Infrastructure\BlockCypherBitcoinUtxoProvider
+
+    App\Blockchain\Application\BitcoinTransactionBroadcaster:
+        alias: App\Blockchain\Infrastructure\BlockCypherBitcoinTransactionBroadcaster

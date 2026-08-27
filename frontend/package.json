@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test:bitcoin-vector": "node scripts/bitcoin-vector-test.ts"
   },
   "dependencies": {
     "@noble/hashes": "2.3.0",

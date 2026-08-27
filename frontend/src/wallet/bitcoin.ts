@@ -3,7 +3,7 @@ import { concatBytes } from '@noble/hashes/utils.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
 import { createBase58check } from '@scure/base';
 import { HDKey } from '@scure/bip32';
-import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
+import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 
 const BITCOIN_P2PKH_VERSION = 0x00;
@@ -20,8 +20,16 @@ export type CreatedBitcoinWallet = {
 };
 
 export function createBitcoinWallet(): CreatedBitcoinWallet {
-  const mnemonic = generateMnemonic(wordlist, 128);
-  const seed = mnemonicToSeedSync(mnemonic);
+  return deriveBitcoinWalletFromMnemonic(generateMnemonic(wordlist, 128));
+}
+
+export function deriveBitcoinWalletFromMnemonic(mnemonic: string): CreatedBitcoinWallet {
+  const normalizedMnemonic = mnemonic.trim().replace(/\s+/g, ' ');
+  if (!validateMnemonic(normalizedMnemonic, wordlist)) {
+    throw new Error('Invalid BIP39 mnemonic.');
+  }
+
+  const seed = mnemonicToSeedSync(normalizedMnemonic);
   const root = HDKey.fromMasterSeed(seed);
   const account = root.derive(BITCOIN_DERIVATION_PATH);
 
@@ -44,7 +52,7 @@ export function createBitcoinWallet(): CreatedBitcoinWallet {
 
     return {
       address,
-      mnemonic,
+      mnemonic: normalizedMnemonic,
       wif,
       derivationPath: BITCOIN_DERIVATION_PATH,
     };

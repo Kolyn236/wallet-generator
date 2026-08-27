@@ -43,6 +43,22 @@ If there is no saved preference, the UI uses Russian when the browser language s
 
 Only the language preference may be stored in browser storage. WIF/private keys are never written to `localStorage` or `sessionStorage`.
 
+## Main workflow
+
+The main wallet UI has three steps:
+
+1. **Wallet**;
+2. **Send DOGE**;
+3. **CPFP rescue**.
+
+There is intentionally no separate raw-transaction Broadcast screen. Serialized signed transaction bytes are machine-readable and are not a useful manual review surface for a normal user.
+
+Send and CPFP first display a human-readable transaction summary. Only after that summary exists does an explicit **Broadcast to network / Отправить в сеть** button appear in the same result card.
+
+Broadcast remains a separate irreversible action from building/signing. Pressing the button asks for final confirmation before the signed transaction is sent to the relay provider.
+
+After broadcast, success or failure information remains in the same transaction result card together with the TXID, provider status, and explorer link.
+
 ## Screens
 
 ### Wallet
@@ -75,7 +91,7 @@ The balance page uses the same RU/EN preference as the main wallet UI and links 
 
 Builds and signs a one-input P2PKH transaction with automatic confirmed-UTXO discovery and selection.
 
-The normal send form now asks only for:
+The normal send form asks only for:
 
 - source WIF;
 - recipient (`To`) address;
@@ -102,7 +118,9 @@ Building does **not** broadcast. The result shows:
 - serialized size;
 - locally calculated TXID.
 
-The signed raw transaction can then be loaded into the separate Broadcast screen.
+The signed raw bytes stay as internal application data rather than being exposed in an editable raw-hex review field. The user reviews the human-readable summary and explicitly presses **Broadcast to network**.
+
+On success, the same result card shows the broadcast state, TXID, provider, and a Blockchair explorer link. On failure, the error is shown in the same card without discarding the transaction summary.
 
 ### CPFP rescue
 
@@ -114,11 +132,17 @@ You still provide the parent output index, that output's amount, the parent's fe
 
 If the child destination is blank, the remaining output is sent back to the source wallet (self-transfer), which is the usual CPFP rescue shape.
 
-### Broadcast
+After the child is built, the human-readable CPFP summary contains its own **Broadcast to network** button. Broadcast status and explorer information are shown in that same CPFP result card.
 
-Broadcast is intentionally separate from signing and requires an explicit irreversible-action checkbox.
+The parent raw transaction input remains an advanced CPFP input for now. It is not the broadcast review UI. A future iteration can replace it with automatic parent transaction lookup/decoding.
 
-The current web UI uses BlockCypher for Dogecoin mainnet broadcast. The request contains only the already-signed public raw transaction. The WIF/private key is never included.
+## Broadcast behavior
+
+The current web UI uses BlockCypher for Dogecoin mainnet broadcast.
+
+Only an already-signed public transaction is sent to the provider. The WIF/private key is never included.
+
+The UI deliberately does not ask the user to approve a wall of serialized transaction hex. The review boundary is the human-readable transaction information produced before the broadcast button becomes available.
 
 ## Local security model
 
@@ -138,7 +162,8 @@ The web app:
 - denies framing;
 - has no permissive CORS configuration;
 - sends only a public Dogecoin address externally for balance/UTXO lookup;
-- sends only already-signed public transaction bytes externally during explicit broadcast.
+- sends only already-signed public transaction bytes externally during explicit broadcast;
+- never broadcasts automatically as part of build/sign.
 
 Treat this as educational software for small test amounts, not an audited production wallet.
 
@@ -151,8 +176,9 @@ The web UI currently has these main limitations:
 - one input UTXO per normal transaction;
 - automatic selection cannot yet combine multiple small UTXOs;
 - only confirmed UTXOs are selected for ordinary sends and shown by the balance page;
+- CPFP still accepts parent raw transaction data manually;
 - no live fee estimator;
 - no RBF controls yet;
 - UTXO lookup and broadcast currently depend on BlockCypher rather than our own Dogecoin Core node.
 
-Natural next steps are multi-input coin selection, RBF-by-default, live fee estimation, transaction decoding/review, and optional Dogecoin Core JSON-RPC integration.
+Natural next steps are multi-input coin selection, automatic CPFP parent lookup/decoding, RBF-by-default, live fee estimation, transaction decoding/review, and optional Dogecoin Core JSON-RPC integration.

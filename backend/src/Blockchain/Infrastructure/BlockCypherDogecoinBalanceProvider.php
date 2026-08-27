@@ -7,7 +7,6 @@ namespace App\Blockchain\Infrastructure;
 use App\Blockchain\Application\BalanceLookupFailed;
 use App\Blockchain\Application\DogecoinBalanceProvider;
 use App\Blockchain\Domain\AddressBalance;
-use JsonException;
 
 final class BlockCypherDogecoinBalanceProvider implements DogecoinBalanceProvider
 {
@@ -24,24 +23,24 @@ final class BlockCypherDogecoinBalanceProvider implements DogecoinBalanceProvide
             ],
         ]);
 
-        $payload = @file_get_contents(sprintf(self::ENDPOINT, rawurlencode($address)), false, $context);
+        $payload = @file_get_contents(\sprintf(self::ENDPOINT, rawurlencode($address)), false, $context);
 
         if (false === $payload) {
             throw new BalanceLookupFailed('Dogecoin provider request failed.');
         }
 
         try {
-            $decoded = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException $exception) {
+            $decoded = json_decode($payload, true, 512, \JSON_THROW_ON_ERROR);
+        } catch (\JsonException $exception) {
             throw new BalanceLookupFailed('Dogecoin provider returned invalid JSON.', previous: $exception);
         }
 
-        if (!is_array($decoded) || ($decoded['address'] ?? null) !== $address) {
+        if (!\is_array($decoded) || ($decoded['address'] ?? null) !== $address) {
             throw new BalanceLookupFailed('Dogecoin provider returned an unexpected response.');
         }
 
         $balance = $decoded['balance'] ?? null;
-        if (!is_int($balance) || $balance < 0) {
+        if (!\is_int($balance) || $balance < 0) {
             throw new BalanceLookupFailed('Dogecoin provider returned an invalid balance.');
         }
 

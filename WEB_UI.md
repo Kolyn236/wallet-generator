@@ -7,6 +7,7 @@
 ```bash
 git pull
 python3 doge_wallet.py --self-test
+python3 blockcypher_transactions.py
 python3 web_app.py --open
 ```
 
@@ -126,17 +127,36 @@ On success, the same result card shows the broadcast state, TXID, provider, and 
 
 Builds a Child-Pays-For-Parent transaction.
 
-Instead of manually typing a parent TXID and size, paste the signed parent raw transaction. The web app calculates both locally, which avoids TXID transcription mistakes.
+The normal CPFP form asks only for:
 
-You still provide the parent output index, that output's amount, the parent's fee, and the target package fee rate.
+- source WIF;
+- parent transaction TXID;
+- target package fee rate;
+- optional child destination.
+
+The user does **not** enter the parent raw transaction, vout, parent output amount, parent fee, or parent size manually.
+
+The backend resolves these values automatically from the public parent transaction:
+
+1. derive the source address locally from the WIF;
+2. fetch the parent transaction from BlockCypher by TXID with raw hex included;
+3. verify the returned TXID and locally recompute the TXID from the raw bytes;
+4. verify the serialized size against those raw bytes;
+5. refuse CPFP if the parent already has confirmations or is marked as a double spend;
+6. parse the parent outputs locally and compare their value/script data with the provider response;
+7. find unspent P2PKH outputs controlled by the source wallet;
+8. select the largest matching output automatically, resolving its vout and value;
+9. use the parent fee and size to calculate the child fee required for the requested package rate.
+
+Any unspent output from the parent creates the required dependency for CPFP. Choosing the largest matching output gives the fee calculation the most headroom while keeping selection deterministic.
+
+If the parent has no unspent output controlled by the source WIF, the build is rejected. If the parent is already confirmed, the build is also rejected because CPFP is no longer needed.
 
 If the child destination is blank, the remaining output is sent back to the source wallet (self-transfer), which is the usual CPFP rescue shape.
 
-After the child is built, the human-readable CPFP summary contains its own **Broadcast to network** button. Broadcast status and explorer information are shown in that same CPFP result card.
+After the child is built, the human-readable summary shows the automatically resolved parent vout, parent output amount, parent fee, parent size, child fee, child output, package rate, and child TXID. The same card contains the explicit **Broadcast to network** button.
 
-The parent raw transaction input remains an advanced CPFP input for now. It is not the broadcast review UI. A future iteration can replace it with automatic parent transaction lookup/decoding.
-
-## Broadcast behavior
+### Broadcast behavior
 
 The current web UI uses BlockCypher for Dogecoin mainnet broadcast.
 
@@ -161,7 +181,7 @@ The web app:
 - requires a random per-process local API token for POST requests;
 - denies framing;
 - has no permissive CORS configuration;
-- sends only a public Dogecoin address externally for balance/UTXO lookup;
+- sends only public Dogecoin addresses/TXIDs externally for balance, UTXO, and parent-transaction lookup;
 - sends only already-signed public transaction bytes externally during explicit broadcast;
 - never broadcasts automatically as part of build/sign.
 
@@ -176,9 +196,9 @@ The web UI currently has these main limitations:
 - one input UTXO per normal transaction;
 - automatic selection cannot yet combine multiple small UTXOs;
 - only confirmed UTXOs are selected for ordinary sends and shown by the balance page;
-- CPFP still accepts parent raw transaction data manually;
+- CPFP parent lookup currently depends on BlockCypher seeing the unconfirmed parent;
 - no live fee estimator;
 - no RBF controls yet;
-- UTXO lookup and broadcast currently depend on BlockCypher rather than our own Dogecoin Core node.
+- UTXO lookup, CPFP parent lookup, and broadcast currently depend on BlockCypher rather than our own Dogecoin Core node.
 
-Natural next steps are multi-input coin selection, automatic CPFP parent lookup/decoding, RBF-by-default, live fee estimation, transaction decoding/review, and optional Dogecoin Core JSON-RPC integration.
+Natural next steps are multi-input coin selection, provider adapters / Dogecoin Core JSON-RPC, RBF-by-default, live fee estimation, and richer transaction status tracking.

@@ -34,7 +34,7 @@ export const assets: AssetDefinition[] = [
       {
         id: 'dogecoin-mainnet',
         name: 'Dogecoin',
-        standard: 'DOGE mainnet',
+        standard: 'DOGE mainnet · P2PKH',
         feePolicy: {
           kind: 'utxo-rate-per-kb',
           unit: 'DOGE/kB',
@@ -47,13 +47,16 @@ export const assets: AssetDefinition[] = [
     symbol: 'BTC',
     name: 'Bitcoin',
     mark: '₿',
-    status: 'planned',
+    status: 'ready-next',
     networks: [
       {
         id: 'bitcoin-mainnet',
         name: 'Bitcoin',
-        standard: 'BTC mainnet',
-        feePolicy: null,
+        standard: 'BTC mainnet · P2PKH',
+        feePolicy: {
+          kind: 'utxo-rate-per-kb',
+          unit: 'BTC/kB',
+        },
       },
     ],
   },

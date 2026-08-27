@@ -34,3 +34,26 @@ jobs:
         run: composer analyse
       - name: Check code style
         run: composer cs:check
+
+  react-frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build frontend
+        run: npm run build
+      - name: Validate Compose topology
+        working-directory: .
+        run: docker compose config --quiet
+      - name: Build platform Nginx image
+        working-directory: .
+        run: docker build --file docker/nginx/Dockerfile --tag wallet-platform-nginx:test .

@@ -4,14 +4,17 @@ import { getDogecoinBalance, getHealth } from './api';
 import { DogecoinTransferPanel } from './DogecoinTransferPanel';
 import { type Language, messages } from './i18n';
 import {
+  connectDogecoinWalletFromWif,
   createDogecoinWallet,
   isDogecoinMainnetAddress,
-  type CreatedDogecoinWallet,
+  type DogecoinSigningWallet,
 } from './wallet/dogecoin';
 
 type HealthState = 'checking' | 'online' | 'offline';
 type BalanceState = 'idle' | 'loading' | 'loaded' | 'error';
-type DogecoinWalletMode = 'none' | 'created' | 'watch-only';
+type DogecoinWalletMode = 'none' | 'created' | 'connected' | 'watch-only';
+type ExistingAccess = 'watch-only' | 'signing';
+type ExistingError = 'invalid-address' | 'invalid-wif' | 'balance' | null;
 type CopyState = 'none' | 'seed' | 'wif';
 
 const LANGUAGE_KEY = 'wallet-platform-language';
@@ -29,20 +32,25 @@ export function App() {
   const [networkId, setNetworkId] = useState('dogecoin-mainnet');
   const [dogeAddress, setDogeAddress] = useState('');
   const [existingAddress, setExistingAddress] = useState('');
+  const [existingWif, setExistingWif] = useState('');
+  const [existingAccess, setExistingAccess] = useState<ExistingAccess>('watch-only');
   const [dogeBalance, setDogeBalance] = useState<string | null>(null);
   const [balanceState, setBalanceState] = useState<BalanceState>('idle');
   const [dogeWalletMode, setDogeWalletMode] = useState<DogecoinWalletMode>('none');
   const [showExistingForm, setShowExistingForm] = useState(false);
-  const [addressError, setAddressError] = useState<'invalid' | 'balance' | null>(null);
+  const [existingError, setExistingError] = useState<ExistingError>(null);
   const [showBackupSecrets, setShowBackupSecrets] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('none');
-  const createdWalletRef = useRef<CreatedDogecoinWallet | null>(null);
+  const signingWalletRef = useRef<DogecoinSigningWallet | null>(null);
 
   const copy = messages[language];
   const asset = getAsset(assetId);
   const network = asset.networks.find((candidate) => candidate.id === networkId) ?? asset.networks[0];
   const connectedDoge = dogeWalletMode !== 'none' && dogeAddress !== '';
-  const createdWallet = dogeWalletMode === 'created' ? createdWalletRef.current : null;
+  const signingWallet = dogeWalletMode === 'created' || dogeWalletMode === 'connected'
+    ? signingWalletRef.current
+    : null;
+  const createdWallet = signingWallet?.origin === 'created' ? signingWallet : null;
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -74,7 +82,7 @@ export function App() {
 
   async function refreshDogecoinBalance(address: string): Promise<boolean> {
     setBalanceState('loading');
-    setAddressError(null);
+    setExistingError(null);
 
     try {
       const result = await getDogecoinBalance(address);
@@ -84,47 +92,91 @@ export function App() {
       return true;
     } catch {
       setBalanceState('error');
-      setAddressError('balance');
+      setExistingError('balance');
       return false;
     }
   }
 
   function createWallet() {
     const wallet = createDogecoinWallet();
-    createdWalletRef.current = wallet;
+    signingWalletRef.current = wallet;
     setDogeWalletMode('created');
     setDogeAddress(wallet.address);
     setDogeBalance('0.00000000');
     setBalanceState('loaded');
     setExistingAddress('');
+    setExistingWif('');
     setShowExistingForm(false);
     setShowBackupSecrets(false);
     setCopyState('none');
-    setAddressError(null);
+    setExistingError(null);
     void refreshDogecoinBalance(wallet.address);
+  }
+
+  function openExistingWalletForm() {
+    setExistingAddress(dogeAddress);
+    setExistingWif('');
+    setExistingAccess(dogeWalletMode === 'watch-only' ? 'watch-only' : 'signing');
+    setShowExistingForm(true);
+    setExistingError(null);
+  }
+
+  function closeExistingWalletForm() {
+    setExistingWif('');
+    setShowExistingForm(false);
+    setExistingError(null);
+  }
+
+  function changeExistingAccess(access: ExistingAccess) {
+    setExistingAccess(access);
+    setExistingError(null);
+    setExistingWif('');
   }
 
   async function specifyExistingWallet(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const address = existingAddress.trim();
+    setExistingError(null);
 
-    if (!isDogecoinMainnetAddress(address)) {
-      setAddressError('invalid');
+    if (existingAccess === 'watch-only') {
+      const address = existingAddress.trim();
+      if (!isDogecoinMainnetAddress(address)) {
+        setExistingError('invalid-address');
+        return;
+      }
+
+      signingWalletRef.current = null;
+      setDogeWalletMode('watch-only');
+      setDogeAddress(address);
+      setDogeBalance(null);
+      setShowExistingForm(false);
+      setShowBackupSecrets(false);
+      setCopyState('none');
+      void refreshDogecoinBalance(address);
       return;
     }
 
-    const loaded = await refreshDogecoinBalance(address);
-    if (!loaded) return;
+    let wallet: DogecoinSigningWallet;
+    try {
+      wallet = connectDogecoinWalletFromWif(existingWif);
+    } catch {
+      setExistingError('invalid-wif');
+      return;
+    }
 
-    createdWalletRef.current = null;
-    setDogeWalletMode('watch-only');
+    signingWalletRef.current = wallet;
+    setDogeWalletMode('connected');
+    setDogeAddress(wallet.address);
+    setDogeBalance(null);
+    setExistingAddress(wallet.address);
+    setExistingWif('');
     setShowExistingForm(false);
     setShowBackupSecrets(false);
     setCopyState('none');
+    void refreshDogecoinBalance(wallet.address);
   }
 
   async function copySecret(kind: 'seed' | 'wif') {
-    const wallet = createdWalletRef.current;
+    const wallet = createdWallet;
     if (!wallet || !navigator.clipboard) return;
 
     const secret = kind === 'seed' ? wallet.mnemonic : wallet.wif;
@@ -138,9 +190,11 @@ export function App() {
 
   const dogeModeLabel = dogeWalletMode === 'created'
     ? copy.createdLocally
-    : dogeWalletMode === 'watch-only'
-      ? copy.watchOnly
-      : copy.noWallet;
+    : dogeWalletMode === 'connected'
+      ? copy.connectedForSigning
+      : dogeWalletMode === 'watch-only'
+        ? copy.watchOnly
+        : copy.noWallet;
 
   return (
     <div className="app-shell">
@@ -253,7 +307,7 @@ export function App() {
                   {!connectedDoge && !showExistingForm && (
                     <div className="wallet-actions wallet-choice-actions">
                       <button type="button" className="primary-button" onClick={createWallet}>{copy.createWallet}</button>
-                      <button type="button" className="secondary-button" onClick={() => { setShowExistingForm(true); setAddressError(null); }}>{copy.specifyExisting}</button>
+                      <button type="button" className="secondary-button" onClick={openExistingWalletForm}>{copy.specifyExisting}</button>
                     </div>
                   )}
 
@@ -263,20 +317,57 @@ export function App() {
                         <strong>{copy.existingTitle}</strong>
                         <p>{copy.existingHint}</p>
                       </div>
-                      <label>
-                        <span>{copy.publicAddress}</span>
-                        <div className="address-connect-row">
-                          <input value={existingAddress} onChange={(event) => setExistingAddress(event.target.value)} placeholder={copy.addressPlaceholder} autoComplete="off" />
-                          <button type="submit" className="primary-button" disabled={balanceState === 'loading'}>{balanceState === 'loading' ? copy.loadingBalance : copy.loadBalance}</button>
-                        </div>
-                      </label>
-                      {addressError === 'invalid' && <p className="form-error">{copy.invalidAddress}</p>}
-                      {addressError === 'balance' && <p className="form-error">{copy.balanceError}</p>}
+
+                      <div className="existing-access-switch" role="group" aria-label={copy.accessMode}>
+                        <button
+                          type="button"
+                          className={existingAccess === 'watch-only' ? 'active' : ''}
+                          onClick={() => changeExistingAccess('watch-only')}
+                        >
+                          {copy.watchOnlyOption}
+                        </button>
+                        <button
+                          type="button"
+                          className={existingAccess === 'signing' ? 'active' : ''}
+                          onClick={() => changeExistingAccess('signing')}
+                        >
+                          {copy.signingOption}
+                        </button>
+                      </div>
+
+                      {existingAccess === 'watch-only' ? (
+                        <label>
+                          <span>{copy.publicAddress}</span>
+                          <div className="address-connect-row">
+                            <input value={existingAddress} onChange={(event) => setExistingAddress(event.target.value)} placeholder={copy.addressPlaceholder} autoComplete="off" />
+                            <button type="submit" className="primary-button" disabled={balanceState === 'loading'}>{copy.loadBalance}</button>
+                          </div>
+                        </label>
+                      ) : (
+                        <label>
+                          <span>{copy.wif}</span>
+                          <div className="address-connect-row">
+                            <input
+                              type="password"
+                              value={existingWif}
+                              onChange={(event) => setExistingWif(event.target.value)}
+                              placeholder={copy.wifPlaceholder}
+                              autoComplete="off"
+                              spellCheck={false}
+                            />
+                            <button type="submit" className="primary-button">{copy.connectForSending}</button>
+                          </div>
+                        </label>
+                      )}
+
+                      {existingError === 'invalid-address' && <p className="form-error">{copy.invalidAddress}</p>}
+                      {existingError === 'invalid-wif' && <p className="form-error">{copy.invalidWif}</p>}
+                      {existingError === 'balance' && <p className="form-error">{copy.balanceError}</p>}
                       <div className="connect-form-footer">
-                        <small>{copy.publicOnly}</small>
+                        <small>{existingAccess === 'watch-only' ? copy.publicOnly : copy.wifLocalOnly}</small>
                         <div className="connect-form-footer-actions">
                           <button type="button" className="primary-button" onClick={createWallet}>{copy.createWallet}</button>
-                          <button type="button" className="text-button" onClick={() => { setShowExistingForm(false); setAddressError(null); }}>{copy.cancel}</button>
+                          <button type="button" className="text-button" onClick={closeExistingWalletForm}>{copy.cancel}</button>
                         </div>
                       </div>
                     </form>
@@ -288,8 +379,8 @@ export function App() {
                       <button type="button" className="primary-button" onClick={() => void refreshDogecoinBalance(dogeAddress)} disabled={balanceState === 'loading'}>
                         {balanceState === 'loading' ? copy.loadingBalance : copy.refreshBalance}
                       </button>
-                      <button type="button" className="secondary-button" onClick={() => { setExistingAddress(dogeAddress); setShowExistingForm(true); setAddressError(null); }}>{copy.specifyExisting}</button>
-                      {addressError === 'balance' && <span className="inline-error">{copy.balanceError}</span>}
+                      <button type="button" className="secondary-button" onClick={openExistingWalletForm}>{copy.specifyExisting}</button>
+                      {existingError === 'balance' && <span className="inline-error">{copy.balanceError}</span>}
                     </div>
                   )}
                 </>
@@ -359,7 +450,7 @@ export function App() {
           networkStandard={network.standard}
           sourceAddress={assetId === 'doge' ? dogeAddress : ''}
           walletMode={assetId === 'doge' ? dogeWalletMode : 'none'}
-          createdWallet={assetId === 'doge' ? createdWallet : null}
+          signingWallet={assetId === 'doge' ? signingWallet : null}
         />
 
         <section className="security-card" id="security">

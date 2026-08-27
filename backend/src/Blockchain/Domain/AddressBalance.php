@@ -17,6 +17,6 @@ final readonly class AddressBalance
         $whole = intdiv($this->smallestUnit, 100_000_000);
         $fraction = $this->smallestUnit % 100_000_000;
 
-        return sprintf('%d.%08d', $whole, $fraction);
+        return \sprintf('%d.%08d', $whole, $fraction);
     }
 }

@@ -7,7 +7,7 @@ Security model:
 - private WIFs are processed only by the local Python process;
 - no secrets are persisted by the web app;
 - language preference is the only value stored in localStorage;
-- balance/UTXO lookup sends only the derived public address to BlockCypher;
+- balance/UTXO lookup sends only a public address to BlockCypher;
 - broadcast sends only an already-signed public transaction.
 """
 
@@ -32,6 +32,7 @@ from doge_wallet import (
     double_sha256,
     format_doge,
     generate_wallet,
+    p2pkh_script_pubkey,
     wallet_from_wif,
 )
 
@@ -46,6 +47,20 @@ def txid_from_raw(raw: bytes) -> str:
 
 def fetch_wallet_utxos(address: str) -> AddressUtxos:
     return fetch_confirmed_utxos(address, os.environ.get("BLOCKCYPHER_TOKEN"))
+
+
+def wallet_status_payload(snapshot: AddressUtxos) -> dict:
+    largest = max((utxo.value for utxo in snapshot.utxos), default=0)
+    return {
+        "address": snapshot.address,
+        "current_balance": format_doge(snapshot.final_balance),
+        "confirmed_balance": format_doge(snapshot.balance),
+        "pending_balance": format_doge(snapshot.unconfirmed_balance),
+        # Kept for compatibility with the first automatic-UTXO UI version.
+        "balance": format_doge(snapshot.balance),
+        "utxo_count": len(snapshot.utxos),
+        "largest_utxo": format_doge(largest),
+    }
 
 
 def build_with_automatic_utxo(
@@ -116,12 +131,13 @@ header{display:flex;justify-content:space-between;gap:28px;align-items:flex-star
 .steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;overflow-x:auto;scrollbar-width:none;scroll-snap-type:x proximity}.steps::-webkit-scrollbar{display:none}.step{min-width:0;border:1px solid transparent;background:transparent;text-align:left;cursor:pointer;border-radius:16px;padding:12px 13px;display:flex;gap:10px;align-items:center;color:var(--muted);scroll-snap-align:start;transition:background .2s ease,border-color .2s ease,transform .2s ease,color .2s ease}.step:hover{background:var(--surface-soft);color:var(--text)}.step.active{border-color:#ead38b;background:var(--accent-soft);color:var(--text);transform:translateY(-1px)}.step-number{flex:0 0 auto;width:29px;height:29px;display:grid;place-items:center;border-radius:10px;background:#eceee6;font-size:12px;font-weight:900}.step.active .step-number{background:var(--accent);color:white}.step-copy{min-width:0}.step-title,.step-subtitle{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.step-title{font-size:13px;font-weight:850}.step-subtitle{margin-top:2px;font-size:11px;color:var(--muted)}
 .carousel-shell{position:relative;touch-action:pan-y}.panel{display:none;background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:24px;padding:clamp(20px,4vw,32px);box-shadow:var(--shadow);animation:panel-in .24s ease both}.panel.active{display:block}@keyframes panel-in{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}.panel-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:22px}.panel-copy{min-width:0}.panel-kicker{margin:0 0 5px;color:var(--accent-strong);font-size:11px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}h2{margin:0;font-size:clamp(23px,3vw,30px);letter-spacing:-.025em}.small{margin:8px 0 0;font-size:13px;color:var(--muted);line-height:1.55}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.full{grid-column:1/-1}label{display:block;font-size:11px;font-weight:850;color:#565b50;margin:0 0 7px;text-transform:uppercase;letter-spacing:.065em}input,textarea{width:100%;border:1px solid #dfe2d8;background:#fbfbf8;color:var(--text);border-radius:13px;padding:13px 14px;outline:none;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}input:hover,textarea:hover{background:white}input:focus,textarea:focus{border-color:#caa642;background:white;box-shadow:0 0 0 4px rgba(217,165,27,.12)}textarea{min-height:124px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}.help{margin-top:7px;color:var(--muted);font-size:12px;line-height:1.45}
-.wallet-status{display:none;margin-top:11px;padding:12px 14px;border:1px solid #dfe2d8;border-radius:13px;background:#fafbf7}.wallet-status.show{display:block}.wallet-status.loading{color:var(--muted)}.wallet-status.good{border-color:#bcdcc8;background:#f4fbf7}.wallet-status.bad{border-color:#efc5ca;background:var(--bad-soft);color:#8f3340}.wallet-status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 16px}.wallet-status-label{display:block;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.wallet-status-value{display:block;margin-top:3px;font-size:13px;font-weight:750;overflow-wrap:anywhere}
+.balance-card{margin-top:22px;padding:18px;border:1px solid #e0e2d9;border-radius:18px;background:linear-gradient(145deg,#fffdf6,#f8f9f4);box-shadow:var(--shadow-soft)}.balance-card h3{margin:0;font-size:17px}.balance-address-row{display:flex;gap:9px;align-items:stretch;margin-top:14px}.balance-address-row input{min-width:0;flex:1}.balance-address-row button{white-space:nowrap}.balance-current{font-size:clamp(24px,4vw,36px)!important;font-weight:900!important;color:#765800}.balance-pending.positive{color:var(--good)}.balance-pending.negative{color:var(--bad)}
+.wallet-status{display:none;margin-top:11px;padding:12px 14px;border:1px solid #dfe2d8;border-radius:13px;background:#fafbf7}.wallet-status.show{display:block}.wallet-status.loading{color:var(--muted)}.wallet-status.good{border-color:#bcdcc8;background:#f4fbf7}.wallet-status.bad{border-color:#efc5ca;background:var(--bad-soft);color:#8f3340}.wallet-status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px 16px}.wallet-status-label{display:block;color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}.wallet-status-value{display:block;margin-top:3px;font-size:13px;font-weight:750;overflow-wrap:anywhere}
 .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:19px}button.primary,button.secondary,button.danger,button.nav-btn{border:0;border-radius:12px;padding:12px 16px;cursor:pointer;font-weight:850;font-size:13px;transition:transform .15s ease,box-shadow .15s ease,background .15s ease}button.primary{background:linear-gradient(135deg,#e2b12c,#c99509);color:#fff;box-shadow:0 10px 22px rgba(190,139,0,.18)}button.primary:hover{transform:translateY(-1px);box-shadow:0 13px 27px rgba(190,139,0,.24)}button.secondary{background:#eff1ea;color:#34382f}button.secondary:hover{background:#e5e8de}button.danger{background:#b74754;color:white;box-shadow:0 10px 22px rgba(183,71,84,.16)}button.danger:hover{transform:translateY(-1px)}
 .result{display:none;margin-top:20px;border:1px solid #dfe2d8;background:#fafbf7;padding:17px;border-radius:15px;overflow:auto}.result.show{display:block}.result.good{border-color:#bcdcc8;background:#f4fbf7}.result.bad{border-color:#efc5ca;background:var(--bad-soft)}.kv{display:grid;grid-template-columns:190px 1fr;gap:9px 14px;margin:7px 0}.kv div:nth-child(odd){color:var(--muted)}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.secret{filter:blur(7px);user-select:none;transition:.15s}.secret.reveal{filter:none;user-select:text}.check{display:flex;gap:10px;align-items:flex-start;margin-top:15px;color:#555a50;line-height:1.45}.check input{width:auto;margin-top:3px}a{color:#9b7100;font-weight:750}
 .carousel-nav{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px}.nav-btn{border:1px solid var(--line);background:rgba(255,255,255,.86);color:var(--text);box-shadow:var(--shadow-soft);min-width:106px}.nav-btn:hover:not(:disabled){transform:translateY(-1px);background:white}.nav-btn:disabled{opacity:.38;cursor:default;box-shadow:none}.nav-hint{color:var(--muted);font-size:11px;text-align:center}
 .title-with-help{display:flex;align-items:center;gap:9px}.tooltip{position:relative;display:inline-flex;align-items:center}.tooltip-trigger{width:26px;height:26px;padding:0;display:inline-grid;place-items:center;border:1px solid #d8dccc;border-radius:50%;background:#f6f7f1;color:#64695e;font:850 13px/1 ui-sans-serif,system-ui,sans-serif;cursor:help}.tooltip-trigger:hover,.tooltip-trigger:focus-visible{border-color:#d0aa37;color:#8d6800;outline:none;box-shadow:0 0 0 4px rgba(217,165,27,.10)}.tooltip-content{position:absolute;z-index:30;top:calc(100% + 10px);left:50%;transform:translate(-50%,-4px);width:min(390px,calc(100vw - 48px));padding:14px 15px;border:1px solid #e0dfd6;border-radius:14px;background:#fff;color:#4c5148;box-shadow:0 18px 48px rgba(42,45,34,.16);font-size:13px;line-height:1.52;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .14s ease,transform .14s ease,visibility .14s}.tooltip:hover .tooltip-content,.tooltip:focus-within .tooltip-content{opacity:1;visibility:visible;transform:translate(-50%,0);pointer-events:auto}
-@media(max-width:820px){.wrap{padding:20px 14px 54px}header{flex-direction:column;gap:17px}.header-actions{width:100%;justify-content:space-between}.steps{grid-template-columns:repeat(4,minmax(150px,1fr));margin-inline:-3px;padding:3px}.workflow-card{padding:10px}.grid{grid-template-columns:1fr}.full{grid-column:auto}.kv{grid-template-columns:1fr}.panel{border-radius:20px}.wallet-status-grid{grid-template-columns:1fr}.tooltip-content{left:0;transform:translate(0,-4px);width:min(340px,calc(100vw - 52px))}.tooltip:hover .tooltip-content,.tooltip:focus-within .tooltip-content{transform:translate(0,0)}}
+@media(max-width:820px){.wrap{padding:20px 14px 54px}header{flex-direction:column;gap:17px}.header-actions{width:100%;justify-content:space-between}.steps{grid-template-columns:repeat(4,minmax(150px,1fr));margin-inline:-3px;padding:3px}.workflow-card{padding:10px}.grid{grid-template-columns:1fr}.full{grid-column:auto}.kv{grid-template-columns:1fr}.panel{border-radius:20px}.balance-address-row{flex-direction:column}.wallet-status-grid{grid-template-columns:1fr}.tooltip-content{left:0;transform:translate(0,-4px);width:min(340px,calc(100vw - 52px))}.tooltip:hover .tooltip-content,.tooltip:focus-within .tooltip-content{transform:translate(0,0)}}
 @media(max-width:520px){.brand-mark{width:40px;height:40px;border-radius:13px;font-size:23px}.workflow-head{padding-inline:2px}.panel-head{margin-bottom:18px}.carousel-nav{position:sticky;bottom:8px;z-index:10;padding:8px;border:1px solid rgba(224,226,217,.9);border-radius:15px;background:rgba(247,248,243,.88);backdrop-filter:blur(12px)}.nav-hint{display:none}.nav-btn{min-width:0;flex:1}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 </style>
@@ -133,7 +149,7 @@ header{display:flex;justify-content:space-between;gap:28px;align-items:flex-star
     <div class="header-actions"><div class="lang-switch" role="group" aria-label="Language"><button class="lang-btn" type="button" data-lang="ru">RU</button><button class="lang-btn" type="button" data-lang="en">EN</button></div><div class="badge" data-i18n="localBadge">LOCAL · 127.0.0.1</div></div>
   </header>
 
-  <div class="notice"><div class="notice-icon" aria-hidden="true">✓</div><div><b data-i18n="securityTitle">Private keys stay local.</b> <span data-i18n="securityBody">WIF stays inside this browser and the local Python process. Balance lookup sends only the derived public DOGE address to BlockCypher; broadcast sends only signed public transaction bytes.</span></div></div>
+  <div class="notice"><div class="notice-icon" aria-hidden="true">✓</div><div><b data-i18n="securityTitle">Private keys stay local.</b> <span data-i18n="securityBody">WIF stays inside this browser and the local Python process. Balance lookup sends only a public DOGE address to BlockCypher; broadcast sends only signed public transaction bytes.</span></div></div>
 
   <div class="workflow-card">
     <div class="workflow-head"><span class="workflow-label" data-i18n="workflowLabel">Wallet workflow</span><span class="step-counter" id="step-counter">1 / 4</span></div>
@@ -149,6 +165,12 @@ header{display:flex;justify-content:space-between;gap:28px;align-items:flex-star
     <section id="wallet" class="panel active" role="tabpanel">
       <div class="panel-head"><div class="panel-copy"><p class="panel-kicker" data-i18n="stepOne">Step 1</p><h2 data-i18n="walletTitle">Generate a local wallet</h2><p class="small" data-i18n="walletHelp">A new secp256k1 private key is generated locally with Python's cryptographic RNG.</p></div></div>
       <div class="actions"><button class="primary" onclick="generateWallet()" data-i18n="generateWallet">Generate wallet</button></div><div id="wallet-result" class="result"></div>
+      <div class="balance-card">
+        <h3 data-i18n="walletBalanceTitle">Wallet balance</h3>
+        <div class="help" data-i18n="walletBalanceHelp">Paste any public Dogecoin mainnet D... address. No WIF or private key is required to view a balance.</div>
+        <div class="balance-address-row"><input id="wallet-balance-address" class="mono" placeholder="D..." aria-label="Dogecoin address"><button class="secondary" type="button" onclick="loadAddressBalance(true)" data-i18n="refreshBalance">Refresh balance</button></div>
+        <div id="wallet-balance-status" class="wallet-status"></div>
+      </div>
     </section>
 
     <section id="send" class="panel" role="tabpanel">
@@ -195,17 +217,17 @@ header{display:flex;justify-content:space-between;gap:28px;align-items:flex-star
 const LOCAL_TOKEN="__LOCAL_TOKEN__";
 const LANG_STORAGE_KEY="doge-wallet-lang";
 const STEP_IDS=["wallet","send","cpfp","broadcast"];
-let activeStep=0,touchStartX=null,lastWalletStatus=null,lastStatusWif="";
+let activeStep=0,touchStartX=null,lastWalletStatus=null,lastStatusWif="",lastAddressBalance=null,lastBalanceAddress="";
 
 const I18N={
   en:{
     eyebrow:"Local-first wallet lab",subtitle:"Local UI for generating Dogecoin keys, building and signing P2PKH transactions, CPFP rescue, and explicit broadcast.",
-    localBadge:"LOCAL · 127.0.0.1",securityTitle:"Private keys stay local.",securityBody:"WIF stays inside this browser and the local Python process. Balance lookup sends only the derived public DOGE address to BlockCypher; broadcast sends only signed public transaction bytes.",
+    localBadge:"LOCAL · 127.0.0.1",securityTitle:"Private keys stay local.",securityBody:"WIF stays inside this browser and the local Python process. Balance lookup sends only a public DOGE address to BlockCypher; broadcast sends only signed public transaction bytes.",
     workflowLabel:"Wallet workflow",stepWalletSub:"Create keys locally",stepSendSub:"Build and sign",stepCpfpSub:"Speed up a parent",stepBroadcastSub:"Publish signed bytes",
     tabWallet:"Wallet",tabSend:"Send DOGE",tabCpfp:"CPFP rescue",tabBroadcast:"Broadcast",stepOne:"Step 1",stepTwo:"Step 2",stepThree:"Step 3",stepFour:"Step 4",previous:"← Previous",next:"Next →",swipeHint:"You can also swipe between steps on touch screens.",
-    walletTitle:"Generate a local wallet",walletHelp:"A new secp256k1 private key is generated locally with Python's cryptographic RNG.",generateWallet:"Generate wallet",
+    walletTitle:"Generate a local wallet",walletHelp:"A new secp256k1 private key is generated locally with Python's cryptographic RNG.",generateWallet:"Generate wallet",walletBalanceTitle:"Wallet balance",walletBalanceHelp:"Paste any public Dogecoin mainnet D... address. No WIF or private key is required to view a balance.",refreshBalance:"Refresh balance",
     sendTitle:"Build & sign a transfer",sendAutoHelp:"Source address, confirmed balance and UTXO are resolved automatically. Change returns to the source wallet.",sourceWif:"Source WIF · local secret",sourceWifHelp:"The WIF is processed locally. Only the derived public address is sent to BlockCypher to look up confirmed UTXOs.",sendAmount:"Send amount · DOGE",recipient:"Recipient · To address",feeRate:"Fee rate · DOGE/kB",feeRateHelp:"0.01 DOGE/kB is the documented Dogecoin Core recommendation, not a live fee estimate.",buildSigned:"Build signed transaction",
-    walletLoading:"Loading confirmed balance…",sourceAddress:"Source address",confirmedBalance:"Confirmed balance",availableUtxos:"Spendable UTXOs",largestUtxo:"Largest UTXO",
+    walletLoading:"Loading wallet balance…",sourceAddress:"Source address",walletAddress:"Wallet address",currentBalance:"Current balance",confirmedBalance:"Confirmed balance",pendingBalance:"Pending delta",availableUtxos:"Spendable UTXOs",largestUtxo:"Largest UTXO",
     cpfpTitle:"CPFP rescue",cpfpTooltipAria:"What is CPFP?",cpfpTooltip:"CPFP (Child Pays For Parent) is a way to speed up a pending transaction. It creates a higher-fee child transaction that spends an unconfirmed output from the parent, usually its change. A miner must include the parent before the child, so the combined package becomes more attractive to confirm.",cpfpHelp:"Parent TXID and byte size are computed from the signed parent raw transaction to avoid manual TXID mistakes.",parentRaw:"Parent signed raw transaction",parentVout:"Parent output vout to spend",parentOutputAmount:"Parent output amount · DOGE",parentFee:"Parent fee · DOGE",targetPackageRate:"Target package rate · DOGE/kB",childDestination:"Child destination · optional",cpfpDestinationHelp:"For a pure CPFP rescue, blank means the remaining output returns to the source wallet.",buildCpfp:"Build CPFP child",
     broadcastTitle:"Broadcast signed raw transaction",broadcastHelp:"Broadcast is a separate irreversible action. Only the signed public transaction is sent to the relay provider.",rawTransaction:"Raw transaction",broadcastConfirm:"I reviewed the transaction and understand that broadcast is irreversible.",broadcastButton:"Broadcast via BlockCypher",placeholderCpfpTo:"blank = self-transfer back to source",placeholderRaw:"Paste signed raw tx hex",
     dogeAddress:"DOGE address",publicKey:"Public key",wif:"WIF",privateKeyHex:"Private key hex",revealSecrets:"Reveal / hide secrets",fromSource:"From / source",toRecipient:"To / recipient",send:"Send",change:"Change",changeAddressResult:"Change address",networkFee:"Network fee",size:"Size",txid:"TXID",loadBroadcast:"Load into Broadcast",none:"none",
@@ -213,12 +235,12 @@ const I18N={
   },
   ru:{
     eyebrow:"Локальная лаборатория кошелька",subtitle:"Локальный интерфейс для создания ключей Dogecoin, сборки и подписи P2PKH-транзакций, CPFP-ускорения и явной отправки в сеть.",
-    localBadge:"ЛОКАЛЬНО · 127.0.0.1",securityTitle:"Приватные ключи остаются локально.",securityBody:"WIF остаётся только в браузере и локальном Python-процессе. Для баланса BlockCypher получает только вычисленный публичный DOGE-адрес; при broadcast наружу уходят только подписанные публичные байты транзакции.",
+    localBadge:"ЛОКАЛЬНО · 127.0.0.1",securityTitle:"Приватные ключи остаются локально.",securityBody:"WIF остаётся только в браузере и локальном Python-процессе. Для баланса BlockCypher получает только публичный DOGE-адрес; при broadcast наружу уходят только подписанные публичные байты транзакции.",
     workflowLabel:"Процесс работы",stepWalletSub:"Создать ключи",stepSendSub:"Собрать и подписать",stepCpfpSub:"Ускорить parent",stepBroadcastSub:"Отправить raw TX",
     tabWallet:"Кошелёк",tabSend:"Отправить DOGE",tabCpfp:"Ускорение CPFP",tabBroadcast:"Отправка в сеть",stepOne:"Шаг 1",stepTwo:"Шаг 2",stepThree:"Шаг 3",stepFour:"Шаг 4",previous:"← Назад",next:"Далее →",swipeHint:"На сенсорном экране между шагами можно переключаться свайпом.",
-    walletTitle:"Создать локальный кошелёк",walletHelp:"Новый приватный ключ secp256k1 генерируется локально криптографическим генератором Python.",generateWallet:"Создать кошелёк",
+    walletTitle:"Создать локальный кошелёк",walletHelp:"Новый приватный ключ secp256k1 генерируется локально криптографическим генератором Python.",generateWallet:"Создать кошелёк",walletBalanceTitle:"Баланс кошелька",walletBalanceHelp:"Вставьте любой публичный D... адрес Dogecoin mainnet. WIF или приватный ключ для просмотра баланса не нужен.",refreshBalance:"Обновить баланс",
     sendTitle:"Собрать и подписать перевод",sendAutoHelp:"Адрес источника, подтверждённый баланс и UTXO подбираются автоматически. Сдача возвращается на исходный кошелёк.",sourceWif:"WIF источника · локальный секрет",sourceWifHelp:"WIF обрабатывается локально. BlockCypher получает только вычисленный публичный адрес для поиска подтверждённых UTXO.",sendAmount:"Сумма перевода · DOGE",recipient:"Получатель · адрес To",feeRate:"Ставка комиссии · DOGE/kB",feeRateHelp:"0.01 DOGE/kB — документированная рекомендация Dogecoin Core, а не актуальная оценка комиссии сети.",buildSigned:"Собрать подписанную транзакцию",
-    walletLoading:"Загружаем подтверждённый баланс…",sourceAddress:"Адрес источника",confirmedBalance:"Подтверждённый баланс",availableUtxos:"Доступные UTXO",largestUtxo:"Крупнейший UTXO",
+    walletLoading:"Загружаем баланс кошелька…",sourceAddress:"Адрес источника",walletAddress:"Адрес кошелька",currentBalance:"Текущий баланс",confirmedBalance:"Подтверждённый баланс",pendingBalance:"Ожидает подтверждения",availableUtxos:"Доступные UTXO",largestUtxo:"Крупнейший UTXO",
     cpfpTitle:"Ускорение CPFP",cpfpTooltipAria:"Что такое CPFP?",cpfpTooltip:"CPFP (Child Pays For Parent) — способ ускорить зависшую неподтверждённую транзакцию. Создаётся дочерняя транзакция с повышенной комиссией, которая тратит неподтверждённый выход parent — обычно сдачу. Чтобы включить child, майнеру нужно сначала включить parent, поэтому общий пакет становится выгоднее для подтверждения.",cpfpHelp:"TXID и размер родительской транзакции вычисляются из её signed raw bytes, чтобы исключить ошибки ручного копирования TXID.",parentRaw:"Подписанная raw-транзакция родителя",parentVout:"vout родительского выхода для траты",parentOutputAmount:"Сумма родительского выхода · DOGE",parentFee:"Комиссия родителя · DOGE",targetPackageRate:"Целевая ставка пакета · DOGE/kB",childDestination:"Адрес child-транзакции · необязательно",cpfpDestinationHelp:"Для обычного CPFP поле можно оставить пустым: остаток вернётся на исходный кошелёк.",buildCpfp:"Собрать CPFP child",
     broadcastTitle:"Отправить подписанную raw-транзакцию в сеть",broadcastHelp:"Отправка в сеть — отдельное необратимое действие. Провайдеру передаётся только публичная подписанная транзакция.",rawTransaction:"Raw-транзакция",broadcastConfirm:"Я проверил транзакцию и понимаю, что после отправки действие необратимо.",broadcastButton:"Отправить через BlockCypher",placeholderCpfpTo:"пусто = self-transfer обратно источнику",placeholderRaw:"Вставьте hex подписанной raw-транзакции",
     dogeAddress:"Адрес DOGE",publicKey:"Публичный ключ",wif:"WIF",privateKeyHex:"Приватный ключ hex",revealSecrets:"Показать / скрыть секреты",fromSource:"Откуда / source",toRecipient:"Куда / получатель",send:"Отправляем",change:"Сдача",changeAddressResult:"Адрес сдачи",networkFee:"Комиссия сети",size:"Размер",txid:"TXID",loadBroadcast:"Перейти к отправке",none:"нет",
@@ -236,7 +258,7 @@ const ERROR_TRANSLATIONS_RU={
 let currentLang=(()=>{const saved=localStorage.getItem(LANG_STORAGE_KEY);if(saved==="ru"||saved==="en")return saved;return navigator.language&&navigator.language.toLowerCase().startsWith("ru")?"ru":"en";})();
 function t(key){return(I18N[currentLang]&&I18N[currentLang][key])||I18N.en[key]||key}
 function applyLanguage(){document.documentElement.lang=currentLang;document.querySelectorAll("[data-i18n]").forEach(el=>el.textContent=t(el.dataset.i18n));document.querySelectorAll("[data-i18n-placeholder]").forEach(el=>el.placeholder=t(el.dataset.i18nPlaceholder));document.querySelectorAll("[data-i18n-aria-label]").forEach(el=>el.setAttribute("aria-label",t(el.dataset.i18nAriaLabel)));document.querySelectorAll(".lang-btn").forEach(btn=>{btn.classList.toggle("active",btn.dataset.lang===currentLang);btn.setAttribute("aria-pressed",btn.dataset.lang===currentLang?"true":"false")});document.title=currentLang==="ru"?"Doge Wallet Lab · локальный кошелёк":"Doge Wallet Lab · local wallet"}
-function setLanguage(lang){if(lang!=="ru"&&lang!=="en")return;currentLang=lang;localStorage.setItem(LANG_STORAGE_KEY,lang);applyLanguage();refreshRenderedResults();renderWalletStatus(lastWalletStatus)}
+function setLanguage(lang){if(lang!=="ru"&&lang!=="en")return;currentLang=lang;localStorage.setItem(LANG_STORAGE_KEY,lang);applyLanguage();refreshRenderedResults();renderWalletStatus(lastWalletStatus);renderAddressBalance(lastAddressBalance)}
 document.querySelectorAll(".lang-btn").forEach(btn=>btn.addEventListener("click",()=>setLanguage(btn.dataset.lang)));
 
 function goToStep(index,focus=false){activeStep=Math.max(0,Math.min(STEP_IDS.length-1,index));document.querySelectorAll(".panel").forEach((panel,i)=>panel.classList.toggle("active",i===activeStep));document.querySelectorAll(".step").forEach((step,i)=>{const active=i===activeStep;step.classList.toggle("active",active);step.setAttribute("aria-selected",active?"true":"false");if(active)step.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"})});document.getElementById("step-counter").textContent=`${activeStep+1} / ${STEP_IDS.length}`;document.getElementById("prev-step").disabled=activeStep===0;document.getElementById("next-step").disabled=activeStep===STEP_IDS.length-1;if(focus){const heading=document.querySelector(`#${STEP_IDS[activeStep]} h2`);if(heading){heading.setAttribute("tabindex","-1");heading.focus({preventScroll:true})}}}
@@ -249,6 +271,7 @@ function showError(id,error){const message=localizedError(error&&error.message?e
 async function post(path,body){const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json","X-Local-Token":LOCAL_TOKEN},body:JSON.stringify(body)});let data={};try{data=await r.json()}catch(_){}if(!r.ok)throw new Error(data.error||("HTTP "+r.status));return data}
 function kv(rows){return'<div class="kv">'+rows.map(([k,v,cls=""])=>`<div>${esc(k)}</div><div class="${cls}">${esc(v)}</div>`).join("")+'</div>'}
 function loadBroadcast(raw){document.getElementById("broadcast-raw").value=raw;goToStep(3,true)}
+function pendingClass(value){const n=Number(value);return Number.isFinite(n)&&n>0?"positive":Number.isFinite(n)&&n<0?"negative":""}
 
 const rendered={wallet:null,send:null,cpfp:null,broadcast:null};
 function renderWalletResult(d){rendered.wallet=d;show("wallet-result",kv([[t("dogeAddress"),d.address,"mono"],[t("publicKey"),d.public_key,"mono"],[t("wif"),d.wif,"mono secret"],[t("privateKeyHex"),d.private_key_hex,"mono secret"]])+`<div class="actions"><button class="secondary" id="toggle-wallet-secrets">${esc(t("revealSecrets"))}</button></div>`);document.getElementById("toggle-wallet-secrets").onclick=()=>document.querySelectorAll("#wallet-result .secret").forEach(x=>x.classList.toggle("reveal"))}
@@ -257,12 +280,16 @@ function renderCpfpResult(d){rendered.cpfp=d;show("cpfp-result",kv([[t("parentTx
 function renderBroadcastResult(d){rendered.broadcast=d;const link="https://blockchair.com/dogecoin/transaction/"+encodeURIComponent(d.txid);show("broadcast-result",kv([[t("txid"),d.txid,"mono"],[t("provider"),"BlockCypher"],[t("result"),t(d.status==="accepted"?"accepted":d.status)]])+`<div class="actions"><a href="${link}" target="_blank" rel="noopener">${esc(t("openBlockchair"))}</a></div>`)}
 function refreshRenderedResults(){if(rendered.wallet)renderWalletResult(rendered.wallet);if(rendered.send)renderSendResult(rendered.send);if(rendered.cpfp)renderCpfpResult(rendered.cpfp);if(rendered.broadcast)renderBroadcastResult(rendered.broadcast)}
 
-function renderWalletStatus(d){const el=document.getElementById("send-wallet-status");if(!d){el.className="wallet-status";el.innerHTML="";return}lastWalletStatus=d;if(d.loading){el.className="wallet-status show loading";el.textContent=t("walletLoading");return}if(d.error){el.className="wallet-status show bad";el.textContent=localizedError(d.error);return}el.className="wallet-status show good";el.innerHTML=`<div class="wallet-status-grid"><div><span class="wallet-status-label">${esc(t("sourceAddress"))}</span><span class="wallet-status-value mono">${esc(d.address)}</span></div><div><span class="wallet-status-label">${esc(t("confirmedBalance"))}</span><span class="wallet-status-value">${esc(d.balance)} DOGE</span></div><div><span class="wallet-status-label">${esc(t("availableUtxos"))}</span><span class="wallet-status-value">${esc(d.utxo_count)}</span></div></div>`}
+function renderAddressBalance(d){const el=document.getElementById("wallet-balance-status");if(!d){el.className="wallet-status";el.innerHTML="";return}lastAddressBalance=d;if(d.loading){el.className="wallet-status show loading";el.textContent=t("walletLoading");return}if(d.error){el.className="wallet-status show bad";el.textContent=localizedError(d.error);return}const pending=d.pending_balance||"0.00000000";el.className="wallet-status show good";el.innerHTML=`<div class="wallet-status-grid"><div><span class="wallet-status-label">${esc(t("walletAddress"))}</span><span class="wallet-status-value mono">${esc(d.address)}</span></div><div><span class="wallet-status-label">${esc(t("currentBalance"))}</span><span class="wallet-status-value balance-current">${esc(d.current_balance)} DOGE</span></div><div><span class="wallet-status-label">${esc(t("confirmedBalance"))}</span><span class="wallet-status-value">${esc(d.confirmed_balance)} DOGE</span></div><div><span class="wallet-status-label">${esc(t("pendingBalance"))}</span><span class="wallet-status-value balance-pending ${pendingClass(pending)}">${esc(pending)} DOGE</span></div><div><span class="wallet-status-label">${esc(t("availableUtxos"))}</span><span class="wallet-status-value">${esc(d.utxo_count)}</span></div></div>`}
+async function loadAddressBalance(force=false){const input=document.getElementById("wallet-balance-address");const address=input.value.trim();if(!address){lastBalanceAddress="";lastAddressBalance=null;renderAddressBalance(null);return}if(!force&&address===lastBalanceAddress&&lastAddressBalance&&!lastAddressBalance.error)return;lastBalanceAddress=address;renderAddressBalance({loading:true});try{const d=await post("/api/address-status",{address});lastAddressBalance=d;renderAddressBalance(d)}catch(e){lastAddressBalance={error:e.message};renderAddressBalance(lastAddressBalance)}}
+const walletBalanceAddress=document.getElementById("wallet-balance-address");walletBalanceAddress.addEventListener("input",()=>{if(walletBalanceAddress.value.trim()!==lastBalanceAddress){lastAddressBalance=null;renderAddressBalance(null)}});walletBalanceAddress.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();loadAddressBalance(true)}});
+
+function renderWalletStatus(d){const el=document.getElementById("send-wallet-status");if(!d){el.className="wallet-status";el.innerHTML="";return}lastWalletStatus=d;if(d.loading){el.className="wallet-status show loading";el.textContent=t("walletLoading");return}if(d.error){el.className="wallet-status show bad";el.textContent=localizedError(d.error);return}el.className="wallet-status show good";el.innerHTML=`<div class="wallet-status-grid"><div><span class="wallet-status-label">${esc(t("sourceAddress"))}</span><span class="wallet-status-value mono">${esc(d.address)}</span></div><div><span class="wallet-status-label">${esc(t("currentBalance"))}</span><span class="wallet-status-value">${esc(d.current_balance||d.balance)} DOGE</span></div><div><span class="wallet-status-label">${esc(t("confirmedBalance"))}</span><span class="wallet-status-value">${esc(d.confirmed_balance||d.balance)} DOGE</span></div><div><span class="wallet-status-label">${esc(t("availableUtxos"))}</span><span class="wallet-status-value">${esc(d.utxo_count)}</span></div></div>`}
 async function loadWalletStatus(force=false){const wif=document.getElementById("send-wif").value.trim();if(!wif){lastStatusWif="";lastWalletStatus=null;renderWalletStatus(null);return}if(!force&&wif===lastStatusWif&&lastWalletStatus&&!lastWalletStatus.error)return;lastStatusWif=wif;renderWalletStatus({loading:true});try{const d=await post("/api/wallet-status",{wif});lastWalletStatus=d;renderWalletStatus(d)}catch(e){lastWalletStatus={error:e.message};renderWalletStatus(lastWalletStatus)}}
 const sendWif=document.getElementById("send-wif");sendWif.addEventListener("input",()=>{if(sendWif.value.trim()!==lastStatusWif){lastWalletStatus=null;renderWalletStatus(null)}});sendWif.addEventListener("blur",()=>loadWalletStatus());
 
-async function generateWallet(){try{renderWalletResult(await post("/api/generate",{}))}catch(e){showError("wallet-result",e)}}
-async function buildTx(){try{const d=await post("/api/build",{wif:document.getElementById("send-wif").value,to:document.getElementById("send-to").value.trim(),amount:document.getElementById("send-amount").value.trim(),fee_rate:document.getElementById("send-fee-rate").value.trim()});renderSendResult(d);lastWalletStatus={address:d.source,balance:d.confirmed_balance,utxo_count:d.utxo_count};renderWalletStatus(lastWalletStatus)}catch(e){showError("send-result",e)}}
+async function generateWallet(){try{const d=await post("/api/generate",{});renderWalletResult(d);walletBalanceAddress.value=d.address;lastBalanceAddress="";lastAddressBalance=null;renderAddressBalance(null)}catch(e){showError("wallet-result",e)}}
+async function buildTx(){try{const d=await post("/api/build",{wif:document.getElementById("send-wif").value,to:document.getElementById("send-to").value.trim(),amount:document.getElementById("send-amount").value.trim(),fee_rate:document.getElementById("send-fee-rate").value.trim()});renderSendResult(d);lastWalletStatus={address:d.source,current_balance:d.current_balance,confirmed_balance:d.confirmed_balance,pending_balance:d.pending_balance,utxo_count:d.utxo_count};renderWalletStatus(lastWalletStatus)}catch(e){showError("send-result",e)}}
 async function buildCpfp(){try{const d=await post("/api/cpfp",{wif:document.getElementById("cpfp-wif").value,parent_raw:document.getElementById("cpfp-parent-raw").value,parent_vout:document.getElementById("cpfp-vout").value,parent_utxo_amount:document.getElementById("cpfp-utxo-amount").value.trim(),parent_fee:document.getElementById("cpfp-parent-fee").value.trim(),target_rate:document.getElementById("cpfp-rate").value.trim(),to:document.getElementById("cpfp-to").value.trim()});renderCpfpResult(d)}catch(e){showError("cpfp-result",e)}}
 async function broadcastTx(){if(!document.getElementById("broadcast-confirm").checked){show("broadcast-result",esc(t("irreversibleCheck")),false);return}try{renderBroadcastResult(await post("/api/broadcast",{raw_hex:document.getElementById("broadcast-raw").value}))}catch(e){showError("broadcast-result",e)}}
 
@@ -274,7 +301,7 @@ applyLanguage();goToStep(0);
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "DogeWalletLab/0.4"
+    server_version = "DogeWalletLab/0.5"
 
     def log_message(self, fmt: str, *args: object) -> None:
         sys.stderr.write("[web] " + (fmt % args) + "\n")
@@ -330,6 +357,8 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
             if self.path == "/api/generate":
                 self._api_generate()
+            elif self.path == "/api/address-status":
+                self._api_address_status(body)
             elif self.path == "/api/wallet-status":
                 self._api_wallet_status(body)
             elif self.path == "/api/build":
@@ -352,16 +381,15 @@ class Handler(BaseHTTPRequestHandler):
             "private_key_hex": f"{wallet.private_key:064x}",
         })
 
+    def _api_address_status(self, body: dict) -> None:
+        address = str(body.get("address", "")).strip()
+        # Validate locally before sending the public address to an explorer API.
+        p2pkh_script_pubkey(address)
+        self._json(200, wallet_status_payload(fetch_wallet_utxos(address)))
+
     def _api_wallet_status(self, body: dict) -> None:
         wallet = wallet_from_wif(str(body.get("wif", "")).strip())
-        snapshot = fetch_wallet_utxos(wallet.address)
-        largest = max((utxo.value for utxo in snapshot.utxos), default=0)
-        self._json(200, {
-            "address": wallet.address,
-            "balance": format_doge(snapshot.balance),
-            "utxo_count": len(snapshot.utxos),
-            "largest_utxo": format_doge(largest),
-        })
+        self._json(200, wallet_status_payload(fetch_wallet_utxos(wallet.address)))
 
     def _api_build(self, body: dict) -> None:
         wif = str(body.get("wif", "")).strip()
@@ -388,7 +416,9 @@ class Handler(BaseHTTPRequestHandler):
             "size": tx.size,
             "txid": tx.txid,
             "raw_hex": tx.raw.hex(),
+            "current_balance": format_doge(snapshot.final_balance),
             "confirmed_balance": format_doge(snapshot.balance),
+            "pending_balance": format_doge(snapshot.unconfirmed_balance),
             "utxo_count": len(snapshot.utxos),
             "selected_utxo": {"txid": selected.txid, "vout": selected.vout, "amount": format_doge(selected.value)},
         })

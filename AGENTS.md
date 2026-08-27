@@ -26,6 +26,7 @@ This repository currently targets Dogecoin **mainnet legacy P2PKH (`D...`)** tra
 - `build_cpfp.py` — Child-Pays-For-Parent transaction builder.
 - `broadcast_blockcypher.py` — BlockCypher raw transaction broadcaster.
 - `broadcast_blockchair.py` — alternative broadcaster.
+- `balance_page.py` — public-address balance checker page.
 - `web_app.py` — local browser UI and local HTTP API.
 - `README.md` — CLI/project documentation.
 - `WEB_UI.md` — web UI documentation.
@@ -50,7 +51,7 @@ These rules are mandatory.
    `web_app.py` must bind to `127.0.0.1`, not `0.0.0.0`, unless a future change explicitly introduces and documents a secure remote-access model.
 
 6. **Broadcast must remain explicit and separate from signing.**
-   Building/signing a transaction must never automatically publish it. The user must perform a separate irreversible broadcast action.
+   Building/signing a transaction must never automatically publish it. The broadcast action may live in the same human-readable transaction result card, but it must remain a distinct irreversible user action with explicit confirmation.
 
 7. **Do not weaken browser protections casually.**
    Preserve the local request token, `Cache-Control: no-store`, frame denial, restrictive CSP, and absence of permissive CORS.
@@ -86,7 +87,12 @@ Design direction:
 - lighter than the original dark terminal-like UI;
 - clear visual hierarchy and generous spacing;
 - Dogecoin gold may be used as an accent, not as the entire palette;
-- the main workflow may be presented as a swipeable/scrollable carousel or step flow: `Wallet -> Send -> Rescue -> Broadcast`;
+- the main workflow is a swipeable/scrollable three-step flow: `Wallet -> Send -> Rescue`;
+- Send and Rescue result cards contain their own explicit broadcast action after human-readable transaction review;
+- do not introduce a separate raw-hex Broadcast screen as the primary review flow;
+- serialized signed transaction bytes may remain internal application data, but the user-facing review surface must be human-readable;
+- successful or failed broadcast status belongs in the same transaction result card that initiated it;
+- the separate `/balance` page remains a public-address read-only flow and must never ask for WIF/private key;
 - mobile layouts must remain usable without horizontal form overflow;
 - security warnings must remain visible and understandable after visual redesigns.
 
@@ -148,8 +154,12 @@ and manually check:
 - English and Russian language switching;
 - page reload preserves only non-secret preferences;
 - wallet generation still works;
+- `/balance` still works without WIF/private key;
 - WIF remains visually protected where appropriate;
-- transaction build remains separate from broadcast;
+- transaction build remains separate from the explicit broadcast button;
+- Send and CPFP show human-readable summaries before broadcast is possible;
+- successful/failed broadcast state renders inside the originating transaction result card;
+- no separate user-facing raw-hex Broadcast screen is introduced;
 - mobile-width layout is usable.
 
 For cryptographic changes, add or extend deterministic test vectors instead of relying only on a live mainnet transaction.

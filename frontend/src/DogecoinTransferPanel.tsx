@@ -115,7 +115,7 @@ export function DogecoinTransferPanel({
       case 'wif-invalid': return copy.wifInvalid;
       case 'wif-mismatch': return copy.wifMismatch;
       case 'fee-rate-invalid': return copy.feeRateInvalid;
-      case 'fee-policy': return copy.feePolicyError;
+      case 'fee-policy': return copy.transferUnavailable;
       case 'unavailable': return copy.transferUnavailable;
       case 'utxo': return copy.utxoError;
       case 'insufficient-funds': return copy.insufficientFunds;
@@ -333,13 +333,13 @@ export function DogecoinTransferPanel({
               />
               <strong>{feeUnit}</strong>
             </div>
-            {feePolicyState === 'loading' && <small className="transfer-policy">{copy.feePolicyLoading}</small>}
+            {feePolicyState === 'loading' && <small className="transfer-policy">{copy.checking}</small>}
             {feePolicyState === 'loaded' && (
               <small className="transfer-policy">
                 {copy.recommendedFeeRate}: {recommendedFeeRate} {feeUnit}
               </small>
             )}
-            {feePolicyState === 'error' && <small className="form-error">{copy.feePolicyError}</small>}
+            {feePolicyState === 'error' && <small className="form-error">{copy.transferUnavailable}</small>}
           </label>
         </div>
 

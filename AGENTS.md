@@ -57,6 +57,7 @@ Migration rules are mandatory:
 
 - `doge_wallet.py` — crypto primitives, wallet generation, transaction building/signing.
 - `build_cpfp.py` — Child-Pays-For-Parent transaction builder.
+- `blockcypher_transactions.py` — TXID-based parent lookup, raw-byte verification, and CPFP output resolution.
 - `broadcast_blockcypher.py` — BlockCypher raw transaction broadcaster.
 - `broadcast_blockchair.py` — alternative broadcaster.
 - `balance_page.py` — public-address balance checker page.
@@ -98,7 +99,12 @@ These rules are mandatory.
 - Amounts must use integer koinu internally (`100,000,000` koinu = `1 DOGE`). Avoid floating-point arithmetic for money.
 - Never silently alter a destination address, amount, input outpoint, or change address.
 - Always show the user source, destination, amount, change, fee, serialized size, and locally calculated TXID before broadcast.
-- Prefer deriving values from canonical data instead of asking the user to type them manually. Example: derive a parent TXID from raw transaction bytes rather than accepting a manually copied TXID when possible.
+- Prefer deriving values from canonical/public transaction data instead of asking the user to type values that can be resolved safely.
+- CPFP in the web UI is TXID-first: do not ask users to enter parent raw hex, vout, parent output value, parent fee, or parent size when those can be resolved automatically.
+- For CPFP, derive the source address locally from WIF, fetch only public parent transaction data, recompute the TXID from fetched raw bytes, and compare provider output values/scripts with the raw transaction before selecting a spend.
+- CPFP must refuse to build when the parent is already confirmed, is marked as a double spend, or has no unspent output controlled by the source wallet.
+- When multiple unspent parent outputs are controlled by the source wallet, deterministic automatic selection is preferred over exposing vout as routine UI. The current rule is to select the largest matching output.
+- Provider metadata must not silently override raw transaction bytes. If TXID, size, output value, output script, or fee validation disagrees, fail closed.
 - When adding RBF, use an explicit sequence value that signals opt-in RBF and document the behavior. Do not change sequence semantics implicitly.
 - Do not modify secp256k1, Base58Check, RIPEMD-160, RFC6979, DER, sighash, or transaction serialization code as part of unrelated UI/refactoring work.
 - Changes to cryptographic or serialization primitives require dedicated tests and a dedicated commit.
@@ -124,6 +130,7 @@ Design direction:
 - Send and Rescue result cards contain their own explicit broadcast action after human-readable transaction review;
 - do not introduce a separate raw-hex Broadcast screen as the primary review flow;
 - serialized signed transaction bytes may remain internal application data, but the user-facing review surface must be human-readable;
+- CPFP's routine user-facing input is WIF + parent TXID + target package rate + optional child destination; resolved parent details belong in the result/review summary, not as manual form inputs;
 - successful or failed broadcast status belongs in the same transaction result card that initiated it;
 - the separate `/balance` page remains a public-address read-only flow and must never ask for WIF/private key;
 - mobile layouts must remain usable without horizontal form overflow;
@@ -178,6 +185,12 @@ At minimum after changes to wallet/transaction code run:
 python3 doge_wallet.py --self-test
 ```
 
+After CPFP parent-resolution changes also run:
+
+```bash
+python3 blockcypher_transactions.py
+```
+
 For web UI changes also verify:
 
 ```bash
@@ -193,6 +206,9 @@ and manually check:
 - WIF remains visually protected where appropriate;
 - transaction build remains separate from the explicit broadcast button;
 - Send and CPFP show human-readable summaries before broadcast is possible;
+- CPFP form does not ask for raw hex, vout, parent amount, parent fee, or parent size;
+- CPFP resolves those fields from TXID and shows the resolved values in the result summary;
+- confirmed parents are rejected before child construction;
 - successful/failed broadcast state renders inside the originating transaction result card;
 - no separate user-facing raw-hex Broadcast screen is introduced;
 - mobile-width layout is usable.
@@ -222,13 +238,14 @@ External explorers and broadcasters are infrastructure conveniences, not sources
 - A transaction should not depend conceptually on one explorer/provider.
 - Provider failures must not trigger re-signing or secret disclosure.
 - Locally calculated TXID must be compared with a provider-returned TXID when available.
+- Parent transaction raw bytes should be locally parsed/validated before provider metadata is trusted for CPFP selection.
 - Prefer adding provider adapters over scattering provider-specific HTTP logic throughout wallet code.
 
 Longer term, a local Dogecoin Core JSON-RPC backend is preferred for independent broadcast and chain inspection.
 
 ## Current roadmap
 
-The active migration roadmap is `docs/architecture/MIGRATION_PLAN.md`.
+The active platform migration roadmap is `docs/architecture/MIGRATION_PLAN.md`.
 
 Near-term order:
 

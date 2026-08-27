@@ -16,6 +16,12 @@ If `--open` does not launch a browser, open:
 http://127.0.0.1:8765/
 ```
 
+The separate public balance checker is available at:
+
+```text
+http://127.0.0.1:8765/balance
+```
+
 Use another local port if needed:
 
 ```bash
@@ -49,6 +55,21 @@ Generates a new Dogecoin mainnet P2PKH wallet locally:
 - `D...` address.
 
 Secrets are visually hidden until explicitly revealed.
+
+### Public balance checker
+
+The `/balance` page checks a wallet using only its public Dogecoin address. It never asks for a WIF or private key.
+
+The page shows:
+
+- confirmed balance;
+- count of confirmed spendable UTXOs;
+- largest confirmed UTXO;
+- a table of confirmed UTXOs with amount, confirmations, TXID and vout.
+
+The address is validated locally as a Dogecoin mainnet legacy P2PKH address before the lookup. Only the public `D...` address is sent to BlockCypher.
+
+The balance page uses the same RU/EN preference as the main wallet UI and links back to the wallet workflow.
 
 ### Send DOGE
 
@@ -116,7 +137,7 @@ The web app:
 - requires a random per-process local API token for POST requests;
 - denies framing;
 - has no permissive CORS configuration;
-- sends only the derived public Dogecoin address externally for balance/UTXO lookup;
+- sends only a public Dogecoin address externally for balance/UTXO lookup;
 - sends only already-signed public transaction bytes externally during explicit broadcast.
 
 Treat this as educational software for small test amounts, not an audited production wallet.
@@ -129,7 +150,7 @@ The web UI currently has these main limitations:
 - legacy P2PKH only;
 - one input UTXO per normal transaction;
 - automatic selection cannot yet combine multiple small UTXOs;
-- only confirmed UTXOs are selected for ordinary sends;
+- only confirmed UTXOs are selected for ordinary sends and shown by the balance page;
 - no live fee estimator;
 - no RBF controls yet;
 - UTXO lookup and broadcast currently depend on BlockCypher rather than our own Dogecoin Core node.

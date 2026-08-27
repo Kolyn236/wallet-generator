@@ -16,8 +16,11 @@ type DogecoinWalletMode = 'none' | 'created' | 'connected' | 'watch-only';
 type TransferState = 'idle' | 'preparing' | 'prepared' | 'broadcasting' | 'broadcasted';
 type TransferError =
   | 'form'
+  | 'sender-invalid'
   | 'recipient-invalid'
-  | 'watch-only'
+  | 'wif-required'
+  | 'wif-invalid'
+  | 'wif-mismatch'
   | 'unavailable'
   | 'utxo'
   | 'insufficient-funds'
@@ -48,6 +51,8 @@ export function DogecoinTransferPanel({
   signingWallet,
 }: Props) {
   const copy = messages[language];
+  const [sender, setSender] = useState(sourceAddress);
+  const [wif, setWif] = useState(signingWallet?.wif ?? '');
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [state, setState] = useState<TransferState>('idle');
@@ -56,15 +61,16 @@ export function DogecoinTransferPanel({
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null);
 
   const busy = state === 'preparing' || state === 'broadcasting';
-  const canSign = assetId === 'doge'
-    && (walletMode === 'created' || walletMode === 'connected')
-    && signingWallet !== null;
+  const canPrepare = assetId === 'doge';
 
   const errorMessage = useMemo(() => {
     switch (error) {
       case 'form': return copy.formError;
+      case 'sender-invalid': return copy.senderInvalid;
       case 'recipient-invalid': return copy.recipientInvalid;
-      case 'watch-only': return copy.transferWatchOnly;
+      case 'wif-required': return copy.wifRequired;
+      case 'wif-invalid': return copy.wifInvalid;
+      case 'wif-mismatch': return copy.wifMismatch;
       case 'unavailable': return copy.transferUnavailable;
       case 'utxo': return copy.utxoError;
       case 'insufficient-funds': return copy.insufficientFunds;
@@ -81,6 +87,16 @@ export function DogecoinTransferPanel({
     setBroadcastTxid(null);
     setState('idle');
     setError(null);
+  }
+
+  function updateSender(value: string) {
+    setSender(value);
+    resetResult();
+  }
+
+  function updateWif(value: string) {
+    setWif(value);
+    resetResult();
   }
 
   function updateRecipient(value: string) {
@@ -101,14 +117,21 @@ export function DogecoinTransferPanel({
       setError('unavailable');
       return;
     }
-    if (!canSign || !signingWallet) {
-      setError('watch-only');
+
+    const source = sender.trim();
+    const destination = recipient.trim();
+    const signingWif = wif.trim();
+
+    if (!source || !destination || !amount.trim()) {
+      setError('form');
       return;
     }
-
-    const destination = recipient.trim();
-    if (!destination || !amount.trim()) {
-      setError('form');
+    if (!signingWif) {
+      setError('wif-required');
+      return;
+    }
+    if (!isDogecoinMainnetAddress(source)) {
+      setError('sender-invalid');
       return;
     }
     if (!isDogecoinMainnetAddress(destination)) {
@@ -119,10 +142,10 @@ export function DogecoinTransferPanel({
     setState('preparing');
 
     try {
-      const response = await getDogecoinUtxos(signingWallet.address);
+      const response = await getDogecoinUtxos(source);
       const built = buildSignedDogecoinTransfer({
-        wif: signingWallet.wif,
-        sourceAddress: signingWallet.address,
+        wif: signingWif,
+        sourceAddress: source,
         recipientAddress: destination,
         amount,
         utxos: response.utxos,
@@ -137,7 +160,9 @@ export function DogecoinTransferPanel({
         return;
       }
       if (caught instanceof Error) {
-        if (caught.message === 'invalid_address') setError('recipient-invalid');
+        if (caught.message === 'invalid_wif') setError('wif-invalid');
+        else if (caught.message === 'wallet_key_mismatch') setError('wif-mismatch');
+        else if (caught.message === 'invalid_address') setError('sender-invalid');
         else if (caught.message === 'invalid_amount') setError('form');
         else if (caught.message === 'amount_below_dust') setError('amount-below-dust');
         else if (caught.message === 'same_address') setError('same-address');
@@ -181,7 +206,27 @@ export function DogecoinTransferPanel({
       <form className="transfer-form" onSubmit={prepareTransfer}>
         <label>
           <span>{copy.from}</span>
-          <input value={sourceAddress} placeholder={copy.fromPlaceholder} autoComplete="off" readOnly />
+          <input
+            value={sender}
+            onChange={(event) => updateSender(event.target.value)}
+            placeholder={copy.fromPlaceholder}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={busy}
+          />
+        </label>
+        <label>
+          <span>{copy.wifInput}</span>
+          <input
+            type="password"
+            value={wif}
+            onChange={(event) => updateWif(event.target.value)}
+            placeholder={copy.wifPlaceholder}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={busy}
+          />
+          <small className="transfer-policy">{copy.wifHint}</small>
         </label>
         <label>
           <span>{copy.recipient}</span>
@@ -190,6 +235,7 @@ export function DogecoinTransferPanel({
             onChange={(event) => updateRecipient(event.target.value)}
             placeholder={copy.recipientPlaceholder}
             autoComplete="off"
+            spellCheck={false}
             disabled={busy}
           />
         </label>
@@ -214,16 +260,16 @@ export function DogecoinTransferPanel({
           </label>
         </div>
 
-        {!canSign && assetId === 'doge' && walletMode === 'watch-only' && (
+        {assetId === 'doge' && walletMode === 'watch-only' && (
           <p className="transfer-notice">{copy.transferWatchOnly}</p>
         )}
-        {!canSign && assetId === 'doge' && walletMode === 'none' && (
-          <p className="transfer-notice">{copy.walletEmpty}</p>
+        {assetId === 'doge' && walletMode === 'none' && (
+          <p className="transfer-notice">{copy.transferAnySender}</p>
         )}
         {assetId !== 'doge' && <p className="transfer-notice">{copy.transferUnavailable}</p>}
         {errorMessage && <p className="form-error">{errorMessage}</p>}
 
-        <button className="submit-button" type="submit" disabled={busy || !canSign}>
+        <button className="submit-button" type="submit" disabled={busy || !canPrepare}>
           {state === 'preparing' ? copy.preparingTransfer : copy.previewTransfer}
         </button>
       </form>
@@ -235,7 +281,7 @@ export function DogecoinTransferPanel({
             <span>{networkStandard}</span>
           </div>
           <dl>
-            <div><dt>{copy.from}</dt><dd>{sourceAddress}</dd></div>
+            <div><dt>{copy.from}</dt><dd>{sender.trim()}</dd></div>
             <div><dt>{copy.recipient}</dt><dd>{recipient.trim()}</dd></div>
             <div><dt>{copy.amount}</dt><dd>{signedTransfer.amountDoge} DOGE</dd></div>
             <div><dt>{copy.fee}</dt><dd>{signedTransfer.feeDoge} DOGE</dd></div>

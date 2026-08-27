@@ -31,6 +31,21 @@
   line-height: 1.45;
 }
 
+.connect-form-footer-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connect-form-footer-actions .primary-button {
+  border: 0;
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .text-button {
   flex: none;
   border: 0;
@@ -180,5 +195,9 @@
   .connect-form-footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .connect-form-footer-actions {
+    width: 100%;
   }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch confirmed Dogecoin UTXOs from BlockCypher using only a public address."""
+"""Fetch Dogecoin address balances and confirmed UTXOs using only a public address."""
 
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ class Utxo:
 class AddressUtxos:
     address: str
     balance: int
+    unconfirmed_balance: int
+    final_balance: int
     utxos: tuple[Utxo, ...]
 
 
@@ -67,6 +69,16 @@ def parse_address_response(payload: object, expected_address: str) -> AddressUtx
     if not isinstance(balance, int) or balance < 0:
         raise RuntimeError("BlockCypher returned an invalid confirmed balance.")
 
+    unconfirmed_balance = payload.get("unconfirmed_balance", 0)
+    if not isinstance(unconfirmed_balance, int):
+        raise RuntimeError("BlockCypher returned an invalid unconfirmed balance.")
+
+    final_balance = payload.get("final_balance", balance + unconfirmed_balance)
+    if not isinstance(final_balance, int) or final_balance < 0:
+        raise RuntimeError("BlockCypher returned an invalid final balance.")
+    if final_balance != balance + unconfirmed_balance:
+        raise RuntimeError("BlockCypher returned inconsistent balance totals.")
+
     refs = payload.get("txrefs") or []
     if not isinstance(refs, list):
         raise RuntimeError("BlockCypher returned an invalid UTXO list.")
@@ -77,7 +89,13 @@ def parse_address_response(payload: object, expected_address: str) -> AddressUtx
             key=lambda item: (item.value, -item.confirmations, item.txid, item.vout),
         )
     )
-    return AddressUtxos(address=address, balance=balance, utxos=utxos)
+    return AddressUtxos(
+        address=address,
+        balance=balance,
+        unconfirmed_balance=unconfirmed_balance,
+        final_balance=final_balance,
+        utxos=utxos,
+    )
 
 
 def fetch_confirmed_utxos(address: str, token: str | None = None) -> AddressUtxos:
@@ -95,7 +113,7 @@ def fetch_confirmed_utxos(address: str, token: str | None = None) -> AddressUtxo
         endpoint,
         headers={
             "Accept": "application/json",
-            "User-Agent": "doge-wallet-generator/0.3",
+            "User-Agent": "doge-wallet-generator/0.5",
         },
         method="GET",
     )
@@ -121,6 +139,8 @@ def self_test() -> None:
     payload = {
         "address": "DExample",
         "balance": 900,
+        "unconfirmed_balance": 125,
+        "final_balance": 1025,
         "txrefs": [
             {"tx_hash": "22" * 32, "tx_output_n": 1, "value": 600, "confirmations": 2, "spent": False},
             {"tx_hash": "11" * 32, "tx_output_n": 0, "value": 300, "confirmations": 5, "spent": False},
@@ -129,8 +149,19 @@ def self_test() -> None:
     }
     result = parse_address_response(payload, "DExample")
     assert result.balance == 900
+    assert result.unconfirmed_balance == 125
+    assert result.final_balance == 1025
     assert [item.value for item in result.utxos] == [300, 600]
     assert result.utxos[0].txid == "11" * 32
+
+    payload_without_pending = {
+        "address": "DExample",
+        "balance": 900,
+        "txrefs": [],
+    }
+    no_pending = parse_address_response(payload_without_pending, "DExample")
+    assert no_pending.unconfirmed_balance == 0
+    assert no_pending.final_balance == 900
     print("BlockCypher UTXO parser self-test passed.")
 
 

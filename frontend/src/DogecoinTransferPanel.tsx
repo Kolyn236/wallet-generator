@@ -298,16 +298,16 @@ export function DogecoinTransferPanel({
                 {copy.recommendedFeeRate}: {recommendedFeeRate} {feeUnit}
               </small>
             )}
-            {customFeeRate && (
-              <button className="text-button" type="button" onClick={useRecommendedFeeRate} disabled={busy}>
-                {copy.useRecommendedFeeRate}
-              </button>
-            )}
           </label>
         </div>
 
         {customFeeRate && (
-          <p className="transfer-notice">{copy.customFeeWarning}</p>
+          <>
+            <p className="transfer-notice">{copy.customFeeWarning}</p>
+            <button className="text-button" type="button" onClick={useRecommendedFeeRate} disabled={busy}>
+              {copy.useRecommendedFeeRate}
+            </button>
+          </>
         )}
         {assetId === 'doge' && walletMode === 'watch-only' && (
           <p className="transfer-notice">{copy.transferWatchOnly}</p>

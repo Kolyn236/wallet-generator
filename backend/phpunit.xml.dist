@@ -9,6 +9,7 @@
         <env name="APP_DEBUG" value="1" force="true"/>
         <env name="APP_SECRET" value="test-secret" force="true"/>
         <env name="DEFAULT_URI" value="http://localhost" force="true"/>
+        <env name="DOGE_RECOMMENDED_FEE_RATE" value="0.01" force="true"/>
     </php>
     <testsuites>
         <testsuite name="Wallet Platform Backend">

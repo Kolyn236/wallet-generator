@@ -39,7 +39,11 @@
     "scripts": {
         "test": "phpunit",
         "analyse": "phpstan analyse --memory-limit=512M",
-        "cs:check": "php-cs-fixer fix --dry-run --diff --allow-risky=yes"
+        "cs:check": "php-cs-fixer fix --dry-run --diff --allow-risky=yes",
+        "auto-scripts": {
+            "cache:clear": "symfony-cmd",
+            "assets:install %PUBLIC_DIR%": "symfony-cmd"
+        }
     },
     "conflict": {
         "symfony/symfony": "*"

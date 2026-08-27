@@ -7,8 +7,6 @@ namespace App\Tests\Blockchain;
 use App\Blockchain\Application\DogecoinBalanceProvider;
 use App\Blockchain\Application\GetDogecoinAddressBalance;
 use App\Blockchain\Domain\AddressBalance;
-use InvalidArgumentException;
-use LogicException;
 use PHPUnit\Framework\TestCase;
 
 final class GetDogecoinAddressBalanceTest extends TestCase
@@ -33,11 +31,11 @@ final class GetDogecoinAddressBalanceTest extends TestCase
         $provider = new class implements DogecoinBalanceProvider {
             public function getConfirmedBalance(string $address): AddressBalance
             {
-                throw new LogicException('Provider must not be called for an invalid address.');
+                throw new \LogicException('Provider must not be called for an invalid address.');
             }
         };
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(\InvalidArgumentException::class);
 
         (new GetDogecoinAddressBalance($provider))('not-a-doge-address');
     }

@@ -7,7 +7,7 @@ Security model:
 - private WIFs are processed only by the local Python process;
 - no secrets are persisted by the web app;
 - language preference is the only value stored in localStorage;
-- balance/UTXO lookup sends only the derived public address to BlockCypher;
+- balance/UTXO lookup sends only a public address to BlockCypher;
 - broadcast sends only an already-signed public transaction.
 """
 
@@ -22,6 +22,7 @@ import urllib.error
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from balance_page import lookup_address_balance, render_balance_page
 from blockcypher_utxos import AddressUtxos, Utxo, fetch_confirmed_utxos
 from broadcast_blockcypher import broadcast as broadcast_blockcypher
 from build_cpfp import build_cpfp
@@ -109,7 +110,7 @@ button,input,textarea{font:inherit} button{-webkit-tap-highlight-color:transpare
 header{display:flex;justify-content:space-between;gap:28px;align-items:flex-start;margin-bottom:22px}.brand{display:flex;align-items:flex-start;gap:14px}
 .brand-mark{flex:0 0 auto;width:46px;height:46px;display:grid;place-items:center;border-radius:15px;background:linear-gradient(145deg,#f4c94f,#d79e0f);color:#fff;box-shadow:0 10px 26px rgba(185,135,0,.22);font-size:27px;font-weight:900}
 .eyebrow{margin:0 0 4px;color:var(--accent-strong);font-size:12px;font-weight:850;letter-spacing:.09em;text-transform:uppercase}h1{margin:0;font-size:clamp(30px,5vw,48px);line-height:1;letter-spacing:-.045em}.subtitle{color:var(--muted);margin:9px 0 0;max-width:690px;line-height:1.55;font-size:15px}
-.header-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.badge{border:1px solid #cfe5d7;background:var(--good-soft);color:var(--good);padding:8px 11px;border-radius:999px;font-size:11px;font-weight:850;white-space:nowrap}
+.header-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.badge{border:1px solid #cfe5d7;background:var(--good-soft);color:var(--good);padding:8px 11px;border-radius:999px;font-size:11px;font-weight:850;white-space:nowrap}.page-link{display:inline-flex;align-items:center;text-decoration:none;border:1px solid var(--line);background:white;color:#4b5047;padding:8px 11px;border-radius:12px;font-size:11px;font-weight:850;box-shadow:var(--shadow-soft)}
 .lang-switch{display:flex;gap:3px;padding:4px;border:1px solid var(--line);background:rgba(255,255,255,.78);border-radius:12px;box-shadow:var(--shadow-soft)}.lang-btn{border:0;background:transparent;color:var(--muted);border-radius:9px;padding:7px 10px;cursor:pointer;font-weight:850;font-size:12px}.lang-btn.active{background:var(--text);color:white}
 .notice{display:flex;gap:12px;align-items:flex-start;border:1px solid #eadcae;background:rgba(255,250,232,.92);padding:14px 16px;border-radius:17px;color:#66551f;margin:0 0 20px;line-height:1.5;box-shadow:var(--shadow-soft)}.notice-icon{flex:0 0 auto;width:30px;height:30px;display:grid;place-items:center;border-radius:10px;background:#fff1b7;color:#7c5d00;font-weight:900}
 .workflow-card{border:1px solid rgba(219,221,211,.92);background:rgba(255,255,255,.74);backdrop-filter:blur(12px);border-radius:24px;padding:13px;box-shadow:var(--shadow);margin-bottom:16px}.workflow-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:3px 4px 11px}.workflow-label{color:var(--muted);font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.step-counter{color:var(--muted);font-size:12px;font-weight:750}
@@ -130,7 +131,7 @@ header{display:flex;justify-content:space-between;gap:28px;align-items:flex-star
 <div class="wrap">
   <header>
     <div class="brand"><div class="brand-mark" aria-hidden="true">Ð</div><div><p class="eyebrow" data-i18n="eyebrow">Local-first wallet lab</p><h1>Doge Wallet Lab</h1><p class="subtitle" data-i18n="subtitle">Local UI for generating Dogecoin keys, building and signing P2PKH transactions, CPFP rescue, and explicit broadcast.</p></div></div>
-    <div class="header-actions"><div class="lang-switch" role="group" aria-label="Language"><button class="lang-btn" type="button" data-lang="ru">RU</button><button class="lang-btn" type="button" data-lang="en">EN</button></div><div class="badge" data-i18n="localBadge">LOCAL · 127.0.0.1</div></div>
+    <div class="header-actions"><a class="page-link" href="/balance" data-i18n="checkBalance">Check balance</a><div class="lang-switch" role="group" aria-label="Language"><button class="lang-btn" type="button" data-lang="ru">RU</button><button class="lang-btn" type="button" data-lang="en">EN</button></div><div class="badge" data-i18n="localBadge">LOCAL · 127.0.0.1</div></div>
   </header>
 
   <div class="notice"><div class="notice-icon" aria-hidden="true">✓</div><div><b data-i18n="securityTitle">Private keys stay local.</b> <span data-i18n="securityBody">WIF stays inside this browser and the local Python process. Balance lookup sends only the derived public DOGE address to BlockCypher; broadcast sends only signed public transaction bytes.</span></div></div>
@@ -199,7 +200,7 @@ let activeStep=0,touchStartX=null,lastWalletStatus=null,lastStatusWif="";
 
 const I18N={
   en:{
-    eyebrow:"Local-first wallet lab",subtitle:"Local UI for generating Dogecoin keys, building and signing P2PKH transactions, CPFP rescue, and explicit broadcast.",
+    eyebrow:"Local-first wallet lab",subtitle:"Local UI for generating Dogecoin keys, building and signing P2PKH transactions, CPFP rescue, and explicit broadcast.",checkBalance:"Check balance",
     localBadge:"LOCAL · 127.0.0.1",securityTitle:"Private keys stay local.",securityBody:"WIF stays inside this browser and the local Python process. Balance lookup sends only the derived public DOGE address to BlockCypher; broadcast sends only signed public transaction bytes.",
     workflowLabel:"Wallet workflow",stepWalletSub:"Create keys locally",stepSendSub:"Build and sign",stepCpfpSub:"Speed up a parent",stepBroadcastSub:"Publish signed bytes",
     tabWallet:"Wallet",tabSend:"Send DOGE",tabCpfp:"CPFP rescue",tabBroadcast:"Broadcast",stepOne:"Step 1",stepTwo:"Step 2",stepThree:"Step 3",stepFour:"Step 4",previous:"← Previous",next:"Next →",swipeHint:"You can also swipe between steps on touch screens.",
@@ -212,7 +213,7 @@ const I18N={
     parentTxid:"Parent TXID",parentSize:"Parent size",childDestinationResult:"Child destination",childOutput:"Child output",childFee:"Child fee",childSize:"Child size",packageRate:"Package rate",childTxid:"Child TXID",loadCpfp:"Load child into Broadcast",provider:"Provider",result:"Result",accepted:"accepted",openBlockchair:"Open in Blockchair ↗",irreversibleCheck:"Tick the irreversible-broadcast confirmation first.",errorPrefix:"Error"
   },
   ru:{
-    eyebrow:"Локальная лаборатория кошелька",subtitle:"Локальный интерфейс для создания ключей Dogecoin, сборки и подписи P2PKH-транзакций, CPFP-ускорения и явной отправки в сеть.",
+    eyebrow:"Локальная лаборатория кошелька",subtitle:"Локальный интерфейс для создания ключей Dogecoin, сборки и подписи P2PKH-транзакций, CPFP-ускорения и явной отправки в сеть.",checkBalance:"Проверить баланс",
     localBadge:"ЛОКАЛЬНО · 127.0.0.1",securityTitle:"Приватные ключи остаются локально.",securityBody:"WIF остаётся только в браузере и локальном Python-процессе. Для баланса BlockCypher получает только вычисленный публичный DOGE-адрес; при broadcast наружу уходят только подписанные публичные байты транзакции.",
     workflowLabel:"Процесс работы",stepWalletSub:"Создать ключи",stepSendSub:"Собрать и подписать",stepCpfpSub:"Ускорить parent",stepBroadcastSub:"Отправить raw TX",
     tabWallet:"Кошелёк",tabSend:"Отправить DOGE",tabCpfp:"Ускорение CPFP",tabBroadcast:"Отправка в сеть",stepOne:"Шаг 1",stepTwo:"Шаг 2",stepThree:"Шаг 3",stepFour:"Шаг 4",previous:"← Назад",next:"Далее →",swipeHint:"На сенсорном экране между шагами можно переключаться свайпом.",
@@ -274,7 +275,7 @@ applyLanguage();goToStep(0);
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "DogeWalletLab/0.4"
+    server_version = "DogeWalletLab/0.5"
 
     def log_message(self, fmt: str, *args: object) -> None:
         sys.stderr.write("[web] " + (fmt % args) + "\n")
@@ -315,10 +316,13 @@ class Handler(BaseHTTPRequestHandler):
         return secrets.compare_digest(self.headers.get("X-Local-Token", ""), LOCAL_TOKEN)
 
     def do_GET(self) -> None:
-        if self.path != "/":
+        if self.path == "/":
+            page = HTML.replace("__LOCAL_TOKEN__", LOCAL_TOKEN).encode("utf-8")
+        elif self.path in ("/balance", "/balance/"):
+            page = render_balance_page(LOCAL_TOKEN)
+        else:
             self._json(404, {"error": "Not found"})
             return
-        page = HTML.replace("__LOCAL_TOKEN__", LOCAL_TOKEN).encode("utf-8")
         self._headers(200, "text/html; charset=utf-8")
         self.wfile.write(page)
 
@@ -330,6 +334,8 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
             if self.path == "/api/generate":
                 self._api_generate()
+            elif self.path == "/api/address-balance":
+                self._api_address_balance(body)
             elif self.path == "/api/wallet-status":
                 self._api_wallet_status(body)
             elif self.path == "/api/build":
@@ -351,6 +357,10 @@ class Handler(BaseHTTPRequestHandler):
             "wif": wallet.wif,
             "private_key_hex": f"{wallet.private_key:064x}",
         })
+
+    def _api_address_balance(self, body: dict) -> None:
+        address = str(body.get("address", "")).strip()
+        self._json(200, lookup_address_balance(address, os.environ.get("BLOCKCYPHER_TOKEN")))
 
     def _api_wallet_status(self, body: dict) -> None:
         wallet = wallet_from_wif(str(body.get("wif", "")).strip())
@@ -462,6 +472,7 @@ def main() -> int:
     print("Doge Wallet Lab")
     print(f"Listening only on {HOST}:{args.port}")
     print(url)
+    print("Balance page: " + url + "balance")
     print("Press Ctrl+C to stop.")
     if args.open:
         webbrowser.open(url)

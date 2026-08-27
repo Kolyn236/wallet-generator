@@ -9,6 +9,14 @@ export type DogecoinBalanceResponse = {
   unit: 'DOGE';
 };
 
+export type DogecoinFeePolicyResponse = {
+  chain: 'dogecoin';
+  network: 'mainnet';
+  kind: 'utxo-rate-per-kb';
+  recommendedRate: string;
+  unit: 'DOGE/kB';
+};
+
 export type DogecoinUtxoResponse = {
   chain: 'dogecoin';
   network: 'mainnet';
@@ -52,6 +60,23 @@ export async function getHealth(signal?: AbortSignal): Promise<void> {
   if (!response.ok) {
     throw new Error(`Health request failed with HTTP ${response.status}.`);
   }
+}
+
+export async function getDogecoinFeePolicy(signal?: AbortSignal): Promise<DogecoinFeePolicyResponse> {
+  const response = await fetch('/api/chains/dogecoin/mainnet/fee-policy', {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await apiError(response, 'DOGE fee policy lookup');
+  }
+
+  return (await response.json()) as DogecoinFeePolicyResponse;
 }
 
 export async function getDogecoinBalance(address: string, signal?: AbortSignal): Promise<DogecoinBalanceResponse> {

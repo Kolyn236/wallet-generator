@@ -9,25 +9,17 @@ final class ProviderRequestLogger
     /**
      * @param array<string, bool|float|int|string|null> $context
      */
-    public function info(string $event, array $context = []): void
+    public function warning(array $context = []): void
     {
-        $this->write('info', $event, $context);
+        $this->write('warning', $context);
     }
 
     /**
      * @param array<string, bool|float|int|string|null> $context
      */
-    public function warning(string $event, array $context = []): void
+    public function error(array $context = []): void
     {
-        $this->write('warning', $event, $context);
-    }
-
-    /**
-     * @param array<string, bool|float|int|string|null> $context
-     */
-    public function error(string $event, array $context = []): void
-    {
-        $this->write('error', $event, $context);
+        $this->write('error', $context);
     }
 
     public static function maskedAddress(string $address): string
@@ -42,12 +34,11 @@ final class ProviderRequestLogger
     /**
      * @param array<string, bool|float|int|string|null> $context
      */
-    private function write(string $level, string $event, array $context): void
+    private function write(string $level, array $context): void
     {
         $record = [
             'channel' => 'blockchain_provider',
             'level' => $level,
-            'event' => $event,
             'timestamp' => gmdate('c'),
             ...$context,
         ];

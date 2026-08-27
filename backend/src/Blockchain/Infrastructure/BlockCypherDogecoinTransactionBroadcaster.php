@@ -11,6 +11,7 @@ use App\Blockchain\Domain\DogecoinRawTransaction;
 final readonly class BlockCypherDogecoinTransactionBroadcaster implements DogecoinTransactionBroadcaster
 {
     private const string ENDPOINT = 'https://api.blockcypher.com/v1/doge/main/txs/push';
+    private const int MAX_LOGGED_RESPONSE_BYTES = 4096;
 
     public function __construct(private ProviderRequestLogger $logger)
     {
@@ -18,16 +19,8 @@ final readonly class BlockCypherDogecoinTransactionBroadcaster implements Dogeco
 
     public function broadcast(DogecoinRawTransaction $transaction): string
     {
-        $broadcastId = bin2hex(random_bytes(4));
         $startedAt = hrtime(true);
         $http_response_header = [];
-
-        $this->logger->info('dogecoin_broadcast_started', [
-            'provider' => 'blockcypher',
-            'broadcast_id' => $broadcastId,
-            'txid' => $transaction->txid,
-            'size_bytes' => $transaction->sizeBytes,
-        ]);
 
         $body = json_encode(['tx' => $transaction->hex], \JSON_THROW_ON_ERROR);
         $context = stream_context_create([
@@ -45,9 +38,10 @@ final readonly class BlockCypherDogecoinTransactionBroadcaster implements Dogeco
         $durationMs = self::durationMs($startedAt);
 
         if (false === $payload) {
-            $this->logger->error('dogecoin_broadcast_transport_failed', [
+            $this->logger->error([
                 'provider' => 'blockcypher',
-                'broadcast_id' => $broadcastId,
+                'operation' => 'broadcast',
+                'reason' => 'provider_transport_failed',
                 'txid' => $transaction->txid,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
@@ -59,12 +53,14 @@ final readonly class BlockCypherDogecoinTransactionBroadcaster implements Dogeco
         try {
             $decoded = json_decode($payload, true, 512, \JSON_THROW_ON_ERROR);
         } catch (\JsonException $exception) {
-            $this->logger->error('dogecoin_broadcast_invalid_json', [
+            $this->logger->error([
                 'provider' => 'blockcypher',
-                'broadcast_id' => $broadcastId,
+                'operation' => 'broadcast',
+                'reason' => 'provider_invalid_json',
                 'txid' => $transaction->txid,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
+                'response_body' => self::loggableResponse($payload),
             ]);
 
             throw new BroadcastFailed('provider_invalid_json', $status, $exception);
@@ -73,37 +69,50 @@ final readonly class BlockCypherDogecoinTransactionBroadcaster implements Dogeco
         if (null !== $status && $status >= 400) {
             $reason = 429 === $status ? 'provider_rate_limited' : 'provider_rejected_transaction';
 
-            $this->logger->warning('dogecoin_broadcast_rejected', [
+            $this->logger->warning([
                 'provider' => 'blockcypher',
-                'broadcast_id' => $broadcastId,
+                'operation' => 'broadcast',
+                'reason' => $reason,
                 'txid' => $transaction->txid,
                 'http_status' => $status,
                 'duration_ms' => $durationMs,
                 'provider_error' => self::providerError($decoded),
+                'response_body' => self::loggableResponse($payload),
             ]);
 
             throw new BroadcastFailed($reason, $status);
         }
 
         if (!\is_array($decoded)) {
+            $this->logger->error([
+                'provider' => 'blockcypher',
+                'operation' => 'broadcast',
+                'reason' => 'provider_unexpected_response',
+                'txid' => $transaction->txid,
+                'http_status' => $status,
+                'duration_ms' => $durationMs,
+                'response_body' => self::loggableResponse($payload),
+            ]);
+
             throw new BroadcastFailed('provider_unexpected_response', $status);
         }
 
         $providerTxid = $decoded['hash'] ?? null;
         if (!\is_string($providerTxid) || 1 !== preg_match('/^[0-9a-fA-F]{64}$/', $providerTxid)) {
+            $this->logger->error([
+                'provider' => 'blockcypher',
+                'operation' => 'broadcast',
+                'reason' => 'provider_invalid_txid',
+                'txid' => $transaction->txid,
+                'http_status' => $status,
+                'duration_ms' => $durationMs,
+                'response_body' => self::loggableResponse($payload),
+            ]);
+
             throw new BroadcastFailed('provider_invalid_txid', $status);
         }
 
-        $providerTxid = strtolower($providerTxid);
-        $this->logger->info('dogecoin_broadcast_succeeded', [
-            'provider' => 'blockcypher',
-            'broadcast_id' => $broadcastId,
-            'txid' => $providerTxid,
-            'http_status' => $status,
-            'duration_ms' => $durationMs,
-        ]);
-
-        return $providerTxid;
+        return strtolower($providerTxid);
     }
 
     /**
@@ -122,6 +131,16 @@ final readonly class BlockCypherDogecoinTransactionBroadcaster implements Dogeco
     private static function durationMs(int $startedAt): float
     {
         return round((hrtime(true) - $startedAt) / 1_000_000, 2);
+    }
+
+    private static function loggableResponse(string $payload): string
+    {
+        $payload = trim($payload);
+        if (\strlen($payload) <= self::MAX_LOGGED_RESPONSE_BYTES) {
+            return $payload;
+        }
+
+        return substr($payload, 0, self::MAX_LOGGED_RESPONSE_BYTES).'…';
     }
 
     private static function providerError(mixed $decoded): ?string

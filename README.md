@@ -46,6 +46,7 @@ Start the local platform:
 ```bash
 git clone https://github.com/Kolyn236/doge-wallet-generator.git
 cd doge-wallet-generator
+cp .env.example .env
 docker compose up --build
 ```
 
@@ -67,6 +68,27 @@ Stop the stack:
 docker compose down
 ```
 
+## Runtime configuration
+
+Operator defaults that must be changeable without rebuilding the React bundle are read by Symfony from runtime environment variables.
+
+Current DOGE fee default:
+
+```dotenv
+DOGE_RECOMMENDED_FEE_RATE=0.01
+```
+
+For Docker Compose, put the override in the repository-root `.env` file and recreate/restart the PHP runtime:
+
+```bash
+# .env
+DOGE_RECOMMENDED_FEE_RATE=0.02
+
+docker compose up -d --force-recreate php
+```
+
+No frontend rebuild is required. React fetches the current policy from Symfony with `cache: no-store`.
+
 ## Stack
 
 - PHP 8.4;
@@ -84,12 +106,12 @@ PostgreSQL, Redis and RabbitMQ are **not required by the V1 runtime**. They may 
 The application is non-custodial.
 
 ```text
-seed/private key
+seed/private key/WIF
       |
       v
-browser memory only
+browser memory / transfer form only
       |
-      +--> address derivation
+      +--> address derivation / key-address verification
       |
       +--> transaction build + signing
       |
@@ -107,24 +129,28 @@ Rules:
 
 - Symfony never receives WIF/private keys/seed phrases;
 - plaintext signing material is not persisted in localStorage, sessionStorage, IndexedDB, cookies, PostgreSQL or Redis;
-- the first wallet version keeps unlocked secrets in browser RAM only, so F5 or closing the tab clears the wallet session;
+- locally created wallets keep unlocked secrets in browser RAM only, so F5 or closing the tab clears that wallet session;
+- an arbitrary existing DOGE sender may be used by entering its matching WIF directly in the transfer form; that WIF remains browser-local;
 - external providers receive public addresses/transaction data or already-signed raw transaction bytes only;
 - signing and broadcast are explicit separate operations;
 - amounts use integer smallest units internally;
-- the first DOGE transfer implementation spends only confirmed UTXOs and validates that every selected UTXO script belongs to the locally created source address before signing.
+- the DOGE transfer implementation spends only confirmed UTXOs and validates that every selected UTXO script belongs to the specified source address before signing.
 
 ## DOGE transfer flow
 
-Only a wallet created locally in the current browser session can sign. A wallet attached by public address is intentionally watch-only.
+The transfer form is independent from the wallet tile. A selected/created wallet can prefill the sender, but any valid DOGE P2PKH sender address can be used if the matching WIF is supplied locally.
 
 ```text
-Created DOGE wallet
+Sender DOGE address + matching WIF
     |
     v
-Recipient + amount
+Recipient + amount + fee rate
     |
     v
-Symfony: confirmed UTXO lookup
+Symfony: confirmed UTXO lookup for sender
+    |
+    v
+Browser: verify WIF <-> sender
     |
     v
 Browser: validate UTXO scripts
@@ -133,13 +159,10 @@ Browser: validate UTXO scripts
 Browser: coin selection
     |
     v
-Browser: build P2PKH transaction
+Browser: build + sign P2PKH transaction
     |
     v
-Browser: sign every input
-    |
-    v
-Review amount / fee / change / local TXID
+Review amount / fee rate / actual fee / change / local TXID
     |
     v
 Explicit Broadcast button
@@ -151,17 +174,30 @@ Symfony: signed raw transaction only
 Blockchain provider
 ```
 
-The initial recommended fee rate is `0.01 DOGE/kB`, calculated from the final signed byte size. Outputs below `0.01 DOGE` are avoided in this first implementation, matching the safety convention already used by the Python reference tool.
+### DOGE network fee policy
+
+The operator-recommended fee rate is supplied by Symfony at runtime from:
+
+```dotenv
+DOGE_RECOMMENDED_FEE_RATE=0.01
+```
+
+The default unit is `DOGE/kB`. The signer calculates the actual network fee from the final signed transaction byte size.
+
+The user may override the recommended positive rate in the transfer form. A custom value is explicitly marked as a user override because a rate that is too low may delay or prevent relay and a rate that is too high may overpay. The final actual fee is always shown before broadcast.
+
+Outputs below `0.01 DOGE` are avoided in this first implementation, matching the safety convention already used by the Python reference tool.
 
 ## Backend API used by DOGE
 
 ```text
+GET  /api/chains/dogecoin/mainnet/fee-policy
 GET  /api/chains/dogecoin/mainnet/addresses/{address}/balance
 GET  /api/chains/dogecoin/mainnet/addresses/{address}/utxos
 POST /api/chains/dogecoin/mainnet/transactions/broadcast
 ```
 
-The broadcast endpoint accepts only a signed raw transaction. It recomputes the local TXID and requires the provider response to return the same transaction identity.
+The fee-policy endpoint is public, read-only and non-cacheable. The broadcast endpoint accepts only a signed raw transaction. It recomputes the local TXID and requires the provider response to return the same transaction identity.
 
 ## Frontend flow
 
@@ -178,6 +214,9 @@ Wallet workspace
     |
     v
 Transfer form
+    |
+    v
+Load runtime fee policy
     |
     v
 Local sign/review when the selected chain supports it

@@ -6,6 +6,9 @@ venv/
 *.wif
 *.tx
 
+# Deploy-time operator overrides
+deploy/.env.rates
+
 # Symfony backend
 !backend/.env
 backend/.env.local

@@ -11,16 +11,6 @@ services:
       APP_ENV: dev
       APP_DEBUG: '1'
       APP_SECRET: local-development-only-change-me
-      DATABASE_URL: postgresql://wallet:wallet@postgres:5432/wallet?serverVersion=18&charset=utf8
-      REDIS_URL: redis://redis:6379
-      MESSENGER_TRANSPORT_DSN: amqp://guest:guest@rabbitmq:5672/%2f/messages
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
 
   nginx:
     build:
@@ -30,43 +20,3 @@ services:
       - '8080:80'
     depends_on:
       - php
-
-  postgres:
-    image: postgres:18-alpine
-    environment:
-      POSTGRES_DB: wallet
-      POSTGRES_USER: wallet
-      POSTGRES_PASSWORD: wallet
-    ports:
-      - '5432:5432'
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U wallet -d wallet']
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  redis:
-    image: redis:8-alpine
-    ports:
-      - '6379:6379'
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  rabbitmq:
-    image: rabbitmq:4-management-alpine
-    ports:
-      - '5672:5672'
-      - '15672:15672'
-    healthcheck:
-      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
-      interval: 5s
-      timeout: 5s
-      retries: 12
-
-volumes:
-  postgres_data:

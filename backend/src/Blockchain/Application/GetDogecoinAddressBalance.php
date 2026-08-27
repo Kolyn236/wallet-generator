@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Blockchain\Application;
 
 use App\Blockchain\Domain\AddressBalance;
+use App\Blockchain\Domain\DogecoinAddress;
 
 final readonly class GetDogecoinAddressBalance
 {
@@ -14,10 +15,6 @@ final readonly class GetDogecoinAddressBalance
 
     public function __invoke(string $address): AddressBalance
     {
-        if (1 !== preg_match('/^D[1-9A-HJ-NP-Za-km-z]{25,34}$/', $address)) {
-            throw new \InvalidArgumentException('Invalid Dogecoin address format.');
-        }
-
-        return $this->provider->getConfirmedBalance($address);
+        return $this->provider->getConfirmedBalance(DogecoinAddress::fromString($address));
     }
 }

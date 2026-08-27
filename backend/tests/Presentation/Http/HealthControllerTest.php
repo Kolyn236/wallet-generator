@@ -16,7 +16,7 @@ final class HealthControllerTest extends TestCase
         self::assertSame(200, $response->getStatusCode());
         self::assertSame(
             ['status' => 'ok', 'service' => 'wallet-platform-backend'],
-            json_decode((string) $response->getContent(), true, flags: JSON_THROW_ON_ERROR),
+            json_decode((string) $response->getContent(), true, flags: \JSON_THROW_ON_ERROR),
         );
     }
 }

@@ -31,11 +31,15 @@ jobs:
       - name: Show Flex-generated changes
         run: git status --short
         working-directory: .
-      - name: Upload resolved Composer lock
+      - name: Upload generated Symfony backend
         uses: actions/upload-artifact@v4
         with:
-          name: symfony-composer-lock
-          path: backend/composer.lock
+          name: symfony-generated-backend
+          path: |
+            backend/
+            !backend/vendor/**
+            !backend/var/**
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 1
       - name: Run PHPUnit

@@ -7,6 +7,7 @@
 ```bash
 git pull
 python3 doge_wallet.py --self-test
+python3 blockcypher_utxos.py
 python3 web_app.py --open
 ```
 
@@ -50,11 +51,22 @@ Generates a new Dogecoin mainnet P2PKH wallet locally:
 
 Secrets are visually hidden until explicitly revealed.
 
+The Wallet screen also contains a read-only balance overview. Paste any public Dogecoin mainnet `D...` address and press **Refresh balance**. A WIF/private key is not required for balance lookup.
+
+The overview distinguishes:
+
+- **current balance** — BlockCypher `final_balance`, including the net effect of unconfirmed activity;
+- **confirmed balance** — confirmed funds;
+- **pending delta** — unconfirmed incoming or outgoing balance change;
+- **spendable UTXOs** — confirmed UTXOs available to the current one-input send engine.
+
+Generating a new wallet fills its public address into the balance field but does not automatically query the external provider. The user explicitly refreshes when they want a network lookup.
+
 ### Send DOGE
 
 Builds and signs a one-input P2PKH transaction with automatic confirmed-UTXO discovery and selection.
 
-The normal send form now asks only for:
+The normal send form asks only for:
 
 - source WIF;
 - recipient (`To`) address;
@@ -63,7 +75,7 @@ The normal send form now asks only for:
 
 The source address is derived locally from the WIF. The local Python process then sends only that **public address** to BlockCypher and requests confirmed unspent outputs. The WIF/private key is never sent to BlockCypher.
 
-When the WIF field loses focus, the UI shows the derived source address, confirmed balance, and count of spendable confirmed UTXOs.
+When the WIF field loses focus, the UI shows the derived source address, current/confirmed balance, and count of spendable confirmed UTXOs.
 
 When building a transaction, the backend fetches the UTXOs again and chooses the smallest confirmed UTXO that can cover the send amount plus the exact serialized transaction fee. This selection happens on the backend rather than trusting hidden browser fields.
 
@@ -116,7 +128,7 @@ The web app:
 - requires a random per-process local API token for POST requests;
 - denies framing;
 - has no permissive CORS configuration;
-- sends only the derived public Dogecoin address externally for balance/UTXO lookup;
+- sends only a public Dogecoin address externally for balance/UTXO lookup;
 - sends only already-signed public transaction bytes externally during explicit broadcast.
 
 Treat this as educational software for small test amounts, not an audited production wallet.
@@ -132,6 +144,6 @@ The web UI currently has these main limitations:
 - only confirmed UTXOs are selected for ordinary sends;
 - no live fee estimator;
 - no RBF controls yet;
-- UTXO lookup and broadcast currently depend on BlockCypher rather than our own Dogecoin Core node.
+- balance/UTXO lookup and broadcast currently depend on BlockCypher rather than our own Dogecoin Core node.
 
 Natural next steps are multi-input coin selection, RBF-by-default, live fee estimation, transaction decoding/review, and optional Dogecoin Core JSON-RPC integration.

@@ -1,6 +1,7 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
   broadcastDogecoinTransaction,
+  getDogecoinFeePolicy,
   getDogecoinUtxos,
   WalletApiError,
 } from './api';
@@ -14,6 +15,7 @@ import {
 
 type DogecoinWalletMode = 'none' | 'created' | 'watch-only';
 type TransferState = 'idle' | 'preparing' | 'prepared' | 'broadcasting' | 'broadcasted';
+type FeePolicyState = 'idle' | 'loading' | 'loaded' | 'error';
 type TransferError =
   | 'form'
   | 'sender-invalid'
@@ -22,6 +24,7 @@ type TransferError =
   | 'wif-invalid'
   | 'wif-mismatch'
   | 'fee-rate-invalid'
+  | 'fee-policy'
   | 'unavailable'
   | 'utxo'
   | 'insufficient-funds'
@@ -54,22 +57,54 @@ export function DogecoinTransferPanel({
   const copy = messages[language];
   const network = getAsset(assetId).networks.find((candidate) => candidate.standard === networkStandard);
   const feePolicy = network?.feePolicy?.kind === 'utxo-rate-per-kb' ? network.feePolicy : null;
-  const recommendedFeeRate = feePolicy?.recommendedRate ?? '';
   const feeUnit = feePolicy?.unit ?? '';
 
   const [sender, setSender] = useState(sourceAddress);
   const [wif, setWif] = useState(createdWallet?.wif ?? '');
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
-  const [feeRate, setFeeRate] = useState(recommendedFeeRate);
+  const [recommendedFeeRate, setRecommendedFeeRate] = useState('');
+  const [feeRate, setFeeRate] = useState('');
+  const [feePolicyState, setFeePolicyState] = useState<FeePolicyState>('idle');
   const [state, setState] = useState<TransferState>('idle');
   const [error, setError] = useState<TransferError | null>(null);
   const [signedTransfer, setSignedTransfer] = useState<SignedDogecoinTransfer | null>(null);
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (assetId !== 'doge' || !feePolicy) {
+      setFeePolicyState('idle');
+      setRecommendedFeeRate('');
+      setFeeRate('');
+      return;
+    }
+
+    const controller = new AbortController();
+    setFeePolicyState('loading');
+    setRecommendedFeeRate('');
+    setFeeRate('');
+
+    getDogecoinFeePolicy(controller.signal)
+      .then((policy) => {
+        if (policy.kind !== feePolicy.kind || policy.unit !== feePolicy.unit || !policy.recommendedRate) {
+          throw new Error('invalid_fee_policy_response');
+        }
+
+        setRecommendedFeeRate(policy.recommendedRate);
+        setFeeRate(policy.recommendedRate);
+        setFeePolicyState('loaded');
+      })
+      .catch((caught: unknown) => {
+        if (caught instanceof DOMException && caught.name === 'AbortError') return;
+        setFeePolicyState('error');
+      });
+
+    return () => controller.abort();
+  }, [assetId, feePolicy, networkStandard]);
+
   const busy = state === 'preparing' || state === 'broadcasting';
-  const canPrepare = assetId === 'doge' && feePolicy !== null;
-  const customFeeRate = feeRate.trim() !== recommendedFeeRate;
+  const canPrepare = assetId === 'doge' && feePolicy !== null && feePolicyState === 'loaded';
+  const customFeeRate = feePolicyState === 'loaded' && feeRate.trim() !== recommendedFeeRate;
 
   const errorMessage = useMemo(() => {
     switch (error) {
@@ -80,6 +115,7 @@ export function DogecoinTransferPanel({
       case 'wif-invalid': return copy.wifInvalid;
       case 'wif-mismatch': return copy.wifMismatch;
       case 'fee-rate-invalid': return copy.feeRateInvalid;
+      case 'fee-policy': return copy.feePolicyError;
       case 'unavailable': return copy.transferUnavailable;
       case 'utxo': return copy.utxoError;
       case 'insufficient-funds': return copy.insufficientFunds;
@@ -134,6 +170,10 @@ export function DogecoinTransferPanel({
 
     if (assetId !== 'doge' || !feePolicy) {
       setError('unavailable');
+      return;
+    }
+    if (feePolicyState !== 'loaded') {
+      setError('fee-policy');
       return;
     }
 
@@ -287,17 +327,19 @@ export function DogecoinTransferPanel({
                 value={feeRate}
                 onChange={(event) => updateFeeRate(event.target.value)}
                 inputMode="decimal"
-                placeholder={recommendedFeeRate}
+                placeholder={recommendedFeeRate || '—'}
                 autoComplete="off"
-                disabled={busy || !feePolicy}
+                disabled={busy || feePolicyState !== 'loaded'}
               />
               <strong>{feeUnit}</strong>
             </div>
-            {feePolicy && (
+            {feePolicyState === 'loading' && <small className="transfer-policy">{copy.feePolicyLoading}</small>}
+            {feePolicyState === 'loaded' && (
               <small className="transfer-policy">
                 {copy.recommendedFeeRate}: {recommendedFeeRate} {feeUnit}
               </small>
             )}
+            {feePolicyState === 'error' && <small className="form-error">{copy.feePolicyError}</small>}
           </label>
         </div>
 

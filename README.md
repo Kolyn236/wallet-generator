@@ -14,7 +14,7 @@ The primary application entry point is now the React/Symfony stack:
 ```text
 Browser
    |
-   |  wallet/session state + future local signer
+   |  wallet/session state + local DOGE signer
    v
 Nginx :8080
    |---- / ----------> React + TypeScript
@@ -24,14 +24,16 @@ Nginx :8080
                          +--> blockchain nodes/providers
 ```
 
-The frontend is already multi-asset and network-aware:
+The frontend is multi-asset and network-aware:
 
 - DOGE / Dogecoin mainnet;
 - BTC / Bitcoin mainnet;
 - ETH / Ethereum mainnet;
 - USDT with ERC-20 and TRC-20 routes.
 
-Selecting an asset changes the wallet workspace and transfer form. The transfer form currently creates a local preview only; signing and broadcast are intentionally not enabled until the client-side signing boundary and Dogecoin adapter are implemented.
+DOGE is the first live integration. The application can create a Dogecoin wallet locally in browser memory, attach an existing public address in watch-only mode, load confirmed balance/UTXOs, build and sign a legacy P2PKH transaction locally, review the resulting fee/change/TXID and explicitly broadcast the already-signed raw transaction through Symfony.
+
+BTC, ETH and USDT are present in the multi-wallet UI but their chain adapters are not connected yet.
 
 ## Quick start
 
@@ -87,7 +89,9 @@ seed/private key
       v
 browser memory only
       |
-      +--> address derivation / signing (next step)
+      +--> address derivation
+      |
+      +--> transaction build + signing
       |
       v
 signed raw transaction
@@ -105,8 +109,59 @@ Rules:
 - plaintext signing material is not persisted in localStorage, sessionStorage, IndexedDB, cookies, PostgreSQL or Redis;
 - the first wallet version keeps unlocked secrets in browser RAM only, so F5 or closing the tab clears the wallet session;
 - external providers receive public addresses/transaction data or already-signed raw transaction bytes only;
-- signing and broadcast remain explicit separate operations;
-- amounts use integer smallest units internally.
+- signing and broadcast are explicit separate operations;
+- amounts use integer smallest units internally;
+- the first DOGE transfer implementation spends only confirmed UTXOs and validates that every selected UTXO script belongs to the locally created source address before signing.
+
+## DOGE transfer flow
+
+Only a wallet created locally in the current browser session can sign. A wallet attached by public address is intentionally watch-only.
+
+```text
+Created DOGE wallet
+    |
+    v
+Recipient + amount
+    |
+    v
+Symfony: confirmed UTXO lookup
+    |
+    v
+Browser: validate UTXO scripts
+    |
+    v
+Browser: coin selection
+    |
+    v
+Browser: build P2PKH transaction
+    |
+    v
+Browser: sign every input
+    |
+    v
+Review amount / fee / change / local TXID
+    |
+    v
+Explicit Broadcast button
+    |
+    v
+Symfony: signed raw transaction only
+    |
+    v
+Blockchain provider
+```
+
+The initial recommended fee rate is `0.01 DOGE/kB`, calculated from the final signed byte size. Outputs below `0.01 DOGE` are avoided in this first implementation, matching the safety convention already used by the Python reference tool.
+
+## Backend API used by DOGE
+
+```text
+GET  /api/chains/dogecoin/mainnet/addresses/{address}/balance
+GET  /api/chains/dogecoin/mainnet/addresses/{address}/utxos
+POST /api/chains/dogecoin/mainnet/transactions/broadcast
+```
+
+The broadcast endpoint accepts only a signed raw transaction. It recomputes the local TXID and requires the provider response to return the same transaction identity.
 
 ## Frontend flow
 
@@ -125,10 +180,10 @@ Wallet workspace
 Transfer form
     |
     v
-Local preview
+Local sign/review when the selected chain supports it
     |
     v
-local signing + broadcast (next implementation step)
+Explicit broadcast
 ```
 
 For token assets the network is a first-class choice. For example USDT currently exposes both `ERC-20` and `TRC-20`, so the frontend is not built around the incorrect assumption that one asset always belongs to one blockchain.
@@ -156,7 +211,7 @@ Presentation -> Application -> Domain
                  Infrastructure--+
 ```
 
-Domain code must remain independent from Symfony, Doctrine, Redis, RabbitMQ, HTTP clients and provider SDKs. Cross-module code must not reach into another module's `Infrastructure` or `Presentation` layer.
+Domain code remains independent from Symfony, Doctrine, Redis, RabbitMQ, HTTP clients and provider SDKs. Cross-module code must not reach into another module's `Infrastructure` or `Presentation` layer.
 
 Architecture decisions:
 
@@ -218,13 +273,14 @@ The original detailed guide is preserved in `docs/PYTHON_WALLET_LAB.md`; the old
 
 1. Symfony modular boundaries and architecture tests;
 2. React multi-wallet / multi-network application shell;
-3. client-side temporary wallet + signing boundary (RAM only);
-4. Dogecoin gateway APIs and parity tests against Python;
-5. DOGE balance / build / sign locally / broadcast flow;
-6. optional cache/indexer infrastructure only when load requires it;
-7. Bitcoin adapter;
-8. EVM + token adapters;
-9. encrypted local browser vault;
-10. production hardening, observability and load testing.
+3. client-side DOGE wallet creation and signing boundary (RAM only);
+4. Dogecoin balance / UTXO / signed broadcast gateway APIs;
+5. DOGE local build / sign / review / broadcast flow;
+6. deterministic parity tests between the browser signer and Python reference vectors;
+7. optional cache/indexer infrastructure only when load requires it;
+8. Bitcoin adapter;
+9. EVM + token adapters;
+10. encrypted local browser vault;
+11. production hardening, observability and load testing.
 
 The existing Python runtime is removed only after feature parity is demonstrated.

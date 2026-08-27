@@ -5,5 +5,8 @@ services:
         autowire: true
         autoconfigure: true
 
-    App\\:
+    App\:
         resource: '../src/'
+
+    App\Blockchain\Application\DogecoinBalanceProvider:
+        alias: App\Blockchain\Infrastructure\BlockCypherDogecoinBalanceProvider

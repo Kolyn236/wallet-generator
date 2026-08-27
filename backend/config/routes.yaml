@@ -1,3 +1,7 @@
-http_controllers:
+platform_controllers:
     resource: ../src/Presentation/Http/
+    type: attribute
+
+blockchain_controllers:
+    resource: ../src/Blockchain/Presentation/Http/
     type: attribute

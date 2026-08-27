@@ -313,13 +313,17 @@ export function App() {
                       {addressError === 'balance' && <p className="form-error">{copy.balanceError}</p>}
                       <div className="connect-form-footer">
                         <small>{copy.publicOnly}</small>
-                        <button type="button" className="text-button" onClick={() => { setShowExistingForm(false); setAddressError(null); }}>{copy.cancel}</button>
+                        <div className="connect-form-footer-actions">
+                          <button type="button" className="primary-button" onClick={createWallet}>{copy.createWallet}</button>
+                          <button type="button" className="text-button" onClick={() => { setShowExistingForm(false); setAddressError(null); }}>{copy.cancel}</button>
+                        </div>
                       </div>
                     </form>
                   )}
 
                   {connectedDoge && !showExistingForm && (
                     <div className="wallet-actions connected-wallet-actions">
+                      <button type="button" className="primary-button" onClick={createWallet}>{copy.createWallet}</button>
                       <button type="button" className="primary-button" onClick={() => void refreshDogecoinBalance(dogeAddress)} disabled={balanceState === 'loading'}>
                         {balanceState === 'loading' ? copy.loadingBalance : copy.refreshBalance}
                       </button>

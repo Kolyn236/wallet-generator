@@ -19,11 +19,6 @@ export type CreatedDogecoinWallet = {
   derivationPath: string;
 };
 
-export type DogecoinWifKey = {
-  privateKey: Uint8Array;
-  compressed: boolean;
-};
-
 export function createDogecoinWallet(): CreatedDogecoinWallet {
   const mnemonic = generateMnemonic(wordlist, 128);
   const seed = mnemonicToSeedSync(mnemonic);
@@ -58,35 +53,6 @@ export function createDogecoinWallet(): CreatedDogecoinWallet {
     account.wipePrivateData();
     root.wipePrivateData();
   }
-}
-
-export function decodeDogecoinWif(wif: string): DogecoinWifKey {
-  let decoded: Uint8Array;
-  try {
-    decoded = base58check.decode(wif.trim());
-  } catch {
-    throw new Error('invalid_wif');
-  }
-
-  if (decoded[0] !== DOGECOIN_WIF_VERSION) {
-    throw new Error('invalid_wif');
-  }
-
-  if (decoded.length === 33) {
-    return {
-      privateKey: decoded.slice(1, 33),
-      compressed: false,
-    };
-  }
-
-  if (decoded.length === 34 && decoded[33] === COMPRESSED_PUBLIC_KEY_FLAG) {
-    return {
-      privateKey: decoded.slice(1, 33),
-      compressed: true,
-    };
-  }
-
-  throw new Error('invalid_wif');
 }
 
 export function isDogecoinMainnetAddress(address: string): boolean {

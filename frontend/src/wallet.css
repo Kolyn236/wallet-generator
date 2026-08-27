@@ -169,6 +169,81 @@
   color: #676258;
 }
 
+.transfer-form input:disabled {
+  opacity: .7;
+}
+
+.transfer-policy {
+  display: block;
+  margin-top: 15px;
+  color: #8b8579;
+  line-height: 1.45;
+}
+
+.transfer-notice {
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid #e4dfd4;
+  border-radius: 11px;
+  background: #f5f2eb;
+  color: #766f63;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.preview-txid {
+  grid-column: 1 / -1;
+}
+
+.preview-txid dd {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.broadcast-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #ddd8cd;
+}
+
+.broadcast-button {
+  flex: none;
+  min-height: 44px;
+  border: 0;
+  border-radius: 11px;
+  padding: 0 16px;
+  background: #171713;
+  color: #fff;
+  font-weight: 800;
+}
+
+.broadcast-button:disabled {
+  opacity: .58;
+}
+
+.broadcast-success {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: #356944;
+  font-size: 12px;
+}
+
+.broadcast-success span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #5e695f;
+}
+
+.broadcast-success code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 @media (max-width: 820px) {
   .backup-card-header {
     flex-direction: column;
@@ -192,12 +267,17 @@
     width: 100%;
   }
 
-  .connect-form-footer {
+  .connect-form-footer,
+  .broadcast-actions {
     align-items: flex-start;
     flex-direction: column;
   }
 
   .connect-form-footer-actions {
+    width: 100%;
+  }
+
+  .broadcast-button {
     width: 100%;
   }
 }

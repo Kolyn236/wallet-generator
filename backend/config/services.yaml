@@ -10,3 +10,9 @@ services:
 
     App\Blockchain\Application\DogecoinBalanceProvider:
         alias: App\Blockchain\Infrastructure\BlockCypherDogecoinBalanceProvider
+
+    App\Blockchain\Application\DogecoinUtxoProvider:
+        alias: App\Blockchain\Infrastructure\BlockCypherDogecoinUtxoProvider
+
+    App\Blockchain\Application\DogecoinTransactionBroadcaster:
+        alias: App\Blockchain\Infrastructure\BlockCypherDogecoinTransactionBroadcaster

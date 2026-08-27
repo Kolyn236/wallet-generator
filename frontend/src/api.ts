@@ -1,3 +1,5 @@
+import type { DogecoinUtxo } from './wallet/dogecoinTransaction';
+
 export type DogecoinBalanceResponse = {
   chain: 'dogecoin';
   network: 'mainnet';
@@ -5,6 +7,19 @@ export type DogecoinBalanceResponse = {
   balance: string;
   balanceSmallestUnit: number;
   unit: 'DOGE';
+};
+
+export type DogecoinUtxoResponse = {
+  chain: 'dogecoin';
+  network: 'mainnet';
+  address: string;
+  utxos: DogecoinUtxo[];
+};
+
+export type DogecoinBroadcastResponse = {
+  chain: 'dogecoin';
+  network: 'mainnet';
+  txid: string;
 };
 
 type ApiErrorResponse = {
@@ -50,27 +65,70 @@ export async function getDogecoinBalance(address: string, signal?: AbortSignal):
   });
 
   if (!response.ok) {
-    let details: ApiErrorResponse = {};
-
-    try {
-      details = (await response.json()) as ApiErrorResponse;
-    } catch {
-      // The HTTP status is still enough to classify the failure safely.
-    }
-
-    console.error('[wallet-platform] DOGE balance lookup failed', {
-      status: response.status,
-      error: details.error ?? null,
-      reason: details.reason ?? null,
-    });
-
-    throw new WalletApiError(
-      `Balance request failed with HTTP ${response.status}.`,
-      response.status,
-      details.error,
-      details.reason,
-    );
+    throw await apiError(response, 'DOGE balance lookup');
   }
 
   return (await response.json()) as DogecoinBalanceResponse;
+}
+
+export async function getDogecoinUtxos(address: string, signal?: AbortSignal): Promise<DogecoinUtxoResponse> {
+  const response = await fetch(`/api/chains/dogecoin/mainnet/addresses/${encodeURIComponent(address)}/utxos`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await apiError(response, 'DOGE UTXO lookup');
+  }
+
+  return (await response.json()) as DogecoinUtxoResponse;
+}
+
+export async function broadcastDogecoinTransaction(
+  rawTransaction: string,
+  signal?: AbortSignal,
+): Promise<DogecoinBroadcastResponse> {
+  const response = await fetch('/api/chains/dogecoin/mainnet/transactions/broadcast', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ rawTransaction }),
+    cache: 'no-store',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await apiError(response, 'DOGE transaction broadcast');
+  }
+
+  return (await response.json()) as DogecoinBroadcastResponse;
+}
+
+async function apiError(response: Response, operation: string): Promise<WalletApiError> {
+  let details: ApiErrorResponse = {};
+
+  try {
+    details = (await response.json()) as ApiErrorResponse;
+  } catch {
+    // The HTTP status is still enough to classify the failure safely.
+  }
+
+  console.error(`[wallet-platform] ${operation} failed`, {
+    status: response.status,
+    error: details.error ?? null,
+    reason: details.reason ?? null,
+  });
+
+  return new WalletApiError(
+    `${operation} failed with HTTP ${response.status}.`,
+    response.status,
+    details.error,
+    details.reason,
+  );
 }

@@ -4,7 +4,7 @@ import {
   getDogecoinUtxos,
   WalletApiError,
 } from './api';
-import { type AssetId } from './assets';
+import { getAsset, type AssetId } from './assets';
 import { type Language, messages } from './i18n';
 import { isDogecoinMainnetAddress, type CreatedDogecoinWallet } from './wallet/dogecoin';
 import {
@@ -21,6 +21,7 @@ type TransferError =
   | 'wif-required'
   | 'wif-invalid'
   | 'wif-mismatch'
+  | 'fee-rate-invalid'
   | 'unavailable'
   | 'utxo'
   | 'insufficient-funds'
@@ -51,17 +52,24 @@ export function DogecoinTransferPanel({
   createdWallet,
 }: Props) {
   const copy = messages[language];
+  const network = getAsset(assetId).networks.find((candidate) => candidate.standard === networkStandard);
+  const feePolicy = network?.feePolicy?.kind === 'utxo-rate-per-kb' ? network.feePolicy : null;
+  const recommendedFeeRate = feePolicy?.recommendedRate ?? '';
+  const feeUnit = feePolicy?.unit ?? '';
+
   const [sender, setSender] = useState(sourceAddress);
   const [wif, setWif] = useState(createdWallet?.wif ?? '');
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
+  const [feeRate, setFeeRate] = useState(recommendedFeeRate);
   const [state, setState] = useState<TransferState>('idle');
   const [error, setError] = useState<TransferError | null>(null);
   const [signedTransfer, setSignedTransfer] = useState<SignedDogecoinTransfer | null>(null);
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null);
 
   const busy = state === 'preparing' || state === 'broadcasting';
-  const canPrepare = assetId === 'doge';
+  const canPrepare = assetId === 'doge' && feePolicy !== null;
+  const customFeeRate = feeRate.trim() !== recommendedFeeRate;
 
   const errorMessage = useMemo(() => {
     switch (error) {
@@ -71,6 +79,7 @@ export function DogecoinTransferPanel({
       case 'wif-required': return copy.wifRequired;
       case 'wif-invalid': return copy.wifInvalid;
       case 'wif-mismatch': return copy.wifMismatch;
+      case 'fee-rate-invalid': return copy.feeRateInvalid;
       case 'unavailable': return copy.transferUnavailable;
       case 'utxo': return copy.utxoError;
       case 'insufficient-funds': return copy.insufficientFunds;
@@ -109,11 +118,21 @@ export function DogecoinTransferPanel({
     resetResult();
   }
 
+  function updateFeeRate(value: string) {
+    setFeeRate(value);
+    resetResult();
+  }
+
+  function useRecommendedFeeRate() {
+    setFeeRate(recommendedFeeRate);
+    resetResult();
+  }
+
   async function prepareTransfer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     resetResult();
 
-    if (assetId !== 'doge') {
+    if (assetId !== 'doge' || !feePolicy) {
       setError('unavailable');
       return;
     }
@@ -121,6 +140,7 @@ export function DogecoinTransferPanel({
     const source = sender.trim();
     const destination = recipient.trim();
     const signingWif = wif.trim();
+    const selectedFeeRate = feeRate.trim();
 
     if (!source || !destination || !amount.trim()) {
       setError('form');
@@ -128,6 +148,10 @@ export function DogecoinTransferPanel({
     }
     if (!signingWif) {
       setError('wif-required');
+      return;
+    }
+    if (!selectedFeeRate) {
+      setError('fee-rate-invalid');
       return;
     }
     if (!isDogecoinMainnetAddress(source)) {
@@ -148,6 +172,7 @@ export function DogecoinTransferPanel({
         sourceAddress: source,
         recipientAddress: destination,
         amount,
+        feeRateDogePerKb: selectedFeeRate,
         utxos: response.utxos,
       });
       setSignedTransfer(built);
@@ -162,6 +187,7 @@ export function DogecoinTransferPanel({
       if (caught instanceof Error) {
         if (caught.message === 'invalid_wif') setError('wif-invalid');
         else if (caught.message === 'wallet_key_mismatch') setError('wif-mismatch');
+        else if (caught.message === 'invalid_fee_rate') setError('fee-rate-invalid');
         else if (caught.message === 'invalid_address') setError('sender-invalid');
         else if (caught.message === 'invalid_amount') setError('form');
         else if (caught.message === 'amount_below_dust') setError('amount-below-dust');
@@ -255,11 +281,34 @@ export function DogecoinTransferPanel({
             </div>
           </label>
           <label>
-            <span>{copy.fee}</span>
-            <div className="readonly-field">{signedTransfer ? `${signedTransfer.feeDoge} DOGE` : copy.automatic}</div>
+            <span>{copy.feeRate}</span>
+            <div className="amount-field">
+              <input
+                value={feeRate}
+                onChange={(event) => updateFeeRate(event.target.value)}
+                inputMode="decimal"
+                placeholder={recommendedFeeRate}
+                autoComplete="off"
+                disabled={busy || !feePolicy}
+              />
+              <strong>{feeUnit}</strong>
+            </div>
+            {feePolicy && (
+              <small className="transfer-policy">
+                {copy.recommendedFeeRate}: {recommendedFeeRate} {feeUnit}
+              </small>
+            )}
+            {customFeeRate && (
+              <button className="text-button" type="button" onClick={useRecommendedFeeRate} disabled={busy}>
+                {copy.useRecommendedFeeRate}
+              </button>
+            )}
           </label>
         </div>
 
+        {customFeeRate && (
+          <p className="transfer-notice">{copy.customFeeWarning}</p>
+        )}
         {assetId === 'doge' && walletMode === 'watch-only' && (
           <p className="transfer-notice">{copy.transferWatchOnly}</p>
         )}
@@ -284,6 +333,7 @@ export function DogecoinTransferPanel({
             <div><dt>{copy.from}</dt><dd>{sender.trim()}</dd></div>
             <div><dt>{copy.recipient}</dt><dd>{recipient.trim()}</dd></div>
             <div><dt>{copy.amount}</dt><dd>{signedTransfer.amountDoge} DOGE</dd></div>
+            <div><dt>{copy.feeRate}</dt><dd>{signedTransfer.feeRateDogePerKb} {feeUnit}</dd></div>
             <div><dt>{copy.fee}</dt><dd>{signedTransfer.feeDoge} DOGE</dd></div>
             <div><dt>{copy.change}</dt><dd>{signedTransfer.changeDoge} DOGE</dd></div>
             <div><dt>{copy.inputCount}</dt><dd>{signedTransfer.inputCount}</dd></div>

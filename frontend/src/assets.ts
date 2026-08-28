@@ -38,6 +38,22 @@ export type AssetRouteDefinition = {
 
 export type AssetAvailability = 'ready-next' | 'planned';
 
+export type UtxoRatePerKbFeePolicy = {
+  kind: 'utxo-rate-per-kb';
+  unit: string;
+};
+
+type AssetRouteNetworkView = {
+  id: NetworkId;
+  name: string;
+  standard: string;
+  feePolicy: UtxoRatePerKbFeePolicy | null;
+};
+
+type AssetViewDefinition = AssetDefinition & {
+  networks: AssetRouteNetworkView[];
+};
+
 export const chains: ChainDefinition[] = [
   { id: 'dogecoin', name: 'Dogecoin', family: 'utxo' },
   { id: 'bitcoin', name: 'Bitcoin', family: 'utxo' },
@@ -104,7 +120,18 @@ const assetAvailability: Record<AssetId, AssetAvailability> = {
   usdt: 'planned',
 };
 
-export function getAsset(assetId: AssetId): AssetDefinition {
+const utxoFeePolicies: Partial<Record<NetworkId, UtxoRatePerKbFeePolicy>> = {
+  'dogecoin-mainnet': {
+    kind: 'utxo-rate-per-kb',
+    unit: 'DOGE/kB',
+  },
+  'bitcoin-mainnet': {
+    kind: 'utxo-rate-per-kb',
+    unit: 'BTC/kB',
+  },
+};
+
+function findAsset(assetId: AssetId): AssetDefinition {
   const asset = assets.find((candidate) => candidate.id === assetId);
 
   if (!asset) {
@@ -150,4 +177,22 @@ export function getDefaultAssetRoute(assetId: AssetId): AssetRouteDefinition {
 
 export function getAssetAvailability(assetId: AssetId): AssetAvailability {
   return assetAvailability[assetId];
+}
+
+export function getAsset(assetId: AssetId): AssetViewDefinition {
+  const asset = findAsset(assetId);
+
+  return {
+    ...asset,
+    networks: getAssetRoutes(assetId).map((route) => {
+      const network = getNetwork(route.networkId);
+
+      return {
+        id: network.id,
+        name: network.name,
+        standard: route.standard,
+        feePolicy: utxoFeePolicies[network.id] ?? null,
+      };
+    }),
+  };
 }

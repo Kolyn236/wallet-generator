@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   assets,
   getAsset,
@@ -9,24 +9,24 @@ import {
   getNetwork,
   type AssetId,
   type AssetRouteId,
+  type NetworkId,
 } from './assets';
-import { getBitcoinBalance, getDogecoinBalance, getHealth } from './api';
-import { BitcoinTransferPanel } from './BitcoinTransferPanel';
-import { DogecoinTransferPanel } from './DogecoinTransferPanel';
+import { getHealth } from './api';
 import { type Language, messages } from './i18n';
-import { createBitcoinWallet, isBitcoinMainnetAddress, type CreatedBitcoinWallet } from './wallet/bitcoin';
-import { createDogecoinWallet, isDogecoinMainnetAddress, type CreatedDogecoinWallet } from './wallet/dogecoin';
+import { adapterRegistry } from './runtime/adapterRegistry';
+import type { BrowserCreatedWallet } from './runtime/WalletNetworkAdapter';
+import {
+  createWalletSessions,
+  getWalletSession,
+  withWalletSession,
+  type WalletSessions,
+} from './runtime/walletSessions';
 
 type HealthState = 'checking' | 'online' | 'offline';
 type BalanceState = 'idle' | 'loading' | 'loaded' | 'error';
-type WalletMode = 'none' | 'created' | 'watch-only';
 type CopyState = 'none' | 'seed' | 'wif';
-type SupportedAssetId = 'doge' | 'btc';
-type CreatedWallet = CreatedDogecoinWallet | CreatedBitcoinWallet;
-type WalletSession = { address: string; balance: string | null; mode: WalletMode };
 
 const LANGUAGE_KEY = 'wallet-platform-language';
-const EMPTY_SESSION: WalletSession = { address: '', balance: null, mode: 'none' };
 
 function initialLanguage(): Language {
   const stored = localStorage.getItem(LANGUAGE_KEY);
@@ -34,41 +34,31 @@ function initialLanguage(): Language {
   return navigator.language.toLowerCase().startsWith('ru') ? 'ru' : 'en';
 }
 
-function isSupportedAssetId(assetId: AssetId): assetId is SupportedAssetId {
-  return assetId === 'doge' || assetId === 'btc';
-}
-
-function validAddress(assetId: SupportedAssetId, address: string): boolean {
-  return assetId === 'doge' ? isDogecoinMainnetAddress(address) : isBitcoinMainnetAddress(address);
-}
-
 export function App() {
   const [language, setLanguage] = useState<Language>(initialLanguage);
   const [health, setHealth] = useState<HealthState>('checking');
   const [assetId, setAssetId] = useState<AssetId>('doge');
   const [routeId, setRouteId] = useState<AssetRouteId>('doge-dogecoin-mainnet-native');
-  const [sessions, setSessions] = useState<Record<SupportedAssetId, WalletSession>>({
-    doge: { ...EMPTY_SESSION },
-    btc: { ...EMPTY_SESSION },
-  });
+  const [sessions, setSessions] = useState<WalletSessions>(createWalletSessions);
   const [existingAddress, setExistingAddress] = useState('');
   const [balanceState, setBalanceState] = useState<BalanceState>('idle');
   const [showExistingForm, setShowExistingForm] = useState(false);
   const [addressError, setAddressError] = useState<'invalid' | 'balance' | null>(null);
   const [showBackupSecrets, setShowBackupSecrets] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('none');
-  const createdWalletRefs = useRef<Partial<Record<SupportedAssetId, CreatedWallet>>>({});
+  const createdWalletRefs = useRef<Partial<Record<NetworkId, BrowserCreatedWallet>>>({});
 
   const copy = messages[language];
   const asset = getAsset(assetId);
   const route = getAssetRoute(routeId);
   const routes = getAssetRoutes(assetId);
   const network = getNetwork(route.networkId);
-  const supportedAssetId = isSupportedAssetId(assetId) ? assetId : null;
-  const session = supportedAssetId ? sessions[supportedAssetId] : null;
-  const connected = session !== null && session.mode !== 'none' && session.address !== '';
-  const createdWallet = supportedAssetId && session?.mode === 'created'
-    ? createdWalletRefs.current[supportedAssetId] ?? null
+  const walletAdapter = adapterRegistry.resolveWalletNetwork(route.networkId);
+  const routeAdapter = adapterRegistry.resolveAssetRoute(route.id);
+  const session = getWalletSession(sessions, route.networkId);
+  const connected = walletAdapter !== null && session.mode !== 'none' && session.address !== '';
+  const createdWallet = walletAdapter !== null && session.mode === 'created'
+    ? createdWalletRefs.current[route.networkId] ?? null
     : null;
 
   useEffect(() => {
@@ -104,18 +94,24 @@ export function App() {
     setBalanceState('idle');
   }
 
-  async function refreshBalance(id: SupportedAssetId, address: string): Promise<boolean> {
+  async function refreshBalance(networkId: NetworkId, address: string): Promise<boolean> {
+    const adapter = adapterRegistry.resolveWalletNetwork(networkId);
+    if (!adapter) {
+      setBalanceState('error');
+      setAddressError('balance');
+      return false;
+    }
+
     setBalanceState('loading');
     setAddressError(null);
 
     try {
-      const result = id === 'doge'
-        ? await getDogecoinBalance(address)
-        : await getBitcoinBalance(address);
+      const result = await adapter.loadBalance(address);
 
-      setSessions((current) => ({
-        ...current,
-        [id]: { ...current[id], address: result.address, balance: result.balance },
+      setSessions((current) => withWalletSession(current, networkId, {
+        ...getWalletSession(current, networkId),
+        address: result.address,
+        balance: result.balance,
       }));
       setBalanceState('loaded');
       return true;
@@ -127,13 +123,15 @@ export function App() {
   }
 
   function createWallet() {
-    if (!supportedAssetId) return;
+    if (!walletAdapter) return;
 
-    const wallet: CreatedWallet = supportedAssetId === 'doge' ? createDogecoinWallet() : createBitcoinWallet();
-    createdWalletRefs.current[supportedAssetId] = wallet;
-    setSessions((current) => ({
-      ...current,
-      [supportedAssetId]: { address: wallet.address, balance: '0.00000000', mode: 'created' },
+    const wallet = walletAdapter.createWallet();
+    const networkId = walletAdapter.networkId;
+    createdWalletRefs.current[networkId] = wallet;
+    setSessions((current) => withWalletSession(current, networkId, {
+      address: wallet.address,
+      balance: '0.00000000',
+      mode: 'created',
     }));
     setExistingAddress('');
     setShowExistingForm(false);
@@ -141,26 +139,27 @@ export function App() {
     setCopyState('none');
     setAddressError(null);
     setBalanceState('loaded');
-    void refreshBalance(supportedAssetId, wallet.address);
+    void refreshBalance(networkId, wallet.address);
   }
 
   async function specifyExistingWallet(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!supportedAssetId) return;
+    if (!walletAdapter) return;
 
     const address = existingAddress.trim();
-    if (!validAddress(supportedAssetId, address)) {
+    if (!walletAdapter.validatePublicAddress(address)) {
       setAddressError('invalid');
       return;
     }
 
-    const loaded = await refreshBalance(supportedAssetId, address);
+    const loaded = await refreshBalance(walletAdapter.networkId, address);
     if (!loaded) return;
 
-    delete createdWalletRefs.current[supportedAssetId];
-    setSessions((current) => ({
-      ...current,
-      [supportedAssetId]: { ...current[supportedAssetId], address, mode: 'watch-only' },
+    delete createdWalletRefs.current[walletAdapter.networkId];
+    setSessions((current) => withWalletSession(current, walletAdapter.networkId, {
+      ...getWalletSession(current, walletAdapter.networkId),
+      address,
+      mode: 'watch-only',
     }));
     setShowExistingForm(false);
     setShowBackupSecrets(false);
@@ -179,11 +178,32 @@ export function App() {
     }
   }
 
-  const modeLabel = session?.mode === 'created'
+  const modeLabel = session.mode === 'created'
     ? copy.createdLocally
-    : session?.mode === 'watch-only'
+    : session.mode === 'watch-only'
       ? copy.watchOnly
       : copy.noWallet;
+
+  const unavailableTransferPanel = (
+    <section className="transfer-card" id="transfer">
+      <div className="transfer-copy">
+        <span className="muted-label">{asset.symbol} · {route.standard}</span>
+        <h2>{copy.transferTitle}</h2>
+        <p>{copy.transferText}</p>
+        <p className="transfer-notice">{copy.transferUnavailable}</p>
+      </div>
+    </section>
+  );
+
+  const loadingTransferPanel = (
+    <section className="transfer-card" id="transfer">
+      <div className="transfer-copy">
+        <span className="muted-label">{asset.symbol} · {route.standard}</span>
+        <h2>{copy.transferTitle}</h2>
+        <p>{copy.checking}</p>
+      </div>
+    </section>
+  );
 
   return (
     <div className="app-shell">
@@ -206,15 +226,18 @@ export function App() {
           <div className="section-title-row"><div><span className="muted-label">{copy.myWallets}</span><p>{copy.walletTilesHint}</p></div></div>
           <div className="wallet-tiles">
             {assets.map((candidate) => {
-              const candidateSession = isSupportedAssetId(candidate.id) ? sessions[candidate.id] : null;
-              const candidateConnected = candidateSession !== null && candidateSession.mode !== 'none' && candidateSession.address !== '';
               const candidateRoute = getDefaultAssetRoute(candidate.id);
+              const candidateWalletAdapter = adapterRegistry.resolveWalletNetwork(candidateRoute.networkId);
+              const candidateSession = getWalletSession(sessions, candidateRoute.networkId);
+              const candidateConnected = candidateWalletAdapter !== null
+                && candidateSession.mode !== 'none'
+                && candidateSession.address !== '';
               const candidateAvailability = getAssetAvailability(candidate.id);
               return (
                 <button key={candidate.id} type="button" className={`wallet-tile ${candidate.id === assetId ? 'active' : ''}`} onClick={() => selectAsset(candidate.id)}>
                   <div className="wallet-tile-top"><span className="asset-mark">{candidate.mark}</span><span className={`asset-status status-${candidateAvailability}`}>{candidateAvailability === 'ready-next' ? copy.firstIntegration : copy.planned}</span></div>
                   <div><strong>{candidate.symbol}</strong><small>{candidateRoute.standard}</small></div>
-                  <div className="tile-balance">{candidateConnected && candidateSession?.balance !== null ? <strong>{candidateSession.balance} {candidate.symbol}</strong> : <span>{copy.noAddress}</span>}</div>
+                  <div className="tile-balance">{candidateConnected && candidateSession.balance !== null ? <strong>{candidateSession.balance} {candidate.symbol}</strong> : <span>{copy.noAddress}</span>}</div>
                 </button>
               );
             })}
@@ -241,15 +264,15 @@ export function App() {
             <section className="wallet-card">
               <div className="wallet-card-top">
                 <div className="selected-asset"><span className="selected-mark">{asset.mark}</span><div><span className="muted-label">{copy.selectedWallet}</span><h2>{asset.name} <span>{asset.symbol}</span></h2></div></div>
-                <span className="session-badge">{supportedAssetId ? modeLabel : copy.planned}</span>
+                <span className="session-badge">{walletAdapter ? modeLabel : copy.planned}</span>
               </div>
 
               <div className="wallet-balance-row">
-                <div><span className="muted-label">{copy.walletBalance}</span><strong>{supportedAssetId && session?.balance !== null ? `${session?.balance ?? '0.00000000'} ${asset.symbol}` : `— ${asset.symbol}`}</strong></div>
-                <div className="wallet-empty-copy"><p>{supportedAssetId && session?.address ? session.address : copy.walletEmpty}</p><small>{copy.walletHint}</small></div>
+                <div><span className="muted-label">{copy.walletBalance}</span><strong>{walletAdapter && session.balance !== null ? `${session.balance} ${asset.symbol}` : `— ${asset.symbol}`}</strong></div>
+                <div className="wallet-empty-copy"><p>{walletAdapter && session.address ? session.address : copy.walletEmpty}</p><small>{copy.walletHint}</small></div>
               </div>
 
-              {supportedAssetId ? (
+              {walletAdapter ? (
                 <>
                   {!connected && !showExistingForm && (
                     <div className="wallet-actions wallet-choice-actions">
@@ -277,8 +300,8 @@ export function App() {
                   {connected && !showExistingForm && (
                     <div className="wallet-actions connected-wallet-actions">
                       <button type="button" className="primary-button" onClick={createWallet}>{copy.createWallet}</button>
-                      <button type="button" className="primary-button" onClick={() => session?.address && void refreshBalance(supportedAssetId, session.address)} disabled={balanceState === 'loading'}>{balanceState === 'loading' ? copy.loadingBalance : copy.refreshBalance}</button>
-                      <button type="button" className="secondary-button" onClick={() => { setExistingAddress(session?.address ?? ''); setShowExistingForm(true); setAddressError(null); }}>{copy.specifyExisting}</button>
+                      <button type="button" className="primary-button" onClick={() => session.address && void refreshBalance(route.networkId, session.address)} disabled={balanceState === 'loading'}>{balanceState === 'loading' ? copy.loadingBalance : copy.refreshBalance}</button>
+                      <button type="button" className="secondary-button" onClick={() => { setExistingAddress(session.address); setShowExistingForm(true); setAddressError(null); }}>{copy.specifyExisting}</button>
                       {addressError === 'balance' && <span className="inline-error">{copy.balanceError}</span>}
                     </div>
                   )}
@@ -314,11 +337,20 @@ export function App() {
           </section>
         )}
 
-        {assetId === 'btc' ? (
-          <BitcoinTransferPanel key={`${assetId}:${route.id}:${sessions.btc.address}:${sessions.btc.mode}`} language={language} networkName={network.name} networkStandard={route.standard} sourceAddress={sessions.btc.address} walletMode={sessions.btc.mode} createdWallet={sessions.btc.mode === 'created' ? (createdWalletRefs.current.btc as CreatedBitcoinWallet | undefined) ?? null : null} />
-        ) : (
-          <DogecoinTransferPanel key={`${assetId}:${route.id}:${sessions.doge.address}:${sessions.doge.mode}`} language={language} assetId={assetId} assetSymbol={asset.symbol} networkName={network.name} networkStandard={route.standard} sourceAddress={assetId === 'doge' ? sessions.doge.address : ''} walletMode={assetId === 'doge' ? sessions.doge.mode : 'none'} createdWallet={assetId === 'doge' && sessions.doge.mode === 'created' ? (createdWalletRefs.current.doge as CreatedDogecoinWallet | undefined) ?? null : null} />
-        )}
+        {routeAdapter ? (
+          <Suspense key={`${route.id}:${session.address}:${session.mode}`} fallback={loadingTransferPanel}>
+            {routeAdapter.renderTransferPanel({
+              language,
+              assetId: route.assetId,
+              assetSymbol: asset.symbol,
+              networkName: network.name,
+              networkStandard: route.standard,
+              sourceAddress: session.address,
+              walletMode: session.mode,
+              createdWallet,
+            })}
+          </Suspense>
+        ) : unavailableTransferPanel}
 
         <section className="security-card" id="security"><div className="security-icon">✓</div><div><h2>{copy.securityTitle}</h2><p>{copy.securityText}</p><small>{copy.noStorage}</small></div></section>
       </main>

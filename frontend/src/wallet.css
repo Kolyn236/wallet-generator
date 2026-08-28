@@ -164,6 +164,10 @@
   font-weight: 700;
 }
 
+.form-row {
+  align-items: start;
+}
+
 .transfer-form input[readonly] {
   background: #f4f2ec;
   color: #676258;

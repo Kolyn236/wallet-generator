@@ -1,5 +1,15 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { assets, getAsset, type AssetId } from './assets';
+import {
+  assets,
+  getAsset,
+  getAssetAvailability,
+  getAssetRoute,
+  getAssetRoutes,
+  getDefaultAssetRoute,
+  getNetwork,
+  type AssetId,
+  type AssetRouteId,
+} from './assets';
 import { getBitcoinBalance, getDogecoinBalance, getHealth } from './api';
 import { BitcoinTransferPanel } from './BitcoinTransferPanel';
 import { DogecoinTransferPanel } from './DogecoinTransferPanel';
@@ -36,7 +46,7 @@ export function App() {
   const [language, setLanguage] = useState<Language>(initialLanguage);
   const [health, setHealth] = useState<HealthState>('checking');
   const [assetId, setAssetId] = useState<AssetId>('doge');
-  const [networkId, setNetworkId] = useState('dogecoin-mainnet');
+  const [routeId, setRouteId] = useState<AssetRouteId>('doge-dogecoin-mainnet-native');
   const [sessions, setSessions] = useState<Record<SupportedAssetId, WalletSession>>({
     doge: { ...EMPTY_SESSION },
     btc: { ...EMPTY_SESSION },
@@ -51,7 +61,9 @@ export function App() {
 
   const copy = messages[language];
   const asset = getAsset(assetId);
-  const network = asset.networks.find((candidate) => candidate.id === networkId) ?? asset.networks[0];
+  const route = getAssetRoute(routeId);
+  const routes = getAssetRoutes(assetId);
+  const network = getNetwork(route.networkId);
   const supportedAssetId = isSupportedAssetId(assetId) ? assetId : null;
   const session = supportedAssetId ? sessions[supportedAssetId] : null;
   const connected = session !== null && session.mode !== 'none' && session.address !== '';
@@ -82,9 +94,8 @@ export function App() {
   }, [copy, health]);
 
   function selectAsset(nextAssetId: AssetId) {
-    const nextAsset = getAsset(nextAssetId);
     setAssetId(nextAssetId);
-    setNetworkId(nextAsset.networks[0].id);
+    setRouteId(getDefaultAssetRoute(nextAssetId).id);
     setExistingAddress('');
     setShowExistingForm(false);
     setShowBackupSecrets(false);
@@ -197,10 +208,12 @@ export function App() {
             {assets.map((candidate) => {
               const candidateSession = isSupportedAssetId(candidate.id) ? sessions[candidate.id] : null;
               const candidateConnected = candidateSession !== null && candidateSession.mode !== 'none' && candidateSession.address !== '';
+              const candidateRoute = getDefaultAssetRoute(candidate.id);
+              const candidateAvailability = getAssetAvailability(candidate.id);
               return (
                 <button key={candidate.id} type="button" className={`wallet-tile ${candidate.id === assetId ? 'active' : ''}`} onClick={() => selectAsset(candidate.id)}>
-                  <div className="wallet-tile-top"><span className="asset-mark">{candidate.mark}</span><span className={`asset-status status-${candidate.status}`}>{candidate.status === 'ready-next' ? copy.firstIntegration : copy.planned}</span></div>
-                  <div><strong>{candidate.symbol}</strong><small>{candidate.networks[0].standard}</small></div>
+                  <div className="wallet-tile-top"><span className="asset-mark">{candidate.mark}</span><span className={`asset-status status-${candidateAvailability}`}>{candidateAvailability === 'ready-next' ? copy.firstIntegration : copy.planned}</span></div>
+                  <div><strong>{candidate.symbol}</strong><small>{candidateRoute.standard}</small></div>
                   <div className="tile-balance">{candidateConnected && candidateSession?.balance !== null ? <strong>{candidateSession.balance} {candidate.symbol}</strong> : <span>{copy.noAddress}</span>}</div>
                 </button>
               );
@@ -212,12 +225,15 @@ export function App() {
           <aside className="asset-panel">
             <div className="section-heading"><span>{copy.selectAsset}</span><strong>{assets.length}</strong></div>
             <div className="asset-list">
-              {assets.map((candidate) => (
-                <button key={candidate.id} type="button" className={`asset-item ${candidate.id === assetId ? 'active' : ''}`} onClick={() => selectAsset(candidate.id)}>
-                  <span className="asset-mark">{candidate.mark}</span><span className="asset-copy"><strong>{candidate.symbol}</strong><small>{candidate.name}</small></span>
-                  <span className={`asset-status status-${candidate.status}`}>{candidate.status === 'ready-next' ? copy.firstIntegration : copy.planned}</span>
-                </button>
-              ))}
+              {assets.map((candidate) => {
+                const candidateAvailability = getAssetAvailability(candidate.id);
+                return (
+                  <button key={candidate.id} type="button" className={`asset-item ${candidate.id === assetId ? 'active' : ''}`} onClick={() => selectAsset(candidate.id)}>
+                    <span className="asset-mark">{candidate.mark}</span><span className="asset-copy"><strong>{candidate.symbol}</strong><small>{candidate.name}</small></span>
+                    <span className={`asset-status status-${candidateAvailability}`}>{candidateAvailability === 'ready-next' ? copy.firstIntegration : copy.planned}</span>
+                  </button>
+                );
+              })}
             </div>
           </aside>
 
@@ -274,7 +290,10 @@ export function App() {
 
             <section className="network-card">
               <div><span className="muted-label">{copy.route}</span><h3>{network.name}</h3><p>{copy.routeHint}</p></div>
-              <label className="network-select"><span>{copy.network}</span><select value={network.id} onChange={(event) => setNetworkId(event.target.value)}>{asset.networks.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} · {candidate.standard}</option>)}</select></label>
+              <label className="network-select"><span>{copy.network}</span><select value={route.id} onChange={(event) => setRouteId(event.target.value as AssetRouteId)}>{routes.map((candidateRoute) => {
+                const candidateNetwork = getNetwork(candidateRoute.networkId);
+                return <option key={candidateRoute.id} value={candidateRoute.id}>{candidateNetwork.name} · {candidateRoute.standard}</option>;
+              })}</select></label>
             </section>
           </div>
         </section>
@@ -296,9 +315,9 @@ export function App() {
         )}
 
         {assetId === 'btc' ? (
-          <BitcoinTransferPanel key={`${assetId}:${network.id}:${sessions.btc.address}:${sessions.btc.mode}`} language={language} networkName={network.name} networkStandard={network.standard} sourceAddress={sessions.btc.address} walletMode={sessions.btc.mode} createdWallet={sessions.btc.mode === 'created' ? (createdWalletRefs.current.btc as CreatedBitcoinWallet | undefined) ?? null : null} />
+          <BitcoinTransferPanel key={`${assetId}:${route.id}:${sessions.btc.address}:${sessions.btc.mode}`} language={language} networkName={network.name} networkStandard={route.standard} sourceAddress={sessions.btc.address} walletMode={sessions.btc.mode} createdWallet={sessions.btc.mode === 'created' ? (createdWalletRefs.current.btc as CreatedBitcoinWallet | undefined) ?? null : null} />
         ) : (
-          <DogecoinTransferPanel key={`${assetId}:${network.id}:${sessions.doge.address}:${sessions.doge.mode}`} language={language} assetId={assetId} assetSymbol={asset.symbol} networkName={network.name} networkStandard={network.standard} sourceAddress={assetId === 'doge' ? sessions.doge.address : ''} walletMode={assetId === 'doge' ? sessions.doge.mode : 'none'} createdWallet={assetId === 'doge' && sessions.doge.mode === 'created' ? (createdWalletRefs.current.doge as CreatedDogecoinWallet | undefined) ?? null : null} />
+          <DogecoinTransferPanel key={`${assetId}:${route.id}:${sessions.doge.address}:${sessions.doge.mode}`} language={language} assetId={assetId} assetSymbol={asset.symbol} networkName={network.name} networkStandard={route.standard} sourceAddress={assetId === 'doge' ? sessions.doge.address : ''} walletMode={assetId === 'doge' ? sessions.doge.mode : 'none'} createdWallet={assetId === 'doge' && sessions.doge.mode === 'created' ? (createdWalletRefs.current.doge as CreatedDogecoinWallet | undefined) ?? null : null} />
         )}
 
         <section className="security-card" id="security"><div className="security-icon">✓</div><div><h2>{copy.securityTitle}</h2><p>{copy.securityText}</p><small>{copy.noStorage}</small></div></section>

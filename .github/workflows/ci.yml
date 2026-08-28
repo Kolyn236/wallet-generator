@@ -49,6 +49,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci --no-audit --no-fund
+      - name: Run Bitcoin deterministic vector
+        run: npm run test:bitcoin-vector
       - name: Build frontend
         run: npm run build
       - name: Validate Compose topology
@@ -61,11 +63,14 @@ jobs:
 
           cat > /tmp/wallet-rates.env <<'EOF'
           DOGE_RECOMMENDED_FEE_RATE=0.01234567
+          BTC_RECOMMENDED_FEE_RATE=0.00023456
           EOF
 
           sh scripts/build-deploy-env.sh /tmp/wallet-rates.env .env
           test "$(grep -c '^DOGE_RECOMMENDED_FEE_RATE=' .env)" -eq 1
+          test "$(grep -c '^BTC_RECOMMENDED_FEE_RATE=' .env)" -eq 1
           grep -qx 'DOGE_RECOMMENDED_FEE_RATE=0.01234567' .env
+          grep -qx 'BTC_RECOMMENDED_FEE_RATE=0.00023456' .env
 
           docker compose up -d --build
           trap 'docker compose down -v; rm -f .env' EXIT
@@ -73,20 +78,27 @@ jobs:
           for attempt in $(seq 1 30); do
             if docker compose exec -T --user www-data php sh -c 'test -w var/cache && test -w var/log' \
               && docker compose exec -T php php bin/console debug:router api_dogecoin_fee_policy >/dev/null 2>&1 \
+              && docker compose exec -T php php bin/console debug:router api_bitcoin_fee_policy >/dev/null 2>&1 \
               && curl --fail --silent --show-error -H 'Accept: application/json' http://localhost:8080/api/health >/dev/null \
               && curl --fail --silent --show-error -H 'Accept: application/json' -D /tmp/doge-fee-policy.headers -o /tmp/doge-fee-policy.json http://localhost:8080/api/chains/dogecoin/mainnet/fee-policy \
-              && python3 -c "import json; data=json.load(open('/tmp/doge-fee-policy.json')); assert data['recommendedRate'] == '0.01234567'; assert data['unit'] == 'DOGE/kB'"; then
+              && curl --fail --silent --show-error -H 'Accept: application/json' -D /tmp/btc-fee-policy.headers -o /tmp/btc-fee-policy.json http://localhost:8080/api/chains/bitcoin/mainnet/fee-policy \
+              && python3 -c "import json; data=json.load(open('/tmp/doge-fee-policy.json')); assert data['recommendedRate'] == '0.01234567'; assert data['unit'] == 'DOGE/kB'" \
+              && python3 -c "import json; data=json.load(open('/tmp/btc-fee-policy.json')); assert data['recommendedRate'] == '0.00023456'; assert data['unit'] == 'BTC/kB'"; then
               exit 0
             fi
             sleep 1
           done
 
-          echo '--- Symfony route ---'
+          echo '--- Symfony routes ---'
           docker compose exec -T php php bin/console debug:router api_dogecoin_fee_policy || true
-          echo '--- Fee policy headers ---'
+          docker compose exec -T php php bin/console debug:router api_bitcoin_fee_policy || true
+          echo '--- DOGE fee policy ---'
           cat /tmp/doge-fee-policy.headers 2>/dev/null || true
-          echo '--- Fee policy body ---'
           head -c 2000 /tmp/doge-fee-policy.json 2>/dev/null || true
+          echo
+          echo '--- BTC fee policy ---'
+          cat /tmp/btc-fee-policy.headers 2>/dev/null || true
+          head -c 2000 /tmp/btc-fee-policy.json 2>/dev/null || true
           echo
           echo '--- Containers ---'
           docker compose logs

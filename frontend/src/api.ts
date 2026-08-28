@@ -1,3 +1,4 @@
+import type { BitcoinUtxo } from './wallet/bitcoinTransaction';
 import type { DogecoinUtxo } from './wallet/dogecoinTransaction';
 
 export type DogecoinBalanceResponse = {
@@ -9,12 +10,29 @@ export type DogecoinBalanceResponse = {
   unit: 'DOGE';
 };
 
+export type BitcoinBalanceResponse = {
+  chain: 'bitcoin';
+  network: 'mainnet';
+  address: string;
+  balance: string;
+  balanceSmallestUnit: number;
+  unit: 'BTC';
+};
+
 export type DogecoinFeePolicyResponse = {
   chain: 'dogecoin';
   network: 'mainnet';
   kind: 'utxo-rate-per-kb';
   recommendedRate: string;
   unit: 'DOGE/kB';
+};
+
+export type BitcoinFeePolicyResponse = {
+  chain: 'bitcoin';
+  network: 'mainnet';
+  kind: 'utxo-rate-per-kb';
+  recommendedRate: string;
+  unit: 'BTC/kB';
 };
 
 export type DogecoinUtxoResponse = {
@@ -24,8 +42,21 @@ export type DogecoinUtxoResponse = {
   utxos: DogecoinUtxo[];
 };
 
+export type BitcoinUtxoResponse = {
+  chain: 'bitcoin';
+  network: 'mainnet';
+  address: string;
+  utxos: BitcoinUtxo[];
+};
+
 export type DogecoinBroadcastResponse = {
   chain: 'dogecoin';
+  network: 'mainnet';
+  txid: string;
+};
+
+export type BitcoinBroadcastResponse = {
+  chain: 'bitcoin';
   network: 'mainnet';
   txid: string;
 };
@@ -50,9 +81,7 @@ export class WalletApiError extends Error {
 export async function getHealth(signal?: AbortSignal): Promise<void> {
   const response = await fetch('/api/health', {
     method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
+    headers: { Accept: 'application/json' },
     cache: 'no-store',
     signal,
   });
@@ -63,61 +92,91 @@ export async function getHealth(signal?: AbortSignal): Promise<void> {
 }
 
 export async function getDogecoinFeePolicy(signal?: AbortSignal): Promise<DogecoinFeePolicyResponse> {
-  const response = await fetch('/api/chains/dogecoin/mainnet/fee-policy', {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-    cache: 'no-store',
-    signal,
-  });
+  return getJson('/api/chains/dogecoin/mainnet/fee-policy', 'DOGE fee policy lookup', signal);
+}
 
-  if (!response.ok) {
-    throw await apiError(response, 'DOGE fee policy lookup');
-  }
-
-  return (await response.json()) as DogecoinFeePolicyResponse;
+export async function getBitcoinFeePolicy(signal?: AbortSignal): Promise<BitcoinFeePolicyResponse> {
+  return getJson('/api/chains/bitcoin/mainnet/fee-policy', 'BTC fee policy lookup', signal);
 }
 
 export async function getDogecoinBalance(address: string, signal?: AbortSignal): Promise<DogecoinBalanceResponse> {
-  const response = await fetch(`/api/chains/dogecoin/mainnet/addresses/${encodeURIComponent(address)}/balance`, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-    cache: 'no-store',
+  return getJson(
+    `/api/chains/dogecoin/mainnet/addresses/${encodeURIComponent(address)}/balance`,
+    'DOGE balance lookup',
     signal,
-  });
+  );
+}
 
-  if (!response.ok) {
-    throw await apiError(response, 'DOGE balance lookup');
-  }
-
-  return (await response.json()) as DogecoinBalanceResponse;
+export async function getBitcoinBalance(address: string, signal?: AbortSignal): Promise<BitcoinBalanceResponse> {
+  return getJson(
+    `/api/chains/bitcoin/mainnet/addresses/${encodeURIComponent(address)}/balance`,
+    'BTC balance lookup',
+    signal,
+  );
 }
 
 export async function getDogecoinUtxos(address: string, signal?: AbortSignal): Promise<DogecoinUtxoResponse> {
-  const response = await fetch(`/api/chains/dogecoin/mainnet/addresses/${encodeURIComponent(address)}/utxos`, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-    cache: 'no-store',
+  return getJson(
+    `/api/chains/dogecoin/mainnet/addresses/${encodeURIComponent(address)}/utxos`,
+    'DOGE UTXO lookup',
     signal,
-  });
+  );
+}
 
-  if (!response.ok) {
-    throw await apiError(response, 'DOGE UTXO lookup');
-  }
-
-  return (await response.json()) as DogecoinUtxoResponse;
+export async function getBitcoinUtxos(address: string, signal?: AbortSignal): Promise<BitcoinUtxoResponse> {
+  return getJson(
+    `/api/chains/bitcoin/mainnet/addresses/${encodeURIComponent(address)}/utxos`,
+    'BTC UTXO lookup',
+    signal,
+  );
 }
 
 export async function broadcastDogecoinTransaction(
   rawTransaction: string,
   signal?: AbortSignal,
 ): Promise<DogecoinBroadcastResponse> {
-  const response = await fetch('/api/chains/dogecoin/mainnet/transactions/broadcast', {
+  return postRawTransaction(
+    '/api/chains/dogecoin/mainnet/transactions/broadcast',
+    rawTransaction,
+    'DOGE transaction broadcast',
+    signal,
+  );
+}
+
+export async function broadcastBitcoinTransaction(
+  rawTransaction: string,
+  signal?: AbortSignal,
+): Promise<BitcoinBroadcastResponse> {
+  return postRawTransaction(
+    '/api/chains/bitcoin/mainnet/transactions/broadcast',
+    rawTransaction,
+    'BTC transaction broadcast',
+    signal,
+  );
+}
+
+async function getJson<T>(url: string, operation: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await apiError(response, operation);
+  }
+
+  return (await response.json()) as T;
+}
+
+async function postRawTransaction<T>(
+  url: string,
+  rawTransaction: string,
+  operation: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       Accept: 'application/json',
@@ -129,10 +188,10 @@ export async function broadcastDogecoinTransaction(
   });
 
   if (!response.ok) {
-    throw await apiError(response, 'DOGE transaction broadcast');
+    throw await apiError(response, operation);
   }
 
-  return (await response.json()) as DogecoinBroadcastResponse;
+  return (await response.json()) as T;
 }
 
 async function apiError(response: Response, operation: string): Promise<WalletApiError> {

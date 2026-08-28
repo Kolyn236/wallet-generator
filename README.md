@@ -9,12 +9,12 @@ The target application is a **Symfony 7.4 modular monolith + React/TypeScript fr
 
 ## Current status
 
-The primary application entry point is now the React/Symfony stack:
+The primary application entry point is the React/Symfony stack:
 
 ```text
 Browser
    |
-   |  wallet/session state + local DOGE signer
+   |  wallet/session state + local DOGE/BTC signers
    v
 Nginx :8080
    |---- / ----------> React + TypeScript
@@ -26,14 +26,14 @@ Nginx :8080
 
 The frontend is multi-asset and network-aware:
 
-- DOGE / Dogecoin mainnet;
-- BTC / Bitcoin mainnet;
-- ETH / Ethereum mainnet;
-- USDT with ERC-20 and TRC-20 routes.
+- DOGE / Dogecoin mainnet — live;
+- BTC / Bitcoin mainnet — live for legacy P2PKH (`1...`) addresses;
+- ETH / Ethereum mainnet — planned;
+- USDT with ERC-20 and TRC-20 routes — planned.
 
-DOGE is the first live integration. The application can create a Dogecoin wallet locally in browser memory, attach an existing public address in watch-only mode, load confirmed balance/UTXOs, build and sign a legacy P2PKH transaction locally, review the resulting fee/change/TXID and explicitly broadcast the already-signed raw transaction through Symfony.
+DOGE and BTC can both create wallets locally in browser memory, attach existing public addresses in watch-only mode, load confirmed balance/UTXOs, build and sign legacy P2PKH transactions locally, review fee/change/TXID and explicitly broadcast the already-signed raw transaction through Symfony.
 
-BTC, ETH and USDT are present in the multi-wallet UI but their chain adapters are not connected yet.
+Bitcoin wallet creation uses BIP39 + BIP44 with derivation path `m/44'/0'/0'/0/0`. The first BTC integration intentionally supports mainnet legacy P2PKH only; SegWit (`bc1...`) is a separate follow-up because it changes address/script and transaction-signing rules.
 
 ## Quick start
 
@@ -50,17 +50,9 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Open:
+Open `http://localhost:8080`.
 
-```text
-http://localhost:8080
-```
-
-Symfony health endpoint:
-
-```text
-http://localhost:8080/api/health
-```
+Symfony health endpoint: `http://localhost:8080/api/health`.
 
 Stop the stack:
 
@@ -70,24 +62,26 @@ docker compose down
 
 ## Runtime configuration
 
-Operator defaults that must be changeable without rebuilding the React bundle are read by Symfony from runtime environment variables.
-
-Current DOGE fee default:
+Operator defaults are read by Symfony from runtime environment variables, so changing them does not require rebuilding the React bundle.
 
 ```dotenv
 DOGE_RECOMMENDED_FEE_RATE=0.01
+BTC_RECOMMENDED_FEE_RATE=0.00010000
 ```
 
-For Docker Compose, put the override in the repository-root `.env` file and recreate/restart the PHP runtime:
+The BTC default is expressed as `BTC/kB`; `0.00010000 BTC/kB` equals `10,000 sat/kB`, or about `10 sat/vB` for legacy transactions. This is currently an operator-controlled default, **not a live mempool fee estimator**. The user can override the rate in the review flow.
+
+For Docker Compose, put overrides in the repository-root `.env` and recreate/restart PHP:
 
 ```bash
 # .env
 DOGE_RECOMMENDED_FEE_RATE=0.02
+BTC_RECOMMENDED_FEE_RATE=0.00020000
 
 docker compose up -d --force-recreate php
 ```
 
-No frontend rebuild is required. React fetches the current policy from Symfony with `cache: no-store`.
+React fetches the current fee policies from Symfony with `cache: no-store`.
 
 ## Stack
 
@@ -99,7 +93,7 @@ No frontend rebuild is required. React fetches the current policy from Symfony w
 - Docker Compose;
 - PHPUnit, PHPStan, PHP-CS-Fixer and GitHub Actions.
 
-PostgreSQL, Redis and RabbitMQ are **not required by the V1 runtime**. They may be introduced later only for concrete infrastructure needs such as a public blockchain indexer, cache/rate limiting or asynchronous background processing.
+PostgreSQL, Redis and RabbitMQ are **not required by the V1 runtime**. They may be introduced later for concrete infrastructure needs such as a public blockchain indexer, cache/rate limiting or asynchronous background processing.
 
 ## V1 security model
 
@@ -130,18 +124,19 @@ Rules:
 - Symfony never receives WIF/private keys/seed phrases;
 - plaintext signing material is not persisted in localStorage, sessionStorage, IndexedDB, cookies, PostgreSQL or Redis;
 - locally created wallets keep unlocked secrets in browser RAM only, so F5 or closing the tab clears that wallet session;
-- an arbitrary existing DOGE sender may be used by entering its matching WIF directly in the transfer form; that WIF remains browser-local;
+- existing DOGE/BTC senders may be used by entering the matching WIF directly in the transfer form; that WIF remains browser-local;
 - external providers receive public addresses/transaction data or already-signed raw transaction bytes only;
 - signing and broadcast are explicit separate operations;
-- amounts use integer smallest units internally;
-- the DOGE transfer implementation spends only confirmed UTXOs and validates that every selected UTXO script belongs to the specified source address before signing.
+- amounts use integer smallest units internally (`koinu` / `satoshi`);
+- DOGE and BTC transfers spend only confirmed UTXOs and validate that each selected UTXO script belongs to the specified source address before signing;
+- the TXID is calculated locally and compared with the provider-returned TXID after broadcast.
 
-## DOGE transfer flow
+## UTXO transfer flow
 
-The transfer form is independent from the wallet tile. A selected/created wallet can prefill the sender, but any valid DOGE P2PKH sender address can be used if the matching WIF is supplied locally.
+DOGE and BTC currently share the same product flow while keeping chain-specific address/WIF constants and signing implementations isolated.
 
 ```text
-Sender DOGE address + matching WIF
+Sender address + matching WIF
     |
     v
 Recipient + amount + fee rate
@@ -176,19 +171,17 @@ Blockchain provider
 
 ### DOGE network fee policy
 
-The operator-recommended fee rate is supplied by Symfony at runtime from:
+`DOGE_RECOMMENDED_FEE_RATE` uses `DOGE/kB`. The signer calculates the actual network fee from final signed transaction byte size. Outputs below `0.01 DOGE` are avoided in the first DOGE implementation, matching the safety convention used by the Python reference tool.
 
-```dotenv
-DOGE_RECOMMENDED_FEE_RATE=0.01
-```
+### BTC network fee policy
 
-The default unit is `DOGE/kB`. The signer calculates the actual network fee from the final signed transaction byte size.
+`BTC_RECOMMENDED_FEE_RATE` uses `BTC/kB`. Internally the browser signer converts the decimal BTC value to integer satoshis and calculates the actual fee from the final signed legacy transaction byte size. P2PKH outputs below `546 sat` are treated as dust and are not created as destination/change outputs.
 
-The user may override the recommended positive rate in the transfer form. A custom value is explicitly marked as a user override because a rate that is too low may delay or prevent relay and a rate that is too high may overpay. The final actual fee is always shown before broadcast.
+A custom fee rate is explicitly shown as a user override. Too-low rates may delay or prevent relay; too-high rates may overpay.
 
-Outputs below `0.01 DOGE` are avoided in this first implementation, matching the safety convention already used by the Python reference tool.
+## Backend API
 
-## Backend API used by DOGE
+Dogecoin:
 
 ```text
 GET  /api/chains/dogecoin/mainnet/fee-policy
@@ -197,11 +190,22 @@ GET  /api/chains/dogecoin/mainnet/addresses/{address}/utxos
 POST /api/chains/dogecoin/mainnet/transactions/broadcast
 ```
 
-The fee-policy endpoint is public, read-only and non-cacheable. The broadcast endpoint accepts only a signed raw transaction. It recomputes the local TXID and requires the provider response to return the same transaction identity.
+Bitcoin:
+
+```text
+GET  /api/chains/bitcoin/mainnet/fee-policy
+GET  /api/chains/bitcoin/mainnet/addresses/{address}/balance
+GET  /api/chains/bitcoin/mainnet/addresses/{address}/utxos
+POST /api/chains/bitcoin/mainnet/transactions/broadcast
+```
+
+Balance/UTXO endpoints accept public addresses only. Broadcast endpoints accept only signed raw transactions, recompute the local TXID and require the provider response to return the same transaction identity.
+
+The current infrastructure adapter uses BlockCypher. Provider-specific HTTP logic stays behind application ports so a node/RPC adapter can replace it without changing browser signing rules.
 
 ## Frontend flow
 
-The main UI is a multi-wallet dashboard.
+The main UI is a multi-wallet dashboard. DOGE and BTC maintain independent in-memory wallet sessions, so switching between assets does not overwrite the other wallet.
 
 ```text
 Select asset
@@ -213,19 +217,19 @@ Select transfer network
 Wallet workspace
     |
     v
-Transfer form
+Create local wallet or connect watch-only address
     |
     v
-Load runtime fee policy
+Load runtime fee policy + UTXOs
     |
     v
-Local sign/review when the selected chain supports it
+Local sign/review
     |
     v
 Explicit broadcast
 ```
 
-For token assets the network is a first-class choice. For example USDT currently exposes both `ERC-20` and `TRC-20`, so the frontend is not built around the incorrect assumption that one asset always belongs to one blockchain.
+For token assets the network is a first-class choice. For example USDT already exposes both `ERC-20` and `TRC-20` in the UI model even though those adapters are not implemented yet.
 
 ## Backend architecture
 
@@ -310,16 +314,15 @@ The original detailed guide is preserved in `docs/PYTHON_WALLET_LAB.md`; the old
 
 ## Migration roadmap
 
-1. Symfony modular boundaries and architecture tests;
-2. React multi-wallet / multi-network application shell;
-3. client-side DOGE wallet creation and signing boundary (RAM only);
-4. Dogecoin balance / UTXO / signed broadcast gateway APIs;
-5. DOGE local build / sign / review / broadcast flow;
-6. deterministic parity tests between the browser signer and Python reference vectors;
-7. optional cache/indexer infrastructure only when load requires it;
-8. Bitcoin adapter;
-9. EVM + token adapters;
-10. encrypted local browser vault;
-11. production hardening, observability and load testing.
+1. Symfony modular boundaries and architecture tests — done;
+2. React multi-wallet / multi-network application shell — done;
+3. client-side DOGE wallet creation/signing + blockchain gateway — done;
+4. client-side BTC legacy P2PKH wallet creation/signing + blockchain gateway — done;
+5. deterministic browser signer vectors/parity coverage;
+6. Bitcoin SegWit (`bc1...`) and fee-estimation improvements;
+7. EVM + token adapters;
+8. optional cache/indexer infrastructure only when load requires it;
+9. encrypted local browser vault;
+10. production hardening, observability and load testing.
 
 The existing Python runtime is removed only after feature parity is demonstrated.

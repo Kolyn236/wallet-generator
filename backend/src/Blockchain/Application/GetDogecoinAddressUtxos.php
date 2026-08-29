@@ -9,7 +9,7 @@ use App\Blockchain\Domain\DogecoinUtxo;
 
 final readonly class GetDogecoinAddressUtxos
 {
-    public function __construct(private DogecoinUtxoProvider $provider)
+    public function __construct(private ChainAdapterRegistry $adapters)
     {
     }
 
@@ -18,6 +18,18 @@ final readonly class GetDogecoinAddressUtxos
      */
     public function __invoke(string $address): array
     {
-        return $this->provider->getConfirmedUtxos(DogecoinAddress::fromString($address));
+        $address = DogecoinAddress::fromString($address);
+        $capability = $this->adapters->requireCapability('dogecoin', 'mainnet', UtxoLookupCapability::class);
+        $dogecoinUtxos = [];
+
+        foreach ($capability->getConfirmedUtxos($address->value) as $utxo) {
+            if (!$utxo instanceof DogecoinUtxo) {
+                throw new \LogicException('Dogecoin adapter returned a non-Dogecoin UTXO.');
+            }
+
+            $dogecoinUtxos[] = $utxo;
+        }
+
+        return $dogecoinUtxos;
     }
 }

@@ -9,7 +9,7 @@ use App\Blockchain\Domain\BitcoinUtxo;
 
 final readonly class GetBitcoinAddressUtxos
 {
-    public function __construct(private BitcoinUtxoProvider $provider)
+    public function __construct(private ChainAdapterRegistry $adapters)
     {
     }
 
@@ -18,6 +18,18 @@ final readonly class GetBitcoinAddressUtxos
      */
     public function __invoke(string $address): array
     {
-        return $this->provider->getConfirmedUtxos(BitcoinAddress::fromString($address));
+        $address = BitcoinAddress::fromString($address);
+        $capability = $this->adapters->requireCapability('bitcoin', 'mainnet', UtxoLookupCapability::class);
+        $bitcoinUtxos = [];
+
+        foreach ($capability->getConfirmedUtxos($address->value) as $utxo) {
+            if (!$utxo instanceof BitcoinUtxo) {
+                throw new \LogicException('Bitcoin adapter returned a non-Bitcoin UTXO.');
+            }
+
+            $bitcoinUtxos[] = $utxo;
+        }
+
+        return $bitcoinUtxos;
     }
 }

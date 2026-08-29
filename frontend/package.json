@@ -7,6 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "test:adapter-registry": "node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/adapter-registry-test.ts",
     "test:bitcoin-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/bitcoin-vector-test.ts"
   },
   "dependencies": {

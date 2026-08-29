@@ -45,11 +45,7 @@ final class ChainAdapterRegistry
         $adapter = $this->get($chain, $network);
 
         if (!$adapter instanceof $capability) {
-            throw new UnsupportedChainCapability(\sprintf(
-                'Chain adapter "%s" does not support capability "%s".',
-                self::key($chain, $network),
-                $capability,
-            ));
+            throw new UnsupportedChainCapability(\sprintf('Chain adapter "%s" does not support capability "%s".', self::key($chain, $network), $capability));
         }
 
         return $adapter;

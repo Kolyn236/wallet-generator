@@ -9,12 +9,15 @@ use App\Blockchain\Domain\BitcoinAddress;
 
 final readonly class GetBitcoinAddressBalance
 {
-    public function __construct(private BitcoinBalanceProvider $provider)
+    public function __construct(private ChainAdapterRegistry $adapters)
     {
     }
 
     public function __invoke(string $address): AddressBalance
     {
-        return $this->provider->getConfirmedBalance(BitcoinAddress::fromString($address));
+        $address = BitcoinAddress::fromString($address);
+        $capability = $this->adapters->requireCapability('bitcoin', 'mainnet', AddressBalanceCapability::class);
+
+        return $capability->getConfirmedBalance($address->value);
     }
 }

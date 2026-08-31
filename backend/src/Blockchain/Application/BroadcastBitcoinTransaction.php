@@ -8,14 +8,15 @@ use App\Blockchain\Domain\BitcoinRawTransaction;
 
 final readonly class BroadcastBitcoinTransaction
 {
-    public function __construct(private BitcoinTransactionBroadcaster $broadcaster)
+    public function __construct(private ChainAdapterRegistry $adapters)
     {
     }
 
     public function __invoke(string $rawTransaction): BitcoinRawTransaction
     {
         $transaction = BitcoinRawTransaction::fromHex($rawTransaction);
-        $providerTxid = strtolower($this->broadcaster->broadcast($transaction));
+        $capability = $this->adapters->requireCapability('bitcoin', 'mainnet', RawTransactionBroadcastCapability::class);
+        $providerTxid = strtolower($capability->broadcastRawTransaction($transaction->hex));
 
         if ($providerTxid !== $transaction->txid) {
             throw new BroadcastFailed('provider_txid_mismatch');

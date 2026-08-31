@@ -5,8 +5,16 @@ services:
         autowire: true
         autoconfigure: true
 
+    _instanceof:
+        App\Blockchain\Application\ChainAdapter:
+            tags: ['app.blockchain.chain_adapter']
+
     App\:
         resource: '../src/'
+
+    App\Blockchain\Application\ChainAdapterRegistry:
+        arguments:
+            $adapters: !tagged_iterator app.blockchain.chain_adapter
 
     App\Blockchain\Application\DogecoinFeePolicy:
         arguments:

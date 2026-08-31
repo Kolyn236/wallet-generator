@@ -8,14 +8,15 @@ use App\Blockchain\Domain\DogecoinRawTransaction;
 
 final readonly class BroadcastDogecoinTransaction
 {
-    public function __construct(private DogecoinTransactionBroadcaster $broadcaster)
+    public function __construct(private ChainAdapterRegistry $adapters)
     {
     }
 
     public function __invoke(string $rawTransaction): DogecoinRawTransaction
     {
         $transaction = DogecoinRawTransaction::fromHex($rawTransaction);
-        $providerTxid = strtolower($this->broadcaster->broadcast($transaction));
+        $capability = $this->adapters->requireCapability('dogecoin', 'mainnet', RawTransactionBroadcastCapability::class);
+        $providerTxid = strtolower($capability->broadcastRawTransaction($transaction->hex));
 
         if ($providerTxid !== $transaction->txid) {
             throw new BroadcastFailed('provider_txid_mismatch');

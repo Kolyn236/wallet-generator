@@ -9,12 +9,15 @@ use App\Blockchain\Domain\DogecoinAddress;
 
 final readonly class GetDogecoinAddressBalance
 {
-    public function __construct(private DogecoinBalanceProvider $provider)
+    public function __construct(private ChainAdapterRegistry $adapters)
     {
     }
 
     public function __invoke(string $address): AddressBalance
     {
-        return $this->provider->getConfirmedBalance(DogecoinAddress::fromString($address));
+        $address = DogecoinAddress::fromString($address);
+        $capability = $this->adapters->requireCapability('dogecoin', 'mainnet', AddressBalanceCapability::class);
+
+        return $capability->getConfirmedBalance($address->value);
     }
 }

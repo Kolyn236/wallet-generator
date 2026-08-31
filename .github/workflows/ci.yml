@@ -28,6 +28,8 @@ jobs:
         run: composer validate --strict
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Run backend adapter registry invariants
+        run: composer test:adapter-invariants
       - name: Run PHPUnit
         run: composer test
       - name: Run PHPStan
@@ -49,8 +51,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci --no-audit --no-fund
-      - name: Run frontend adapter registry tests
-        run: npm run test:adapter-registry
+      - name: Run frontend adapter registry invariants
+        run: npm run test:adapter-invariants
       - name: Run Bitcoin deterministic vector
         run: npm run test:bitcoin-vector
       - name: Build frontend

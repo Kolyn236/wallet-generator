@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import {
   assetRoutes,
-  getAssetAvailability,
+  getAssetRouteAvailability,
 } from '../src/assets.ts';
 import {
   adapterRegistry,
@@ -18,16 +18,22 @@ import {
   dogecoinMainnetWalletAdapter,
 } from '../src/runtime/adapters/dogecoinMainnet.ts';
 import {
+  createAssetRouteBalances,
+  getAssetRouteBalance,
+  invalidateAssetRouteBalancesForNetwork,
+  withAssetRouteBalance,
+} from '../src/runtime/assetRouteBalances.ts';
+import {
   createWalletSessions,
   getWalletSession,
   withWalletSession,
 } from '../src/runtime/walletSessions.ts';
 
 const liveRoutes = assetRoutes.filter(
-  (route) => getAssetAvailability(route.assetId) === 'ready-next',
+  (route) => getAssetRouteAvailability(route.id) === 'ready-next',
 );
 const plannedRoutes = assetRoutes.filter(
-  (route) => getAssetAvailability(route.assetId) === 'planned',
+  (route) => getAssetRouteAvailability(route.id) === 'planned',
 );
 
 for (const route of liveRoutes) {
@@ -36,10 +42,12 @@ for (const route of liveRoutes) {
   assert.equal(routeAdapter.routeId, route.id);
   assert.equal(routeAdapter.assetId, route.assetId);
   assert.equal(routeAdapter.networkId, route.networkId);
+  assert.equal(typeof routeAdapter.loadBalance, 'function');
 
   const walletAdapter = adapterRegistry.resolveWalletNetwork(route.networkId);
   assert.ok(walletAdapter, `Live asset route has no wallet network adapter: ${route.id}`);
   assert.equal(walletAdapter.networkId, route.networkId);
+  assert.equal('loadBalance' in walletAdapter, false, 'Wallet network adapters must not own asset balance loading.');
 }
 
 for (const route of plannedRoutes) {
@@ -68,6 +76,12 @@ assert.strictEqual(
 );
 assert.notStrictEqual(dogecoinMainnetAssetRouteAdapter, bitcoinMainnetAssetRouteAdapter);
 assert.notStrictEqual(dogecoinMainnetWalletAdapter, bitcoinMainnetWalletAdapter);
+
+assert.equal(getAssetRouteAvailability('doge-dogecoin-mainnet-native'), 'ready-next');
+assert.equal(getAssetRouteAvailability('btc-bitcoin-mainnet-native'), 'ready-next');
+assert.equal(getAssetRouteAvailability('eth-ethereum-mainnet-native'), 'planned');
+assert.equal(getAssetRouteAvailability('usdt-ethereum-mainnet-erc20'), 'planned');
+assert.equal(getAssetRouteAvailability('usdt-tron-mainnet-trc20'), 'planned');
 
 assert.equal(adapterRegistry.resolveAssetRoute('eth-ethereum-mainnet-native'), null);
 assert.equal(adapterRegistry.resolveAssetRoute('usdt-ethereum-mainnet-erc20'), null);
@@ -149,24 +163,80 @@ assert.equal(independentRegistry.resolveAssetRoute('unknown-route'), null);
 let sessions = createWalletSessions();
 sessions = withWalletSession(sessions, 'dogecoin-mainnet', {
   address: 'D-dogecoin-session',
-  balance: '12.00000000',
   mode: 'watch-only',
 });
 sessions = withWalletSession(sessions, 'bitcoin-mainnet', {
   address: '1-bitcoin-session',
-  balance: '0.50000000',
   mode: 'created',
 });
 
 assert.equal(getWalletSession(sessions, 'dogecoin-mainnet').address, 'D-dogecoin-session');
-assert.equal(getWalletSession(sessions, 'dogecoin-mainnet').balance, '12.00000000');
 assert.equal(getWalletSession(sessions, 'bitcoin-mainnet').address, '1-bitcoin-session');
-assert.equal(getWalletSession(sessions, 'bitcoin-mainnet').balance, '0.50000000');
 assert.deepEqual(getWalletSession(sessions, 'ethereum-mainnet'), {
   address: '',
-  balance: null,
   mode: 'none',
 });
+assert.equal('balance' in getWalletSession(sessions, 'dogecoin-mainnet'), false);
+
+let balances = createAssetRouteBalances();
+balances = withAssetRouteBalance(balances, 'doge-dogecoin-mainnet-native', {
+  address: 'D-dogecoin-session',
+  balance: '12.00000000',
+  status: 'loaded',
+});
+balances = withAssetRouteBalance(balances, 'eth-ethereum-mainnet-native', {
+  address: '0xshared',
+  balance: '1.25',
+  status: 'loaded',
+});
+balances = withAssetRouteBalance(balances, 'usdt-ethereum-mainnet-erc20', {
+  address: '0xshared',
+  balance: '500.000000',
+  status: 'loaded',
+});
+
+assert.equal(getAssetRouteBalance(balances, 'doge-dogecoin-mainnet-native').balance, '12.00000000');
+assert.equal(getAssetRouteBalance(balances, 'eth-ethereum-mainnet-native').balance, '1.25');
+assert.equal(getAssetRouteBalance(balances, 'usdt-ethereum-mainnet-erc20').balance, '500.000000');
+
+balances = invalidateAssetRouteBalancesForNetwork(balances, 'ethereum-mainnet');
+assert.equal(getAssetRouteBalance(balances, 'eth-ethereum-mainnet-native').balance, null);
+assert.equal(getAssetRouteBalance(balances, 'usdt-ethereum-mainnet-erc20').balance, null);
+assert.equal(getAssetRouteBalance(balances, 'doge-dogecoin-mainnet-native').balance, '12.00000000');
+
+const incompatibleWallet = {
+  address: '0x0000000000000000000000000000000000000000',
+  mnemonic: 'test only',
+  derivationPath: "m/44'/60'/0'/0/0",
+  signingMaterial: {
+    kind: 'private-key' as const,
+    value: '0xdeadbeef',
+  },
+};
+const transferProps = {
+  language: 'en' as const,
+  assetId: 'doge' as const,
+  assetSymbol: 'DOGE',
+  networkName: 'Dogecoin',
+  networkStandard: 'DOGE mainnet · P2PKH',
+  sourceAddress: 'D-test',
+  walletMode: 'created' as const,
+  createdWallet: incompatibleWallet,
+};
+assert.throws(
+  () => dogecoinMainnetAssetRouteAdapter.renderTransferPanel(transferProps),
+  /incompatible_signing_material/,
+);
+assert.throws(
+  () => bitcoinMainnetAssetRouteAdapter.renderTransferPanel({
+    ...transferProps,
+    assetId: 'btc',
+    assetSymbol: 'BTC',
+    networkName: 'Bitcoin',
+    networkStandard: 'BTC mainnet · P2PKH',
+  }),
+  /incompatible_signing_material/,
+);
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -202,7 +272,7 @@ for (const file of sourceFiles(srcDirectory)) {
   }
 
   assert.equal(
-    /(?:localStorage|sessionStorage)\s*\.\s*setItem\s*\([^\n;]*(?:wif|mnemonic|privateKey|seed)/i.test(source),
+    /(?:localStorage|sessionStorage)\s*\.\s*setItem\s*\([^\n;]*(?:wif|mnemonic|privateKey|private-key|signingMaterial|seed)/i.test(source),
     false,
     `wallet secret persistence is forbidden in ${relativeFile}`,
   );

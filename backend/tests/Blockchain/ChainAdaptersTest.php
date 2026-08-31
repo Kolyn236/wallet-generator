@@ -17,11 +17,16 @@ use App\Blockchain\Application\DogecoinBalanceProvider;
 use App\Blockchain\Application\DogecoinFeePolicy;
 use App\Blockchain\Application\DogecoinTransactionBroadcaster;
 use App\Blockchain\Application\DogecoinUtxoProvider;
+use App\Blockchain\Application\Eip1559FeeQuoteCapability;
+use App\Blockchain\Application\EvmGasEstimateCapability;
+use App\Blockchain\Application\EvmNativeBalanceCapability;
+use App\Blockchain\Application\EvmPendingNonceCapability;
 use App\Blockchain\Application\GetBitcoinAddressBalance;
 use App\Blockchain\Application\GetBitcoinAddressUtxos;
 use App\Blockchain\Application\GetDogecoinAddressBalance;
 use App\Blockchain\Application\GetDogecoinAddressUtxos;
 use App\Blockchain\Application\RawTransactionBroadcastCapability;
+use App\Blockchain\Application\UnsupportedChainCapability;
 use App\Blockchain\Application\UtxoFeeRateCapability;
 use App\Blockchain\Application\UtxoLookupCapability;
 use App\Blockchain\Domain\AddressBalance;
@@ -33,6 +38,11 @@ use App\Blockchain\Domain\DogecoinRawTransaction;
 use App\Blockchain\Domain\DogecoinUtxo;
 use App\Blockchain\Infrastructure\BitcoinMainnetAdapter;
 use App\Blockchain\Infrastructure\DogecoinMainnetAdapter;
+use App\Blockchain\Infrastructure\EthereumJsonRpcClient;
+use App\Blockchain\Infrastructure\EthereumJsonRpcTransport;
+use App\Blockchain\Infrastructure\EthereumJsonRpcTransportResponse;
+use App\Blockchain\Infrastructure\EthereumMainnetAdapter;
+use App\Blockchain\Infrastructure\ProviderRequestLogger;
 use PHPUnit\Framework\TestCase;
 
 final class ChainAdaptersTest extends TestCase
@@ -55,6 +65,39 @@ final class ChainAdaptersTest extends TestCase
             self::assertInstanceOf(UtxoFeeRateCapability::class, $adapter);
             self::assertInstanceOf(RawTransactionBroadcastCapability::class, $adapter);
         }
+    }
+
+    public function testRegistersEthereumMainnetWithOnlyEvmCapabilities(): void
+    {
+        $ethereum = self::ethereumAdapter();
+        $registry = new ChainAdapterRegistry([$ethereum]);
+
+        self::assertSame($ethereum, $registry->get('ethereum', 'mainnet'));
+        self::assertInstanceOf(EvmNativeBalanceCapability::class, $ethereum);
+        self::assertInstanceOf(EvmPendingNonceCapability::class, $ethereum);
+        self::assertInstanceOf(EvmGasEstimateCapability::class, $ethereum);
+        self::assertInstanceOf(Eip1559FeeQuoteCapability::class, $ethereum);
+        self::assertInstanceOf(RawTransactionBroadcastCapability::class, $ethereum);
+        self::assertNotInstanceOf(UtxoLookupCapability::class, $ethereum);
+        self::assertNotInstanceOf(UtxoFeeRateCapability::class, $ethereum);
+
+        foreach ([UtxoLookupCapability::class, UtxoFeeRateCapability::class] as $capability) {
+            try {
+                $registry->requireCapability('ethereum', 'mainnet', $capability);
+                self::fail('Ethereum must fail closed for unsupported UTXO capability '.$capability);
+            } catch (UnsupportedChainCapability) {
+            }
+        }
+    }
+
+    public function testEthereumWrongNetworkFailsClosed(): void
+    {
+        $registry = new ChainAdapterRegistry([self::ethereumAdapter()]);
+
+        $this->expectException(ChainAdapterNotFound::class);
+        $this->expectExceptionMessage('ethereum:sepolia');
+
+        $registry->get('ethereum', 'sepolia');
     }
 
     public function testDogecoinUseCaseDoesNotFallbackToBitcoinAdapter(): void
@@ -187,5 +230,21 @@ final class ChainAdaptersTest extends TestCase
             new BitcoinFeePolicy('0.0001'),
             $broadcaster,
         );
+    }
+
+    private static function ethereumAdapter(): EthereumMainnetAdapter
+    {
+        $transport = new class implements EthereumJsonRpcTransport {
+            public function post(string $url, string $payload): EthereumJsonRpcTransportResponse
+            {
+                throw new \LogicException('RPC call not expected in adapter registry invariant test.');
+            }
+        };
+
+        return new EthereumMainnetAdapter(new EthereumJsonRpcClient(
+            'https://rpc.example.invalid',
+            $transport,
+            new ProviderRequestLogger(),
+        ));
     }
 }

@@ -2,12 +2,40 @@ import { createElement, lazy } from 'react';
 import { getBitcoinBalance } from '../../api';
 import { createBitcoinWallet, isBitcoinMainnetAddress } from '../../wallet/bitcoin';
 import type { AssetRouteAdapter } from '../AssetRouteAdapter';
-import type { WalletNetworkAdapter } from '../WalletNetworkAdapter';
+import type { BrowserCreatedWallet, WalletNetworkAdapter } from '../WalletNetworkAdapter';
 
 const BitcoinTransferPanel = lazy(async () => {
   const module = await import('../../BitcoinTransferPanel');
   return { default: module.BitcoinTransferPanel };
 });
+
+function toBrowserWallet(): BrowserCreatedWallet {
+  const wallet = createBitcoinWallet();
+
+  return {
+    address: wallet.address,
+    mnemonic: wallet.mnemonic,
+    derivationPath: wallet.derivationPath,
+    signingMaterial: {
+      kind: 'wif',
+      value: wallet.wif,
+    },
+  };
+}
+
+function toBitcoinCreatedWallet(wallet: BrowserCreatedWallet | null) {
+  if (!wallet) return null;
+  if (wallet.signingMaterial.kind !== 'wif') {
+    throw new Error('incompatible_signing_material');
+  }
+
+  return {
+    address: wallet.address,
+    mnemonic: wallet.mnemonic,
+    derivationPath: wallet.derivationPath,
+    wif: wallet.signingMaterial.value,
+  };
+}
 
 export const bitcoinMainnetWalletAdapter: WalletNetworkAdapter = {
   networkId: 'bitcoin-mainnet',
@@ -20,12 +48,8 @@ export const bitcoinMainnetWalletAdapter: WalletNetworkAdapter = {
     watchOnly: true,
     localSigning: true,
   },
-  createWallet: createBitcoinWallet,
+  createWallet: toBrowserWallet,
   validatePublicAddress: isBitcoinMainnetAddress,
-  async loadBalance(address, signal) {
-    const result = await getBitcoinBalance(address, signal);
-    return { address: result.address, balance: result.balance };
-  },
 };
 
 export const bitcoinMainnetAssetRouteAdapter: AssetRouteAdapter = {
@@ -37,6 +61,10 @@ export const bitcoinMainnetAssetRouteAdapter: AssetRouteAdapter = {
     transfer: true,
     localSigning: true,
   },
+  async loadBalance(address, signal) {
+    const result = await getBitcoinBalance(address, signal);
+    return { address: result.address, balance: result.balance };
+  },
   renderTransferPanel(props) {
     return createElement(BitcoinTransferPanel, {
       language: props.language,
@@ -44,7 +72,7 @@ export const bitcoinMainnetAssetRouteAdapter: AssetRouteAdapter = {
       networkStandard: props.networkStandard,
       sourceAddress: props.sourceAddress,
       walletMode: props.walletMode,
-      createdWallet: props.createdWallet,
+      createdWallet: toBitcoinCreatedWallet(props.createdWallet),
     });
   },
 };

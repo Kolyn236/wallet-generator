@@ -16,7 +16,6 @@ jobs:
         with:
           php-version: '8.4'
           coverage: none
-          extensions: gmp
           tools: composer:v2
       - name: Validate Composer metadata
         run: composer validate --strict

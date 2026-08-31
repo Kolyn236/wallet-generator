@@ -30,7 +30,7 @@ final readonly class EvmQuantity
         $decimal = '0';
         foreach (str_split(substr($value, 2)) as $digit) {
             $decimal = self::multiplyBySmall($decimal, 16);
-            $decimal = self::addSmall($decimal, hexdec($digit));
+            $decimal = self::addSmall($decimal, (int) hexdec($digit));
         }
 
         return new self($decimal);
@@ -63,7 +63,7 @@ final readonly class EvmQuantity
         $carry = 0;
         $result = '';
 
-        for ($index = strlen($value) - 1; $index >= 0; --$index) {
+        for ($index = \strlen($value) - 1; $index >= 0; --$index) {
             $product = ((int) $value[$index] * $multiplier) + $carry;
             $result = (string) ($product % 10).$result;
             $carry = intdiv($product, 10);
@@ -88,8 +88,8 @@ final readonly class EvmQuantity
 
     private static function add(string $left, string $right): string
     {
-        $leftIndex = strlen($left) - 1;
-        $rightIndex = strlen($right) - 1;
+        $leftIndex = \strlen($left) - 1;
+        $rightIndex = \strlen($right) - 1;
         $carry = 0;
         $result = '';
 
@@ -115,7 +115,7 @@ final readonly class EvmQuantity
         $remainder = 0;
         $quotient = '';
 
-        for ($index = 0, $length = strlen($value); $index < $length; ++$index) {
+        for ($index = 0, $length = \strlen($value); $index < $length; ++$index) {
             $current = ($remainder * 10) + (int) $value[$index];
             $digit = intdiv($current, $divisor);
 

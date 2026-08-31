@@ -38,6 +38,7 @@
     },
     "scripts": {
         "test": "phpunit",
+        "test:adapter-invariants": "phpunit tests/Blockchain/ChainAdapterRegistryTest.php tests/Blockchain/ChainAdaptersTest.php tests/Architecture/ModuleBoundariesTest.php",
         "analyse": "phpstan analyse --memory-limit=512M",
         "cs:check": "php-cs-fixer fix --dry-run --diff --allow-risky=yes",
         "auto-scripts": {

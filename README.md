@@ -93,7 +93,7 @@ React fetches the current UTXO fee policies from Symfony with `cache: no-store`.
 
 ## Stack
 
-- PHP 8.4 with GMP for exact EVM integer arithmetic;
+- PHP 8.4;
 - Symfony 7.4 LTS;
 - React 19 + TypeScript;
 - Vite;
@@ -335,8 +335,6 @@ Architecture decisions:
 
 ### Symfony backend
 
-The PHP runtime/test environment needs the GMP extension for exact EVM integer arithmetic.
-
 ```bash
 cd backend
 composer install
@@ -344,6 +342,8 @@ composer test
 composer analyse
 composer cs:check
 ```
+
+Ethereum quantity conversion and fee arithmetic are implemented on canonical decimal strings, so the backend does not require a native big-integer extension.
 
 Ethereum tests use deterministic fake transports/fixtures; CI does not call a public Ethereum RPC endpoint and never requires funded accounts.
 

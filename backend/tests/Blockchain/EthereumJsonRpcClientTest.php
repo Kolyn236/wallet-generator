@@ -20,8 +20,8 @@ final class EthereumJsonRpcClientTest extends TestCase
     public function testBalancePreservesValuesBeyondSignedInt64(): void
     {
         $transport = new QueueEthereumTransport([
-            self::result('0x1'),
-            self::result('0x3635c9adc5dea00000'),
+            self::rpcResult('0x1'),
+            self::rpcResult('0x3635c9adc5dea00000'),
         ]);
 
         $client = self::client($transport);
@@ -32,8 +32,8 @@ final class EthereumJsonRpcClientTest extends TestCase
     public function testMaximumUint256QuantityIsParsedWithoutTruncation(): void
     {
         $transport = new QueueEthereumTransport([
-            self::result('0x1'),
-            self::result('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
+            self::rpcResult('0x1'),
+            self::rpcResult('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'),
         ]);
 
         self::assertSame(
@@ -45,8 +45,8 @@ final class EthereumJsonRpcClientTest extends TestCase
     public function testPendingNonceUsesPendingBlockTag(): void
     {
         $transport = new QueueEthereumTransport([
-            self::result('0x1'),
-            self::result('0x2a'),
+            self::rpcResult('0x1'),
+            self::rpcResult('0x2a'),
         ]);
 
         self::assertSame('42', self::client($transport)->pendingNonce(self::ADDRESS));
@@ -59,8 +59,8 @@ final class EthereumJsonRpcClientTest extends TestCase
     public function testGasEstimateUsesExactPublicIntent(): void
     {
         $transport = new QueueEthereumTransport([
-            self::result('0x1'),
-            self::result('0x5208'),
+            self::rpcResult('0x1'),
+            self::rpcResult('0x5208'),
         ]);
         $intent = new EvmTransactionIntent(
             self::ADDRESS,
@@ -84,8 +84,8 @@ final class EthereumJsonRpcClientTest extends TestCase
     public function testFeeQuoteUsesFeeHistoryAndArbitraryPrecisionPolicy(): void
     {
         $transport = new QueueEthereumTransport([
-            self::result('0x1'),
-            self::result([
+            self::rpcResult('0x1'),
+            self::rpcResult([
                 'oldestBlock' => '0x10',
                 'baseFeePerGas' => ['0x3b9aca00', '0x4a817c800'],
                 'gasUsedRatio' => [0.5],
@@ -106,7 +106,7 @@ final class EthereumJsonRpcClientTest extends TestCase
 
     public function testWrongChainFailsClosed(): void
     {
-        $transport = new QueueEthereumTransport([self::result('0xaa36a7')]);
+        $transport = new QueueEthereumTransport([self::rpcResult('0xaa36a7')]);
 
         try {
             self::client($transport)->balanceWei(self::ADDRESS);
@@ -119,8 +119,8 @@ final class EthereumJsonRpcClientTest extends TestCase
     public function testMalformedHexQuantityIsRejectedInsteadOfBecomingZero(): void
     {
         $transport = new QueueEthereumTransport([
-            self::result('0x1'),
-            self::result('0x00'),
+            self::rpcResult('0x1'),
+            self::rpcResult('0x00'),
         ]);
 
         try {
@@ -163,7 +163,7 @@ final class EthereumJsonRpcClientTest extends TestCase
     public function testGasRpcErrorBecomesGasEstimationFailure(): void
     {
         $transport = new QueueEthereumTransport([
-            self::result('0x1'),
+            self::rpcResult('0x1'),
             self::rpcError(-32000),
         ]);
         $intent = new EvmTransactionIntent(self::ADDRESS, self::OTHER_ADDRESS, '1', '0x');
@@ -179,8 +179,8 @@ final class EthereumJsonRpcClientTest extends TestCase
     public function testBroadcastValidatesReturnedTransactionHash(): void
     {
         $transport = new QueueEthereumTransport([
-            self::result('0x1'),
-            self::result('0x1234'),
+            self::rpcResult('0x1'),
+            self::rpcResult('0x1234'),
         ]);
 
         try {
@@ -200,7 +200,7 @@ final class EthereumJsonRpcClientTest extends TestCase
 
         try {
             $transport = new QueueEthereumTransport([
-                self::result('0x1'),
+                self::rpcResult('0x1'),
                 self::rpcError(-32000),
             ]);
             $rawTransaction = '0x02'.str_repeat('ab', 64);
@@ -231,7 +231,7 @@ final class EthereumJsonRpcClientTest extends TestCase
         );
     }
 
-    private static function result(mixed $result): EthereumJsonRpcTransportResponse
+    private static function rpcResult(mixed $result): EthereumJsonRpcTransportResponse
     {
         return new EthereumJsonRpcTransportResponse(200, json_encode([
             'jsonrpc' => '2.0',
@@ -248,8 +248,7 @@ final class EthereumJsonRpcClientTest extends TestCase
             'error' => [
                 'code' => $code,
                 'message' => 'fixture error',
-            ],
-        ], \JSON_THROW_ON_ERROR));
+            ], \JSON_THROW_ON_ERROR));
     }
 }
 

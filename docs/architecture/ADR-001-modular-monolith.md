@@ -1,96 +1,100 @@
 # ADR-001: Symfony modular monolith
 
 ## Status
-Accepted for migration.
+
+Accepted. The initial runtime migration is complete; this ADR describes the supported Symfony modular-monolith architecture and its extension boundaries.
 
 ## Context
-The repository is a working educational Dogecoin wallet laboratory in Python. The target is a multi-chain wallet platform that can later run in production, support multiple wallets/assets, expose balance and transaction APIs, and scale to at least 300 RPS without coupling every request to a third-party blockchain API.
 
-The Python implementation remains the reference implementation during migration and must keep working until equivalent behavior is covered by tests in the new backend.
+The project originated as an educational Dogecoin wallet lab and has evolved into a multi-chain non-custodial wallet platform. The supported runtime is now React/TypeScript in the browser plus a Symfony backend. Historical implementation code is retained by Git history, not as a parallel application runtime.
+
+The platform must support multiple chains/assets without forcing UTXO, EVM and other chain families into one misleading transaction abstraction. Wallet secrets must remain outside the Symfony trust boundary.
 
 ## Decision
+
 Use a modular monolith with:
 
 - PHP 8.4;
 - Symfony 7.4 LTS;
-- PostgreSQL as system of record;
-- Redis for cache, rate limiting and distributed locks;
-- RabbitMQ through Symfony Messenger;
 - React + TypeScript + Vite for the web UI;
 - Nginx + PHP-FPM for HTTP;
+- Docker Compose for the integrated local runtime;
 - one repository and one backend deployable artifact;
-- separate runtime processes for HTTP and Messenger workers.
+- explicit chain/network adapters and capability interfaces;
+- GitHub Actions for deterministic, architecture, backend and integration checks.
 
-A monolith is not a single process. The same Symfony codebase may run as PHP-FPM, transaction consumers, blockchain consumers and notification consumers.
+PostgreSQL, Redis, RabbitMQ and Messenger are optional future infrastructure rather than mandatory V1 runtime dependencies. Add them only for concrete persistence, indexing, caching, rate-limiting or asynchronous-processing requirements.
 
 ## Module boundaries
+
 Initial backend modules:
 
-- `Wallet` — wallets, addresses and ownership metadata;
+- `Wallet` — wallet/address concepts and ownership metadata when needed;
 - `Asset` — chains, networks, native assets and tokens;
-- `Transaction` — lifecycle, idempotency and transaction orchestration;
-- `Blockchain` — chain-neutral ports and concrete chain adapters;
-- `Signer` — signing boundary and key references;
-- `Indexer` — chain synchronization, UTXO/nonce state and confirmations.
+- `Transaction` — transaction lifecycle/orchestration when server-side workflow state is introduced;
+- `Blockchain` — application capabilities and concrete chain adapters;
+- `Signer` — reserved signing-boundary concepts; current non-custodial signing stays in the browser;
+- `Indexer` — chain synchronization/read models when introduced.
 
 Modules use `Domain`, `Application`, `Infrastructure` and `Presentation` layers where needed. Domain code must not depend on Symfony, Doctrine, RabbitMQ, Redis, HTTP clients or provider SDKs.
 
+Dependency direction:
+
+```text
+Presentation -> Application <- Infrastructure
+                    |
+                    v
+                  Domain
+```
+
+Presentation must not import Infrastructure directly. Application owns capabilities/ports; Infrastructure implements them.
+
 ## Chain model
-Do not force all currencies into one `CryptoWallet::create/balance/send` abstraction. UTXO chains and account-based chains have different transaction semantics.
 
-Examples:
+Do not force all currencies into one `CryptoWallet::create/balance/send` abstraction. UTXO and account-based chains have different transaction, fee and state semantics.
 
-- UTXO: Dogecoin, Bitcoin, Litecoin;
-- account-based: Ethereum/EVM.
+Use chain-family-aware capabilities and exact chain/network adapter identity. Current live backend keys are:
 
-Use capabilities and chain adapters. Dogecoin is the first adapter.
+```text
+dogecoin:mainnet
+bitcoin:mainnet
+```
 
-## Async processing
-Symfony Messenger is the application message bus. RabbitMQ is the initial asynchronous transport.
+Unknown keys and unsupported capabilities fail closed.
 
-Initial transports:
+## Non-custodial signing boundary
 
-- `transactions`;
-- `blockchain`;
-- `notifications`.
+Wallet creation and transaction signing are browser responsibilities.
 
-Workers are separate processes but use the same repository, Symfony container, domain model and PostgreSQL database.
+Symfony may receive:
 
-Normal read endpoints are synchronous and read Redis/PostgreSQL. Chain refresh, broadcasting/retries, block synchronization and confirmation checks may be asynchronous.
+- public addresses;
+- public balance/UTXO requests;
+- already-signed raw transactions.
 
-## Consistency rules
-Financial writes require:
+Symfony must not receive or persist plaintext WIF/private keys/seed phrases.
 
-- idempotency keys;
-- PostgreSQL transactions;
-- UTXO reservation to prevent double selection;
-- nonce management for account-based chains;
-- transactional outbox before relying on RabbitMQ delivery;
-- explicit transaction state transitions.
+If server-side custody is ever proposed, it requires a separate architecture/security decision and a dedicated KMS/Vault/HSM-style signing boundary. It must not be introduced as an incremental shortcut.
 
-Initial transaction states:
+## Provider boundary
 
-`CREATED -> PREPARING -> PREPARED -> SIGNED -> BROADCASTING -> MEMPOOL -> CONFIRMED`
+External explorers/providers are Infrastructure implementations, not sources of wallet authority. Application code depends on capabilities/ports. Provider responses are validated, and locally calculated transaction identity is checked against the provider response after broadcast.
 
-Additional states may include `FAILED`, `DROPPED`, `REPLACED`, `CANCELLED`.
+A future node/RPC provider can replace third-party HTTP providers without changing browser signing behavior or public API contracts.
 
-## Security boundary
-No production database column may contain plaintext WIF/private keys/seed phrases.
+## Runtime-retirement checkpoint
 
-Prefer non-custodial signing where practical. If server-side custody is introduced later, private material must be delegated to a dedicated signing boundary backed by KMS/Vault/HSM-style infrastructure and referenced by key identifier.
+The migration checkpoint for retiring the original educational runtime has been satisfied:
 
-The existing Python crypto implementation remains educational/reference code until a production signing design is explicitly approved.
+1. DOGE browser wallet creation/signing is implemented;
+2. BTC browser wallet creation/signing is implemented;
+3. deterministic frontend signer vectors protect both live UTXO integrations;
+4. Symfony exposes the supported blockchain gateway APIs;
+5. frontend/backend adapter registries have fail-closed architecture tests;
+6. Docker and CI validate the supported platform directly.
 
-## Migration rule
-No big-bang rewrite.
-
-1. Preserve current Python behavior.
-2. Introduce Symfony beside it.
-3. Add PostgreSQL/Redis/RabbitMQ infrastructure.
-4. Add module boundaries and chain-neutral contracts.
-5. Migrate DOGE behavior with deterministic parity tests.
-6. Move the UI to React after APIs stabilize.
-7. Retire Python runtime paths only after parity is demonstrated.
+The retired implementation should not be restored as a required runtime, CI dependency or supported alternative. Historical code remains accessible through repository history.
 
 ## Consequences
-This keeps development familiar, allows HTTP and workers to scale independently, preserves the existing working implementation during migration, and leaves clear extraction points if a future indexer or signer truly needs to become a separate service.
+
+The repository has one clear supported architecture while retaining explicit module and provider extraction points. Browser-local signing preserves the non-custodial trust boundary, capability adapters keep chain differences visible, and optional infrastructure can be added later without requiring a premature microservice split.

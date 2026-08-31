@@ -3,7 +3,7 @@ import { concatBytes } from '@noble/hashes/utils.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
 import { createBase58check } from '@scure/base';
 import { HDKey } from '@scure/bip32';
-import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
+import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 
 const DOGECOIN_P2PKH_VERSION = 0x1e;
@@ -20,8 +20,16 @@ export type CreatedDogecoinWallet = {
 };
 
 export function createDogecoinWallet(): CreatedDogecoinWallet {
-  const mnemonic = generateMnemonic(wordlist, 128);
-  const seed = mnemonicToSeedSync(mnemonic);
+  return deriveDogecoinWalletFromMnemonic(generateMnemonic(wordlist, 128));
+}
+
+export function deriveDogecoinWalletFromMnemonic(mnemonic: string): CreatedDogecoinWallet {
+  const normalizedMnemonic = mnemonic.trim().replace(/\s+/g, ' ');
+  if (!validateMnemonic(normalizedMnemonic, wordlist)) {
+    throw new Error('Invalid BIP39 mnemonic.');
+  }
+
+  const seed = mnemonicToSeedSync(normalizedMnemonic);
   const root = HDKey.fromMasterSeed(seed);
   const account = root.derive(DOGECOIN_DERIVATION_PATH);
 
@@ -44,7 +52,7 @@ export function createDogecoinWallet(): CreatedDogecoinWallet {
 
     return {
       address,
-      mnemonic,
+      mnemonic: normalizedMnemonic,
       wif,
       derivationPath: DOGECOIN_DERIVATION_PATH,
     };

@@ -2,261 +2,230 @@
 
 ## Project overview
 
-`doge-wallet-generator` is a small educational Dogecoin wallet laboratory written in Python.
+`doge-wallet-generator` is a multi-chain non-custodial wallet platform.
 
-The project intentionally exposes the mechanics that normal wallet software hides:
+The supported application architecture is:
 
-- secp256k1 key generation;
-- Dogecoin P2PKH addresses and WIF;
-- UTXO-based transaction construction;
-- transaction serialization;
-- local ECDSA signing;
-- fee and change calculation;
-- CPFP rescue transactions;
-- explicit raw-transaction broadcast;
-- a local browser UI on `127.0.0.1`.
+- Symfony 7.4 backend / blockchain API gateway;
+- React + TypeScript + Vite frontend;
+- browser-local wallet creation and transaction signing;
+- DOGE mainnet and BTC mainnet runtime adapters;
+- Nginx + PHP-FPM;
+- Docker Compose;
+- GitHub Actions.
 
-The primary goal is **understandability and correctness**, not production-wallet feature completeness.
+The original educational implementation has been retired from the application runtime. Do not introduce a parallel wallet implementation or an alternate signing path outside the supported React/Symfony architecture.
 
-This repository currently targets Dogecoin **mainnet legacy P2PKH (`D...`)** transactions.
+Before architecture work, read:
 
-## Target architecture and migration
-
-The repository is now being migrated incrementally toward a production-oriented multi-chain wallet platform implemented as a Symfony modular monolith.
-
-Before making migration-related changes, read:
-
+- `README.md`;
 - `docs/architecture/ADR-001-modular-monolith.md`;
-- `docs/architecture/MIGRATION_PLAN.md`;
-- the relevant prompt under `docs/agent-prompts/`.
+- `docs/architecture/MODULE_BOUNDARIES.md`;
+- `docs/architecture/ADAPTER_REGISTRY.md`;
+- `docs/architecture/MIGRATION_PLAN.md`.
 
-Target stack:
+## Core architecture rules
 
-- PHP 8.4;
-- Symfony 7.4 LTS;
-- PostgreSQL;
-- Redis;
-- RabbitMQ through Symfony Messenger;
-- React + TypeScript + Vite;
-- Nginx + PHP-FPM.
-
-Migration rules are mandatory:
-
-1. **No big-bang rewrite.** Keep the working Python implementation until equivalent Symfony behavior is covered by parity tests.
-2. **Do not delete Python reference code as part of bootstrap/refactoring work.** Runtime retirement requires an explicit migration step.
-3. **One monolith may have multiple processes.** PHP-FPM and Messenger consumers use the same Symfony codebase and deployable image; separate worker processes do not imply microservices.
-4. **Keep module boundaries explicit.** Initial modules are `Wallet`, `Asset`, `Transaction`, `Blockchain`, `Signer`, and `Indexer`.
-5. **Domain code is framework-agnostic.** It must not depend directly on Symfony, Doctrine, Redis, RabbitMQ, HTTP clients, or provider SDKs.
-6. **PostgreSQL is authoritative for financial workflow state.** RabbitMQ is transport, not the source of truth.
-7. **Use explicit concurrency controls.** UTXO reservation, idempotency, transaction state transitions, and later nonce management must be designed for multiple concurrent workers.
-8. **Do not store plaintext WIF/private keys/seed phrases in production persistence.** Any future custodial signing model requires a dedicated signing boundary and an explicit architecture/security decision.
-9. **Do not blindly port educational custom cryptography into the production path.** Preserve it as reference/test material until trusted cryptographic dependencies and signing boundaries are deliberately selected.
-10. **Normal reads stay synchronous.** Do not route ordinary wallet/balance reads through RabbitMQ; use Redis/PostgreSQL read models and asynchronous synchronization behind them.
-
-## Important files
-
-- `doge_wallet.py` — crypto primitives, wallet generation, transaction building/signing.
-- `build_cpfp.py` — Child-Pays-For-Parent transaction builder.
-- `blockcypher_transactions.py` — TXID-based parent lookup, raw-byte verification, and CPFP output resolution.
-- `broadcast_blockcypher.py` — BlockCypher raw transaction broadcaster.
-- `broadcast_blockchair.py` — alternative broadcaster.
-- `balance_page.py` — public-address balance checker page.
-- `web_app.py` — local browser UI and local HTTP API.
-- `README.md` — CLI/project documentation.
-- `WEB_UI.md` — web UI documentation.
+1. **Keep the platform non-custodial.** Wallet creation, key derivation and transaction signing stay in the browser.
+2. **Symfony is a blockchain API gateway, not a signer.** It may receive public addresses, public transaction data and already-signed raw transactions, never wallet secrets.
+3. **Keep module boundaries explicit.** Backend modules are `Wallet`, `Asset`, `Transaction`, `Blockchain`, `Signer`, and `Indexer`; only create layers/directories that have a concrete role.
+4. **Domain code is framework-agnostic.** It must not depend directly on Symfony, Doctrine, Redis, RabbitMQ, HTTP clients or provider SDKs.
+5. **Presentation does not import Infrastructure.** Application owns ports/capabilities; Infrastructure implements them.
+6. **Do not force every chain into one universal wallet/blockchain interface.** UTXO, EVM and TRON semantics differ. Model concrete capabilities.
+7. **Runtime lookup fails closed.** Unknown or unimplemented chain/network/asset routes must not resolve to another asset's adapter.
+8. **Do not add persistence or asynchronous infrastructure without a concrete runtime requirement.** PostgreSQL, Redis, RabbitMQ and Messenger are not required by the current V1 runtime.
 
 ## Security invariants
 
 These rules are mandatory.
 
-1. **Never transmit a WIF or private key to an external service.**
-   Private keys may move only between the user's browser and the local Python process on `127.0.0.1`.
+1. **Seed phrases, private keys and WIF never reach Symfony.**
+   They remain browser-local and may exist only in active in-memory wallet/transfer state.
 
-2. **Never log private keys or WIF values.**
-   Do not include them in HTTP logs, exceptions, debug output, telemetry, screenshots, fixtures, examples, or test vectors intended for real funds.
+2. **Do not persist plaintext signing material.**
+   Never write seed/private key/WIF to `localStorage`, `sessionStorage`, IndexedDB, cookies, databases, analytics, application files or telemetry.
 
-3. **Never persist secrets automatically.**
-   The web app must not save WIF/private keys to cookies, `localStorage`, `sessionStorage`, databases, analytics, or application files.
+3. **Do not log signing material.**
+   Do not include secrets in HTTP logs, exceptions, debug output, screenshots, fixtures tied to real funds or support examples.
 
 4. **Broadcast only signed public transaction bytes.**
-   External relay APIs may receive raw signed transactions, never signing material.
+   Provider/node APIs may receive raw signed transactions, never signing material.
 
-5. **Keep the web server local by default.**
-   `web_app.py` must bind to `127.0.0.1`, not `0.0.0.0`, unless a future change explicitly introduces and documents a secure remote-access model.
+5. **Signing and broadcast remain separate operations.**
+   Building/signing a transaction must never automatically publish it. Broadcast is a distinct irreversible user action after human-readable review.
 
-6. **Broadcast must remain explicit and separate from signing.**
-   Building/signing a transaction must never automatically publish it. The broadcast action may live in the same human-readable transaction result card, but it must remain a distinct irreversible user action with explicit confirmation.
+6. **Keep secret-bearing sessions ephemeral.**
+   Refreshing or closing the tab may clear an unlocked wallet session. Only explicitly non-secret preferences such as language may be persisted.
 
-7. **Do not weaken browser protections casually.**
-   Preserve the local request token, `Cache-Control: no-store`, frame denial, restrictive CSP, and absence of permissive CORS.
+7. **Provider data is untrusted input.**
+   Validate addresses, UTXOs, scripts, amounts, transaction identities and response shapes before using provider metadata.
 
-8. **Treat the software as educational.**
-   Do not market or document it as audited, production-grade, or suitable for large balances.
+8. **Validate TXID locally.**
+   Calculate the transaction ID from locally signed raw bytes and compare it with the provider-returned identity after broadcast. Mismatches fail closed.
+
+Fixed public test vectors may use well-known deterministic mnemonics/WIFs only when they are clearly test-only and must never receive funds. Never commit real wallet secrets.
 
 ## Cryptocurrency correctness rules
 
-- Dogecoin fees are not serialized in a dedicated `fee` field. Fee is `sum(inputs) - sum(outputs)`.
-- Amounts must use integer koinu internally (`100,000,000` koinu = `1 DOGE`). Avoid floating-point arithmetic for money.
-- Never silently alter a destination address, amount, input outpoint, or change address.
-- Always show the user source, destination, amount, change, fee, serialized size, and locally calculated TXID before broadcast.
-- Prefer deriving values from canonical/public transaction data instead of asking the user to type values that can be resolved safely.
-- CPFP in the web UI is TXID-first: do not ask users to enter parent raw hex, vout, parent output value, parent fee, or parent size when those can be resolved automatically.
-- For CPFP, derive the source address locally from WIF, fetch only public parent transaction data, recompute the TXID from fetched raw bytes, and compare provider output values/scripts with the raw transaction before selecting a spend.
-- CPFP must refuse to build when the parent is already confirmed, is marked as a double spend, or has no unspent output controlled by the source wallet.
-- When multiple unspent parent outputs are controlled by the source wallet, deterministic automatic selection is preferred over exposing vout as routine UI. The current rule is to select the largest matching output.
-- Provider metadata must not silently override raw transaction bytes. If TXID, size, output value, output script, or fee validation disagrees, fail closed.
-- When adding RBF, use an explicit sequence value that signals opt-in RBF and document the behavior. Do not change sequence semantics implicitly.
-- Do not modify secp256k1, Base58Check, RIPEMD-160, RFC6979, DER, sighash, or transaction serialization code as part of unrelated UI/refactoring work.
-- Changes to cryptographic or serialization primitives require dedicated tests and a dedicated commit.
+- Amounts use integer smallest units internally: `koinu` for DOGE and `satoshi` for BTC. Never use floating-point arithmetic for money.
+- Network fee is derived from transaction inputs/outputs and serialized size; it is not a standalone field serialized into a UTXO transaction.
+- Never silently alter destination address, amount, input outpoint, change address, network or asset route.
+- DOGE and BTC currently spend confirmed UTXOs only.
+- Validate that selected UTXO scripts belong to the source address before signing.
+- Verify that the supplied WIF derives the selected source address before signing.
+- Human-readable review must expose source, destination, amount, fee rate, actual fee, change, serialized size and local TXID before broadcast.
+- Do not change secp256k1 signing options, Base58Check constants, derivation paths, DER encoding, sighash rules or transaction serialization as part of unrelated work.
+- Cryptographic/serialization changes require deterministic regression vectors and a narrowly scoped commit/PR.
+
+Current derivation paths:
+
+- DOGE mainnet legacy P2PKH: `m/44'/3'/0'/0/0`;
+- BTC mainnet legacy P2PKH: `m/44'/0'/0'/0/0`.
+
+## Adapter registry invariants
+
+Frontend:
+
+- every route marked live has its own registered `AssetRouteAdapter`;
+- every live route has the required `WalletNetworkAdapter`;
+- registry keys are unique;
+- DOGE resolves only to the Dogecoin runtime;
+- BTC resolves only to the Bitcoin runtime;
+- planned routes remain unregistered until implemented;
+- unknown route/network lookup fails closed;
+- wallet sessions are network-scoped;
+- secrets remain browser-memory-only.
+
+Backend:
+
+- `ChainAdapter` carries chain/network identity only;
+- behavior is exposed through capability interfaces such as balance, UTXO lookup, fee policy and raw-transaction broadcast;
+- registry keys are exact `chain:network` pairs and unique;
+- unknown chain/network lookup throws explicitly;
+- unsupported capabilities throw explicitly;
+- Application code must not import concrete Blockchain Infrastructure adapters.
+
+Do not bypass a registry with asset-symbol conditionals or fallback behavior.
 
 ## UI and product rules
 
-The web UI is bilingual:
+The UI is bilingual:
 
-- English (`en`)
-- Russian (`ru`)
+- English (`en`);
+- Russian (`ru`).
 
-All user-facing UI strings should go through the translation layer. Do not introduce new hard-coded English or Russian labels in feature code when an i18n key should be used.
+All user-facing strings should use the translation layer. Language preference may be stored in `localStorage`; signing secrets may not.
 
-Language preference may be stored in `localStorage`; **secrets may not**.
+Preserve the current product principles:
 
-Design direction:
+- modern, clear fintech-style interface;
+- wallet creation and watch-only connection are distinct;
+- transaction review is human-readable;
+- raw signed transaction bytes are application data, not the primary review UI;
+- successful/failed broadcast status stays tied to the originating transfer flow;
+- mobile layouts remain usable;
+- security warnings remain visible.
 
-- modern, clean fintech-style interface;
-- lighter than the original dark terminal-like UI;
-- clear visual hierarchy and generous spacing;
-- Dogecoin gold may be used as an accent, not as the entire palette;
-- the main workflow is a swipeable/scrollable three-step flow: `Wallet -> Send -> Rescue`;
-- Send and Rescue result cards contain their own explicit broadcast action after human-readable transaction review;
-- do not introduce a separate raw-hex Broadcast screen as the primary review flow;
-- serialized signed transaction bytes may remain internal application data, but the user-facing review surface must be human-readable;
-- CPFP's routine user-facing input is WIF + parent TXID + target package rate + optional child destination; resolved parent details belong in the result/review summary, not as manual form inputs;
-- successful or failed broadcast status belongs in the same transaction result card that initiated it;
-- the separate `/balance` page remains a public-address read-only flow and must never ask for WIF/private key;
-- mobile layouts must remain usable without horizontal form overflow;
-- security warnings must remain visible and understandable after visual redesigns.
-
-Do not sacrifice transaction review information for visual simplicity.
+Do not redesign the UI while performing unrelated backend, registry or cleanup work.
 
 ## Change discipline
 
-Keep commits narrowly scoped. Do not mix unrelated concerns.
+When working on a task:
 
-Good examples:
-
-- `feat(i18n): add Russian and English UI translations`
-- `style(web): modernize wallet UI and workflow carousel`
-- `docs: add project rules for coding agents`
-- `fix(tx): correct fee calculation for exact serialized size`
-- `feat(tx): add opt-in RBF support`
-
-Bad example:
-
-- one commit that changes cryptography, redesigns the UI, adds a dependency, and rewrites documentation.
-
-When working on a requested task:
-
-1. inspect the current implementation first;
+1. inspect the current implementation and architecture docs first;
 2. make the smallest coherent change;
-3. preserve compatibility unless the task explicitly changes behavior;
-4. update documentation when user-visible behavior changes;
-5. run the relevant tests before considering the change finished.
+3. preserve public API and wallet behavior unless the task explicitly changes them;
+4. keep signing, provider, UI and infrastructure concerns separate;
+5. update documentation when supported behavior or architecture changes;
+6. add regression coverage before removing an old safety net;
+7. run the relevant deterministic, architecture, build and backend checks before considering the change finished.
+
+Avoid generic `Service/`, `Helper/` or `Utils/` dumping grounds. Prefer explicit domain/application concepts and capability contracts.
 
 ## Dependencies
 
-The current Python reference implementation aims to work with Python 3.10+ and the standard library only.
+Frontend cryptographic behavior uses pinned audited/open-source primitives already present in `frontend/package.json`. Do not add or replace crypto dependencies casually.
 
-Do not introduce a new Python runtime dependency unless it provides a clear benefit that cannot reasonably be achieved with the current architecture. If adding one:
+Backend provider logic belongs behind Application capabilities/ports. Do not scatter provider-specific HTTP calls across controllers or domain code.
 
-- explain why it is needed;
-- pin/document it;
-- update setup instructions;
-- keep security-sensitive signing code local.
-
-The new Symfony backend has its own dependency policy defined by ADR-001 and migration prompts.
-
-Do not replace educational crypto code with a library merely to shorten the reference source unless the project direction explicitly changes.
+New dependencies must have a concrete reason, be pinned through the appropriate lock file and stay within the module/security boundaries.
 
 ## Testing requirements
 
-At minimum after changes to wallet/transaction code run:
+For frontend wallet/runtime changes run:
 
 ```bash
-python3 doge_wallet.py --self-test
+cd frontend
+npm ci
+npm run test:adapter-invariants
+npm run test:dogecoin-vector
+npm run test:bitcoin-vector
+npm run build
 ```
 
-After CPFP parent-resolution changes also run:
+For backend/adapter changes run:
 
 ```bash
-python3 blockcypher_transactions.py
+cd backend
+composer install
+composer test
+composer analyse
+composer cs:check
 ```
 
-For web UI changes also verify:
+For integrated platform changes also run from the repository root:
 
 ```bash
-python3 web_app.py --open
+docker compose config --quiet
+docker compose up -d --build
 ```
 
-and manually check:
+Then verify at minimum:
 
-- English and Russian language switching;
-- page reload preserves only non-secret preferences;
-- wallet generation still works;
-- `/balance` still works without WIF/private key;
-- WIF remains visually protected where appropriate;
-- transaction build remains separate from the explicit broadcast button;
-- Send and CPFP show human-readable summaries before broadcast is possible;
-- CPFP form does not ask for raw hex, vout, parent amount, parent fee, or parent size;
-- CPFP resolves those fields from TXID and shows the resolved values in the result summary;
-- confirmed parents are rejected before child construction;
-- successful/failed broadcast state renders inside the originating transaction result card;
-- no separate user-facing raw-hex Broadcast screen is introduced;
-- mobile-width layout is usable.
+- React application loads;
+- `GET /api/health` succeeds;
+- DOGE wallet creation works;
+- BTC wallet creation works;
+- DOGE build/sign/review remains separate from broadcast;
+- BTC build/sign/review remains separate from broadcast.
 
-For cryptographic changes, add or extend deterministic test vectors instead of relying only on a live mainnet transaction.
-
-When Symfony is introduced, its PHPUnit/static-analysis checks must be added to CI without removing the Python self-test until migration parity is complete.
+Use deterministic local vectors for cryptographic regression coverage. Do not depend on live mainnet transactions as the only test oracle.
 
 ## Secret/file hygiene
 
-Keep secret and generated transaction files out of Git. Existing ignore rules for `*.wif` and `*.tx` must not be removed without a strong reason.
+Keep secret and generated transaction files out of Git. Preserve repository ignore rules for `*.wif` and `*.tx`.
 
 Never commit:
 
 - a real WIF/private key;
-- seed phrases;
+- a real seed phrase;
 - exchange credentials/API tokens;
 - private wallet backups;
 - `.env` files containing secrets.
 
-Public addresses, TXIDs, public keys, and signed raw transactions are not private keys, but use real mainnet examples sparingly and clearly label them as public examples.
+Public addresses, TXIDs, public keys and already-signed raw transactions are public data, but use real mainnet examples sparingly.
 
 ## Network providers
 
-External explorers and broadcasters are infrastructure conveniences, not sources of wallet authority.
+External explorers/providers are infrastructure conveniences, not wallet authority.
 
-- A transaction should not depend conceptually on one explorer/provider.
 - Provider failures must not trigger re-signing or secret disclosure.
-- Locally calculated TXID must be compared with a provider-returned TXID when available.
-- Parent transaction raw bytes should be locally parsed/validated before provider metadata is trusted for CPFP selection.
-- Prefer adding provider adapters over scattering provider-specific HTTP logic throughout wallet code.
-
-Longer term, a local Dogecoin Core JSON-RPC backend is preferred for independent broadcast and chain inspection.
+- Validate provider response shapes and values.
+- Locally calculated TXID must be compared with provider-returned TXID when available.
+- Prefer provider adapters behind capabilities instead of direct provider calls from Application/Presentation.
+- A future own-node/RPC adapter should be swappable without changing browser signing behavior.
 
 ## Current roadmap
 
-The active platform migration roadmap is `docs/architecture/MIGRATION_PLAN.md`.
+Current supported live assets are DOGE mainnet and BTC mainnet legacy P2PKH.
 
-Near-term order:
+Near-term evolution may include:
 
-1. Symfony bootstrap beside Python;
-2. modular boundaries;
-3. PostgreSQL/Redis/RabbitMQ foundations;
-4. Dogecoin adapter;
-5. transaction engine and concurrency guarantees;
-6. React UI migration;
-7. Dogecoin Core/indexer;
-8. load testing and production hardening;
-9. Bitcoin, then Ethereum/EVM.
+1. Bitcoin SegWit/Taproot support with separate deterministic vectors;
+2. dynamic fee estimation;
+3. EVM/token adapters;
+4. optional indexer/cache/queue infrastructure when load or provider independence requires it;
+5. encrypted local browser vault;
+6. production hardening, observability and load testing.
 
-Roadmap items are guidance, not permission to bundle unrelated work into the current task.
+Roadmap items do not authorize bundling unrelated changes into the current task.

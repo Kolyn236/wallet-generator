@@ -5,13 +5,6 @@ on:
   pull_request:
 
 jobs:
-  python-reference:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run Dogecoin reference self-test
-        run: python3 doge_wallet.py --self-test
-
   symfony-backend:
     runs-on: ubuntu-latest
     defaults:
@@ -53,6 +46,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Run frontend adapter registry invariants
         run: npm run test:adapter-invariants
+      - name: Run Dogecoin deterministic vector
+        run: npm run test:dogecoin-vector
       - name: Run Bitcoin deterministic vector
         run: npm run test:bitcoin-vector
       - name: Build frontend
@@ -86,8 +81,8 @@ jobs:
               && curl --fail --silent --show-error -H 'Accept: application/json' http://localhost:8080/api/health >/dev/null \
               && curl --fail --silent --show-error -H 'Accept: application/json' -D /tmp/doge-fee-policy.headers -o /tmp/doge-fee-policy.json http://localhost:8080/api/chains/dogecoin/mainnet/fee-policy \
               && curl --fail --silent --show-error -H 'Accept: application/json' -D /tmp/btc-fee-policy.headers -o /tmp/btc-fee-policy.json http://localhost:8080/api/chains/bitcoin/mainnet/fee-policy \
-              && python3 -c "import json; data=json.load(open('/tmp/doge-fee-policy.json')); assert data['recommendedRate'] == '0.01234567'; assert data['unit'] == 'DOGE/kB'" \
-              && python3 -c "import json; data=json.load(open('/tmp/btc-fee-policy.json')); assert data['recommendedRate'] == '0.00023456'; assert data['unit'] == 'BTC/kB'"; then
+              && node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('/tmp/doge-fee-policy.json','utf8')); if (data.recommendedRate !== '0.01234567' || data.unit !== 'DOGE/kB') throw new Error('Unexpected DOGE fee policy: '+JSON.stringify(data));" \
+              && node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('/tmp/btc-fee-policy.json','utf8')); if (data.recommendedRate !== '0.00023456' || data.unit !== 'BTC/kB') throw new Error('Unexpected BTC fee policy: '+JSON.stringify(data));"; then
               exit 0
             fi
             sleep 1

@@ -1,85 +1,73 @@
-# Migration plan: Python Doge Wallet Lab -> Symfony Wallet Platform
+# Migration plan: Wallet Platform
 
-## Goal
-Evolve the repository incrementally into a production-oriented modular monolith while keeping the existing Python Dogecoin flow usable as a reference implementation during the migration.
+## Status
 
-## Target stack
+The runtime migration is complete.
 
-- PHP 8.4
-- Symfony 7.4 LTS
-- PostgreSQL
-- Redis
-- RabbitMQ + Symfony Messenger
-- React + TypeScript + Vite
-- Nginx + PHP-FPM
-- Docker Compose locally
-- GitHub Actions CI
-- Prometheus/Grafana, OpenTelemetry and Sentry later in the production-readiness phase
+The project originally began as an educational Dogecoin wallet lab. The supported application is now the Symfony + React/TypeScript platform, and the legacy runtime has passed its retirement milestone. Historical source remains available through Git history rather than as a second runnable implementation.
 
-## Phase 1 — Symfony bootstrap
+## Supported platform
 
-Create `backend/` with a minimal Symfony application. Add health endpoint, PHPUnit, static analysis, coding standards and Docker development environment. Keep all Python files untouched.
+- PHP 8.4;
+- Symfony 7.4 LTS;
+- React + TypeScript + Vite;
+- Nginx + PHP-FPM;
+- Docker Compose;
+- GitHub Actions;
+- browser-local DOGE/BTC wallet creation and signing;
+- Symfony blockchain API gateway;
+- capability-based chain/network adapters.
 
-Acceptance criteria:
+PostgreSQL, Redis and RabbitMQ are not required by the current V1 runtime. They remain possible future infrastructure when persistence, indexing, rate limiting or asynchronous processing has a concrete requirement.
 
-- `docker compose up` starts PHP, Nginx, PostgreSQL, Redis and RabbitMQ;
-- `GET /api/health` returns success;
-- PHPUnit and static analysis run in CI;
-- no DOGE behavior has been removed or changed.
+## Completed migration milestones
 
-## Phase 2 — Modular boundaries
+### 1. Symfony bootstrap and module boundaries
 
-Create empty module skeletons for `Wallet`, `Asset`, `Transaction`, `Blockchain`, `Signer`, `Indexer`. Establish dependency rules and architecture tests.
+The repository has a Symfony backend with health endpoint, tests, static analysis, coding standards, Docker integration and architecture boundary tests.
 
-Acceptance criteria:
+### 2. React application shell
 
-- Domain code has no framework/infrastructure dependencies;
-- controllers contain transport concerns only;
-- application handlers orchestrate use cases;
-- provider-specific code lives under Infrastructure.
+The browser UI is implemented in React/TypeScript and served through the integrated Nginx platform.
 
-## Phase 3 — Persistence and read model
+### 3. Browser-local Dogecoin runtime
 
-Introduce Doctrine DBAL/ORM where appropriate and migrations for wallets, addresses, assets, balances, transactions, UTXOs, idempotency keys, outbox messages and provider health.
+DOGE wallet creation, address validation, UTXO transaction construction/signing and review happen in browser memory. Symfony handles public chain data and signed-transaction broadcast only.
 
-Do not persist plaintext private keys, WIFs or seed phrases.
+### 4. Browser-local Bitcoin runtime
 
-## Phase 4 — Messenger + RabbitMQ
+BTC mainnet legacy P2PKH wallet creation/signing follows the same non-custodial boundary while keeping Bitcoin-specific constants and serialization isolated.
 
-Configure transports `transactions`, `blockchain`, `notifications` and failed-message handling. Add worker containers using the same backend image.
+### 5. Normalized asset catalog and adapter registries
 
-Start with infrastructure only; do not make every request asynchronous.
+Frontend routes and wallet-network behavior are registry-driven. Backend chain behavior is exposed through capability-based adapters keyed by exact chain/network identity. Unknown and planned routes fail closed.
 
-## Phase 5 — Dogecoin adapter
+### 6. Deterministic regression coverage
 
-Implement chain-neutral ports and a Dogecoin adapter. First migrate read-only behavior: address validation, balance/UTXO lookup and provider abstraction. Then migrate transaction construction/broadcast with deterministic parity tests against the Python reference.
+DOGE and BTC derivation/signing are protected by deterministic TypeScript vectors. Adapter invariants are enforced in both frontend and backend CI.
 
-The production path must not blindly copy custom educational cryptography without an explicit review of trusted cryptographic dependencies and signing boundaries.
+### 7. Legacy runtime retirement
 
-## Phase 6 — Transaction engine
+The obsolete application source, alternate local UI/documentation and CI runtime have been removed. The supported development and CI workflows no longer require a second language runtime.
 
-Add:
+## Post-retirement rules
 
-- multi-input UTXO selection;
-- UTXO reservation;
-- transaction state machine;
-- idempotent send API;
-- transactional outbox;
-- broadcast retries;
-- confirmation tracking.
+- React/TypeScript is authoritative for browser wallet creation and signing.
+- Symfony is authoritative for the supported blockchain gateway/API layer.
+- Seed/private key/WIF stays browser-local and never enters Symfony.
+- Signing and broadcast remain separate explicit operations.
+- Deterministic TypeScript vectors are the regression oracle for current DOGE/BTC signers.
+- Runtime integrations go through the frontend/backend adapter registries.
+- Unknown or unimplemented routes fail closed.
+- Historical implementation details should be recovered from Git history when needed rather than restored as a parallel runtime.
 
-## Phase 7 — React UI
+## Next platform phases
 
-Move the current bilingual UI to React/TypeScript against stable Symfony APIs. Preserve human-readable review-before-broadcast behavior and RU/EN localization.
+Future work may include:
 
-## Phase 8 — Own Dogecoin node and indexer
-
-Add Dogecoin Core JSON-RPC provider and make third-party providers fallbacks. Implement synchronization/read models so balance requests do not fan out to external providers.
-
-## Phase 9 — Load and production readiness
-
-Load-test read/write scenarios at 300 RPS and above. Add rate limiting, observability, backups, secrets management, deployment runbooks, recovery procedures and security review.
-
-## Phase 10 — Additional chains
-
-Add Bitcoin next to validate the shared UTXO abstractions, then Ethereum/EVM to validate that the architecture does not assume UTXO semantics everywhere.
+1. Bitcoin SegWit/Taproot and dynamic fee estimation;
+2. EVM and token routes with chain-family-specific capabilities;
+3. optional own-node/indexer infrastructure;
+4. persistence/cache/queue components only when product/load requirements justify them;
+5. encrypted browser-local vault UX;
+6. observability, security review, recovery runbooks and load testing at production targets.

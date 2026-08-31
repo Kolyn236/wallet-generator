@@ -198,7 +198,7 @@ Backend tests verify that:
 - a Dogecoin use case cannot silently use the Bitcoin adapter and vice versa;
 - Presentation/Application dependency direction does not bypass Infrastructure boundaries.
 
-CI runs these guardrails explicitly in addition to the existing full PHPUnit suite, PHPStan, PHP-CS-Fixer, frontend TypeScript build, Bitcoin deterministic vector, Docker smoke tests and the Python Dogecoin reference self-test.
+CI runs these guardrails explicitly in addition to the full PHPUnit suite, PHPStan, PHP-CS-Fixer, frontend TypeScript build, Dogecoin and Bitcoin deterministic vectors, Docker smoke tests and the platform Nginx image build.
 
 ## Adding a future live route
 

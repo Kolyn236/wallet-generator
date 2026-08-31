@@ -33,7 +33,7 @@ The focused JSON-RPC client uses only the methods needed by the current backend 
 
 Every Ethereum operation verifies that the configured provider reports chain ID `1`. Another EVM chain fails closed with `provider_wrong_chain`.
 
-Provider responses are treated as untrusted: JSON-RPC shape/id/error fields, canonical hex quantities and broadcast transaction hashes are validated before use. EVM quantities are converted exactly with GMP and are exposed through Application/HTTP boundaries as canonical decimal strings; they are never cast to PHP `int` or float.
+Provider responses are treated as untrusted: JSON-RPC shape/id/error fields, canonical hex quantities and broadcast transaction hashes are validated before use. EVM quantities are converted exactly with decimal-string arithmetic and are exposed through Application/HTTP boundaries as canonical decimal strings; they are never cast to PHP `int` or float.
 
 The EIP-1559 wallet policy uses the next base fee from `eth_feeHistory`, the provider's 50th-percentile priority-fee reward from the latest returned block, and computes:
 

@@ -30,10 +30,12 @@ The frontend is multi-asset and network-aware:
 
 - DOGE / Dogecoin mainnet — live;
 - BTC / Bitcoin mainnet — live for legacy P2PKH (`1...`) addresses;
-- ETH / Ethereum mainnet — planned;
+- ETH / Ethereum mainnet — frontend planned; backend Ethereum Mainnet RPC/capability adapter implemented;
 - USDT with ERC-20 and TRC-20 routes — planned.
 
 DOGE and BTC can both create wallets locally in browser memory, attach existing public addresses in watch-only mode, load confirmed balance/UTXOs, build and sign legacy P2PKH transactions locally, review fee/change/TXID and explicitly broadcast the already-signed raw transaction through Symfony.
+
+The Ethereum backend can now validate Ethereum addresses, read native ETH balances, obtain a pending nonce, estimate gas for a public transaction intent, produce an EIP-1559 fee quote and broadcast an already-signed raw Ethereum transaction. It never creates or receives an Ethereum private key and does not make ETH live in the frontend yet.
 
 Bitcoin wallet creation uses BIP39 + BIP44 with derivation path `m/44'/0'/0'/0/0`. Dogecoin uses `m/44'/3'/0'/0/0`. The first BTC integration intentionally supports mainnet legacy P2PKH only; SegWit (`bc1...`) is a separate follow-up because it changes address/script and transaction-signing rules.
 
@@ -46,8 +48,8 @@ Requirements:
 Start the local platform:
 
 ```bash
-git clone https://github.com/Kolyn236/doge-wallet-generator.git
-cd doge-wallet-generator
+git clone https://github.com/Kolyn236/wallet-generator.git
+cd wallet-generator
 cp .env.example .env
 docker compose up --build
 ```
@@ -69,7 +71,10 @@ Operator defaults are read by Symfony from runtime environment variables, so cha
 ```dotenv
 DOGE_RECOMMENDED_FEE_RATE=0.01
 BTC_RECOMMENDED_FEE_RATE=0.00010000
+ETHEREUM_RPC_URL=
 ```
+
+`ETHEREUM_RPC_URL` is required only when Ethereum endpoints are used. Configure it with an Ethereum Mainnet JSON-RPC endpoint through deployment secrets/runtime environment. Do not commit a real provider key. The backend verifies `eth_chainId == 1` before Ethereum state/broadcast operations and fails closed on another EVM network.
 
 The BTC default is expressed as `BTC/kB`; `0.00010000 BTC/kB` equals `10,000 sat/kB`, or about `10 sat/vB` for legacy transactions. This is currently an operator-controlled default, **not a live mempool fee estimator**. The user can override the rate in the review flow.
 
@@ -79,15 +84,16 @@ For Docker Compose, put overrides in the repository-root `.env` and recreate/res
 # .env
 DOGE_RECOMMENDED_FEE_RATE=0.02
 BTC_RECOMMENDED_FEE_RATE=0.00020000
+ETHEREUM_RPC_URL=https://your-mainnet-provider.example/secret
 
 docker compose up -d --force-recreate php
 ```
 
-React fetches the current fee policies from Symfony with `cache: no-store`.
+React fetches the current UTXO fee policies from Symfony with `cache: no-store`.
 
 ## Stack
 
-- PHP 8.4;
+- PHP 8.4 with GMP for exact EVM integer arithmetic;
 - Symfony 7.4 LTS;
 - React 19 + TypeScript;
 - Vite;
@@ -129,9 +135,11 @@ Rules:
 - existing DOGE/BTC senders may be used by entering the matching WIF directly in the transfer form; that WIF remains browser-local;
 - external providers receive public addresses/transaction data or already-signed raw transaction bytes only;
 - signing and broadcast are explicit separate operations;
-- amounts use integer smallest units internally (`koinu` / `satoshi`);
+- DOGE/BTC amounts use integer smallest units internally (`koinu` / `satoshi`);
+- Ethereum wei/nonce/gas/fee quantities cross Application/HTTP boundaries as canonical decimal strings and are never converted through PHP float or signed integer arithmetic;
 - DOGE and BTC transfers spend only confirmed UTXOs and validate that each selected UTXO script belongs to the specified source address before signing;
-- the TXID is calculated locally and compared with the provider-returned TXID after broadcast.
+- DOGE/BTC TXIDs are calculated locally and compared with the provider-returned TXID after broadcast;
+- Ethereum broadcast accepts only the signed raw transaction; the future browser signer will calculate its local Ethereum transaction hash independently.
 
 ## UTXO transfer flow
 
@@ -181,6 +189,44 @@ Blockchain provider
 
 A custom fee rate is explicitly shown as a user override. Too-low rates may delay or prevent relay; too-high rates may overpay.
 
+## Ethereum backend flow
+
+The Ethereum backend is a public-state gateway for a future browser-local EIP-1559 signer.
+
+```text
+Browser public intent
+(from / to / valueWei / data)
+    |
+    v
+Symfony -> Ethereum Mainnet JSON-RPC
+    |
+    +--> verify chainId = 1
+    +--> sender ETH balance
+    +--> pending nonce
+    +--> eth_estimateGas
+    +--> eth_feeHistory
+    |
+    v
+Public preparation snapshot
+    |
+    v
+future browser-local signing
+    |
+    v
+signed raw Type-2 transaction
+    |
+    v
+Symfony -> eth_sendRawTransaction
+```
+
+The EIP-1559 quote currently uses a deterministic wallet policy based on `eth_feeHistory`:
+
+```text
+maxFeePerGas = 2 * baseFeePerGas + maxPriorityFeePerGas
+```
+
+This formula is a wallet fee-selection policy, not an Ethereum protocol constant. If required EIP-1559 data or gas estimation is unavailable, preparation fails explicitly instead of falling back to a legacy `gasPrice` transaction model.
+
 ## Backend API
 
 Dogecoin:
@@ -201,9 +247,17 @@ GET  /api/chains/bitcoin/mainnet/addresses/{address}/utxos
 POST /api/chains/bitcoin/mainnet/transactions/broadcast
 ```
 
-Balance/UTXO endpoints accept public addresses only. Broadcast endpoints accept only signed raw transactions, recompute the local TXID and require the provider response to return the same transaction identity.
+Ethereum Mainnet backend:
 
-The current infrastructure adapters use BlockCypher. Provider-specific HTTP logic stays behind application capabilities/ports so a node/RPC adapter can replace it without changing browser signing rules.
+```text
+GET  /api/chains/ethereum/mainnet/addresses/{address}/balance
+POST /api/chains/ethereum/mainnet/transactions/prepare
+POST /api/chains/ethereum/mainnet/transactions/broadcast
+```
+
+The Ethereum prepare endpoint accepts only public `from`, `to`, `valueWei` and `data` fields. The broadcast endpoint accepts only `rawTransaction`. Neither accepts mnemonic/private-key/WIF fields and Symfony never signs Ethereum transactions.
+
+DOGE/BTC balance/UTXO endpoints accept public addresses only. Broadcast endpoints accept only signed raw transactions. Provider-specific HTTP/RPC logic stays behind application capabilities so providers can be replaced without changing browser signing rules.
 
 ## Frontend flow
 
@@ -231,7 +285,7 @@ Local sign/review
 Explicit broadcast
 ```
 
-For token assets the network is a first-class choice. For example USDT already exposes both `ERC-20` and `TRC-20` in the UI model even though those adapters are not implemented yet.
+For token assets the network is a first-class choice. For example USDT already exposes both `ERC-20` and `TRC-20` in the UI model even though those adapters are not implemented yet. Ethereum backend availability does not make the ETH frontend route live by itself.
 
 ## Adapter registries
 
@@ -240,6 +294,7 @@ Runtime behavior is selected explicitly and fails closed:
 - frontend wallet behavior is registered by network through `WalletNetworkAdapter`;
 - frontend transfer behavior is registered by asset route through `AssetRouteAdapter`;
 - backend blockchain behavior is registered by exact `chain:network` key through capability-based `ChainAdapter` implementations;
+- backend `ethereum:mainnet` exposes EVM capabilities and intentionally does not expose UTXO capabilities;
 - unknown, planned or unimplemented routes do not fall back to DOGE, BTC or another asset.
 
 See `docs/architecture/ADAPTER_REGISTRY.md`.
@@ -280,6 +335,8 @@ Architecture decisions:
 
 ### Symfony backend
 
+The PHP runtime/test environment needs the GMP extension for exact EVM integer arithmetic.
+
 ```bash
 cd backend
 composer install
@@ -287,6 +344,8 @@ composer test
 composer analyse
 composer cs:check
 ```
+
+Ethereum tests use deterministic fake transports/fixtures; CI does not call a public Ethereum RPC endpoint and never requires funded accounts.
 
 ### React frontend
 
@@ -321,6 +380,7 @@ Completed platform milestones include:
 3. client-side DOGE wallet creation/signing + blockchain gateway;
 4. client-side BTC legacy P2PKH wallet creation/signing + blockchain gateway;
 5. frontend/backend adapter registries with fail-closed invariant tests;
-6. deterministic DOGE and BTC browser derivation/signing vectors.
+6. deterministic DOGE and BTC browser derivation/signing vectors;
+7. Ethereum Mainnet backend RPC/capability adapter for public state, EIP-1559 preparation and signed-raw broadcast.
 
-Next roadmap items include Bitcoin SegWit and fee-estimation improvements, EVM/token adapters, optional cache/indexer infrastructure when load requires it, an encrypted local browser vault, and production hardening/observability/load testing.
+Next roadmap items include the browser-local Ethereum wallet/signing flow, USDT ERC-20, Bitcoin SegWit and fee-estimation improvements, optional cache/indexer infrastructure when load requires it, an encrypted local browser vault, and production hardening/observability/load testing.

@@ -107,6 +107,20 @@ final class ModuleBoundariesTest extends TestCase
         }
     }
 
+    public function testBlockchainApplicationDoesNotImportInfrastructureDirectly(): void
+    {
+        $applicationRoot = self::sourceRoot().'/Blockchain/Application';
+        self::assertDirectoryExists($applicationRoot);
+
+        foreach (self::phpFiles($applicationRoot) as $file) {
+            self::assertStringNotContainsString(
+                'App\\Blockchain\\Infrastructure\\',
+                self::read($file),
+                \sprintf('%s must depend on Blockchain Application contracts, not concrete adapters.', $file->getPathname()),
+            );
+        }
+    }
+
     public function testGenericDumpingGroundDirectoriesAreNotIntroduced(): void
     {
         $iterator = new \RecursiveIteratorIterator(

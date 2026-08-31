@@ -11,6 +11,7 @@ use App\Blockchain\Application\BitcoinTransactionBroadcaster;
 use App\Blockchain\Application\BitcoinUtxoProvider;
 use App\Blockchain\Application\BroadcastBitcoinTransaction;
 use App\Blockchain\Application\BroadcastDogecoinTransaction;
+use App\Blockchain\Application\ChainAdapterNotFound;
 use App\Blockchain\Application\ChainAdapterRegistry;
 use App\Blockchain\Application\DogecoinBalanceProvider;
 use App\Blockchain\Application\DogecoinFeePolicy;
@@ -54,6 +55,26 @@ final class ChainAdaptersTest extends TestCase
             self::assertInstanceOf(UtxoFeeRateCapability::class, $adapter);
             self::assertInstanceOf(RawTransactionBroadcastCapability::class, $adapter);
         }
+    }
+
+    public function testDogecoinUseCaseDoesNotFallbackToBitcoinAdapter(): void
+    {
+        $registry = new ChainAdapterRegistry([self::bitcoinAdapter()]);
+
+        $this->expectException(ChainAdapterNotFound::class);
+        $this->expectExceptionMessage('dogecoin:mainnet');
+
+        (new GetDogecoinAddressBalance($registry))(self::DOGE_ADDRESS);
+    }
+
+    public function testBitcoinUseCaseDoesNotFallbackToDogecoinAdapter(): void
+    {
+        $registry = new ChainAdapterRegistry([self::dogecoinAdapter()]);
+
+        $this->expectException(ChainAdapterNotFound::class);
+        $this->expectExceptionMessage('bitcoin:mainnet');
+
+        (new GetBitcoinAddressBalance($registry))(self::BTC_ADDRESS);
     }
 
     public function testDogecoinAndBitcoinUseCasesDelegateToTheirOwnAdapters(): void

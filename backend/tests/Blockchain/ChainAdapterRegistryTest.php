@@ -24,6 +24,16 @@ final class ChainAdapterRegistryTest extends TestCase
         self::assertSame($bitcoin, $registry->get('bitcoin', 'mainnet'));
     }
 
+    public function testSameChainDifferentNetworkKeysRemainDistinct(): void
+    {
+        $mainnet = self::adapter('dogecoin', 'mainnet');
+        $testnet = self::adapter('dogecoin', 'testnet');
+        $registry = new ChainAdapterRegistry([$mainnet, $testnet]);
+
+        self::assertSame($mainnet, $registry->get('dogecoin', 'mainnet'));
+        self::assertSame($testnet, $registry->get('dogecoin', 'testnet'));
+    }
+
     public function testRejectsDuplicateChainAndNetworkRegistration(): void
     {
         $this->expectException(DuplicateChainAdapter::class);
@@ -43,6 +53,32 @@ final class ChainAdapterRegistryTest extends TestCase
         $this->expectExceptionMessage('bitcoin:mainnet');
 
         $registry->get('bitcoin', 'mainnet');
+    }
+
+    public function testUnknownChainDoesNotFallbackToKnownAdapter(): void
+    {
+        $registry = new ChainAdapterRegistry([
+            self::adapter('dogecoin', 'mainnet'),
+            self::adapter('bitcoin', 'mainnet'),
+        ]);
+
+        $this->expectException(ChainAdapterNotFound::class);
+        $this->expectExceptionMessage('litecoin:mainnet');
+
+        $registry->get('litecoin', 'mainnet');
+    }
+
+    public function testUnknownNetworkDoesNotFallbackToKnownAdapter(): void
+    {
+        $registry = new ChainAdapterRegistry([
+            self::adapter('dogecoin', 'mainnet'),
+            self::adapter('bitcoin', 'mainnet'),
+        ]);
+
+        $this->expectException(ChainAdapterNotFound::class);
+        $this->expectExceptionMessage('dogecoin:testnet');
+
+        $registry->get('dogecoin', 'testnet');
     }
 
     public function testUnsupportedCapabilityFailsClosed(): void

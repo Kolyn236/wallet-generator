@@ -26,9 +26,11 @@ Chain family is intentionally not a universal transaction interface. UTXO, EVM a
 
 ### Network
 
-A **Network** is a concrete environment of one chain, such as `dogecoin-mainnet` or `bitcoin-mainnet`.
+A **Network** is a concrete environment of one chain, such as `dogecoin-mainnet`, `bitcoin-mainnet` or future `ethereum-mainnet`.
 
-Wallet identity and session state are network-scoped. A network key must not silently fall back to another network or chain.
+Wallet identity and active browser wallet sessions are network-scoped. This is important for account-based chains: one Ethereum account/address can own multiple assets without creating a second wallet identity.
+
+A network key must not silently fall back to another network or chain.
 
 ### Asset
 
@@ -50,23 +52,50 @@ Examples in the catalog:
 | `usdt-ethereum-mainnet-erc20` | USDT | Ethereum mainnet | token / ERC-20 | planned metadata only |
 | `usdt-tron-mainnet-trc20` | USDT | Tron mainnet | token / TRC-20 | planned metadata only |
 
-A route is the correct runtime selection key because `USDT on Ethereum` and `USDT on Tron` are different execution paths even though the displayed asset symbol is the same.
+A route is the correct runtime selection and balance key because `ETH on Ethereum`, `USDT on Ethereum` and `USDT on Tron` are different asset state/execution paths even when some of them share a wallet identity.
 
 ## Frontend runtime adapters
 
-The frontend separates wallet/network behavior from asset-route behavior.
+The frontend separates wallet/network identity from asset-route state and behavior.
 
 ### `WalletNetworkAdapter`
 
-`WalletNetworkAdapter` owns behavior that belongs to a wallet on one network:
+`WalletNetworkAdapter` owns behavior that belongs to a wallet identity on one network:
 
 - network identity;
 - local wallet creation when supported;
 - public-address validation;
-- balance loading;
 - wallet/network capability metadata.
 
-Wallet sessions are keyed by `networkId`, not by asset symbol. This prevents an asset selection from accidentally reusing a wallet session from another network.
+It does **not** load or own an asset balance.
+
+Wallet sessions are keyed by `networkId`, not by asset symbol or asset route. A wallet session contains identity/session state such as the public address and connection mode. It deliberately contains no balance field.
+
+This allows the future Ethereum state to be represented as:
+
+```text
+ethereum-mainnet wallet session
+address: 0xABC...
+
+eth-ethereum-mainnet-native balance:       1.25 ETH
+usdt-ethereum-mainnet-erc20 balance:       500 USDT
+future usdc-ethereum-mainnet-erc20 balance: separate value
+```
+
+The asset routes share one Ethereum wallet identity while keeping independent balances.
+
+### Browser signing material
+
+The generic browser-created wallet model does not assume WIF. Signing material is discriminated explicitly:
+
+```text
+wif
+private-key
+```
+
+Current DOGE/BTC wallet adapters expose their existing WIF through `kind = wif`. Their route adapters explicitly narrow that kind before handing the value to the existing UTXO transfer runtime. Supplying incompatible signing material fails closed rather than being cast or treated as an optional WIF.
+
+Future Ethereum can use `kind = private-key` without changing the generic wallet identity contract.
 
 Secrets such as mnemonic/WIF/private key remain in browser memory only. Registry/session guardrails reject persistence through browser storage APIs. The existing language preference is the only intentional `localStorage` write.
 
@@ -78,23 +107,56 @@ Secrets such as mnemonic/WIF/private key remain in browser memory only. Registry
 - `assetId`;
 - `networkId`;
 - route-specific capability metadata;
+- asset balance loading;
 - route-specific transfer runtime/UI entry point.
 
 A route adapter may only register when its catalog asset/network identity matches and the required wallet-network adapter is registered.
 
+Current DOGE and BTC route adapters call their existing balance APIs. Their wallet-network adapters no longer know how to obtain an asset balance.
+
+### Asset-route balance state
+
+Frontend balance state is keyed by `routeId`, not `networkId`:
+
+```text
+assetRouteBalances[routeId]
+```
+
+Each stored balance also records the address it belongs to plus load status. The UI must not display a balance if that recorded address differs from the current wallet-session address.
+
+Changing the wallet identity on a network invalidates every asset-route balance on that network immediately. For a future Ethereum wallet change, both ETH and USDT/ERC-20 balances are therefore cleared together before any new balance request completes.
+
 ### Why ETH and ERC-20 share an Ethereum wallet
 
-When Ethereum support is implemented in the future, native ETH and ERC-20 assets on Ethereum should use the same Ethereum wallet/network identity because they use the same Ethereum account/address space.
+When Ethereum support is implemented, native ETH and ERC-20 assets on Ethereum use the same Ethereum wallet/network identity because they use the same Ethereum account/address space.
 
-That does **not** mean their asset routes are the same. Native ETH transfer behavior and an ERC-20 token transfer are different route-level operations.
+That does **not** mean their balances or asset routes are the same. Native ETH and an ERC-20 token each own route-scoped balance/runtime behavior.
 
 ### Why USDT ERC-20 and USDT TRC-20 are separate routes
 
 USDT is an asset, not a blockchain.
 
-`USDT ERC-20` is carried by Ethereum and would use an Ethereum wallet/network adapter. `USDT TRC-20` is carried by Tron and would use a Tron wallet/network adapter. They therefore require separate asset routes and separate route runtime behavior.
+`USDT ERC-20` is carried by Ethereum and will use the Ethereum wallet/network adapter. `USDT TRC-20` is carried by Tron and will use a Tron wallet/network adapter. They therefore require separate asset routes and separate route runtime behavior.
 
 Neither route is implemented today.
+
+## Route availability
+
+Runtime availability is asset-route-scoped, not asset-scoped.
+
+Current route state is:
+
+```text
+DOGE native        live
+BTC native         live
+ETH native         planned
+USDT ERC-20        planned
+USDT TRC-20        planned
+```
+
+The asset-level badge is derived from route state: an asset is shown as available when at least one of its routes is live. A selected planned route remains unavailable even if another route for the same asset becomes live later.
+
+`getDefaultAssetRoute(assetId)` prefers a live route when one exists; otherwise it returns the deterministic catalog default. The catalog does not depend on the runtime registry, so catalog metadata cannot silently become executable merely because another adapter is registered.
 
 ## Frontend fail-closed lookup
 
@@ -109,7 +171,7 @@ The registry rules are:
 5. unknown network lookup returns `null`;
 6. unknown asset-route lookup returns `null`;
 7. planned routes remain unregistered until their runtime is genuinely implemented;
-8. every route marked live by the current availability catalog must resolve to its own registered runtime adapter.
+8. every route marked live by the route-availability catalog must resolve to its own registered runtime adapter.
 
 There is deliberately no default adapter and no `else -> Dogecoin` path.
 
@@ -182,11 +244,15 @@ Frontend invariant tests verify that:
 
 - every currently live route has a registered route adapter and wallet-network adapter;
 - planned routes do not resolve to another runtime;
+- route availability remains explicit for DOGE, BTC, ETH and both USDT routes;
 - built-in registry keys are unique and duplicate registration throws;
 - unknown route/network keys fail closed;
 - DOGE resolves only to the Dogecoin runtime objects;
 - BTC resolves only to the Bitcoin runtime objects;
-- wallet sessions remain network-scoped;
+- wallet sessions remain network-scoped and do not own balances;
+- balances are keyed by asset route;
+- changing a network wallet invalidates every route balance on that network;
+- DOGE/BTC reject incompatible signing-material kinds;
 - wallet secrets are not persisted in browser storage.
 
 Backend tests verify that:
@@ -208,9 +274,9 @@ At minimum:
 
 1. define the chain/network/asset/route catalog metadata;
 2. implement/register the required `WalletNetworkAdapter`;
-3. implement/register the required `AssetRouteAdapter`;
+3. implement/register the required `AssetRouteAdapter`, including its asset-specific balance behavior;
 4. implement/register the backend chain adapter and only the capabilities that chain supports;
 5. add deterministic/runtime regression coverage appropriate to that chain;
-6. change availability to live only after the adapters exist.
+6. change that specific route's availability to live only after the adapters exist.
 
-If availability is changed first, the invariant tests should fail rather than expose a broken or incorrectly routed UI path.
+If route availability is changed first, the invariant tests should fail rather than expose a broken or incorrectly routed UI path.

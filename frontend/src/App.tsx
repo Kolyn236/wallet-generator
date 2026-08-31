@@ -14,6 +14,13 @@ import {
 import { getHealth } from './api';
 import { type Language, messages } from './i18n';
 import { adapterRegistry } from './runtime/adapterRegistry';
+import {
+  createAssetRouteBalances,
+  getAssetRouteBalance,
+  invalidateAssetRouteBalancesForNetwork,
+  withAssetRouteBalance,
+  type AssetRouteBalances,
+} from './runtime/assetRouteBalances';
 import type { BrowserCreatedWallet } from './runtime/WalletNetworkAdapter';
 import {
   createWalletSessions,
@@ -23,8 +30,7 @@ import {
 } from './runtime/walletSessions';
 
 type HealthState = 'checking' | 'online' | 'offline';
-type BalanceState = 'idle' | 'loading' | 'loaded' | 'error';
-type CopyState = 'none' | 'seed' | 'wif';
+type CopyState = 'none' | 'seed' | 'signing-material';
 
 const LANGUAGE_KEY = 'wallet-platform-language';
 
@@ -40,8 +46,8 @@ export function App() {
   const [assetId, setAssetId] = useState<AssetId>('doge');
   const [routeId, setRouteId] = useState<AssetRouteId>('doge-dogecoin-mainnet-native');
   const [sessions, setSessions] = useState<WalletSessions>(createWalletSessions);
+  const [routeBalances, setRouteBalances] = useState<AssetRouteBalances>(createAssetRouteBalances);
   const [existingAddress, setExistingAddress] = useState('');
-  const [balanceState, setBalanceState] = useState<BalanceState>('idle');
   const [showExistingForm, setShowExistingForm] = useState(false);
   const [addressError, setAddressError] = useState<'invalid' | 'balance' | null>(null);
   const [showBackupSecrets, setShowBackupSecrets] = useState(false);
@@ -56,6 +62,9 @@ export function App() {
   const walletAdapter = adapterRegistry.resolveWalletNetwork(route.networkId);
   const routeAdapter = adapterRegistry.resolveAssetRoute(route.id);
   const session = getWalletSession(sessions, route.networkId);
+  const routeBalance = getAssetRouteBalance(routeBalances, route.id);
+  const balanceState = routeBalance.status;
+  const displayedBalance = routeBalance.address === session.address ? routeBalance.balance : null;
   const connected = walletAdapter !== null && session.mode !== 'none' && session.address !== '';
   const createdWallet = walletAdapter !== null && session.mode === 'created'
     ? createdWalletRefs.current[route.networkId] ?? null
@@ -83,40 +92,58 @@ export function App() {
     return copy.checking;
   }, [copy, health]);
 
-  function selectAsset(nextAssetId: AssetId) {
-    setAssetId(nextAssetId);
-    setRouteId(getDefaultAssetRoute(nextAssetId).id);
+  function resetWalletUi() {
     setExistingAddress('');
     setShowExistingForm(false);
     setShowBackupSecrets(false);
     setCopyState('none');
     setAddressError(null);
-    setBalanceState('idle');
   }
 
-  async function refreshBalance(networkId: NetworkId, address: string): Promise<boolean> {
-    const adapter = adapterRegistry.resolveWalletNetwork(networkId);
-    if (!adapter) {
-      setBalanceState('error');
+  function selectAsset(nextAssetId: AssetId) {
+    setAssetId(nextAssetId);
+    setRouteId(getDefaultAssetRoute(nextAssetId).id);
+    resetWalletUi();
+  }
+
+  function selectRoute(nextRouteId: AssetRouteId) {
+    setRouteId(nextRouteId);
+    setAddressError(null);
+  }
+
+  async function refreshBalance(nextRouteId: AssetRouteId, address: string): Promise<boolean> {
+    const adapter = adapterRegistry.resolveAssetRoute(nextRouteId);
+    if (!adapter || !adapter.capabilities.balance) {
+      setRouteBalances((current) => withAssetRouteBalance(current, nextRouteId, {
+        address,
+        balance: null,
+        status: 'error',
+      }));
       setAddressError('balance');
       return false;
     }
 
-    setBalanceState('loading');
+    setRouteBalances((current) => withAssetRouteBalance(current, nextRouteId, {
+      address,
+      balance: null,
+      status: 'loading',
+    }));
     setAddressError(null);
 
     try {
       const result = await adapter.loadBalance(address);
-
-      setSessions((current) => withWalletSession(current, networkId, {
-        ...getWalletSession(current, networkId),
+      setRouteBalances((current) => withAssetRouteBalance(current, nextRouteId, {
         address: result.address,
         balance: result.balance,
+        status: 'loaded',
       }));
-      setBalanceState('loaded');
       return true;
     } catch {
-      setBalanceState('error');
+      setRouteBalances((current) => withAssetRouteBalance(current, nextRouteId, {
+        address,
+        balance: null,
+        status: 'error',
+      }));
       setAddressError('balance');
       return false;
     }
@@ -130,16 +157,14 @@ export function App() {
     createdWalletRefs.current[networkId] = wallet;
     setSessions((current) => withWalletSession(current, networkId, {
       address: wallet.address,
-      balance: '0.00000000',
       mode: 'created',
     }));
-    setExistingAddress('');
-    setShowExistingForm(false);
-    setShowBackupSecrets(false);
-    setCopyState('none');
-    setAddressError(null);
-    setBalanceState('loaded');
-    void refreshBalance(networkId, wallet.address);
+    setRouteBalances((current) => invalidateAssetRouteBalancesForNetwork(current, networkId));
+    resetWalletUi();
+
+    if (routeAdapter && routeAdapter.networkId === networkId) {
+      void refreshBalance(route.id, wallet.address);
+    }
   }
 
   async function specifyExistingWallet(event: FormEvent<HTMLFormElement>) {
@@ -152,24 +177,25 @@ export function App() {
       return;
     }
 
-    const loaded = await refreshBalance(walletAdapter.networkId, address);
-    if (!loaded) return;
-
     delete createdWalletRefs.current[walletAdapter.networkId];
     setSessions((current) => withWalletSession(current, walletAdapter.networkId, {
-      ...getWalletSession(current, walletAdapter.networkId),
       address,
       mode: 'watch-only',
     }));
+    setRouteBalances((current) => invalidateAssetRouteBalancesForNetwork(current, walletAdapter.networkId));
     setShowExistingForm(false);
     setShowBackupSecrets(false);
     setCopyState('none');
+
+    await refreshBalance(route.id, address);
   }
 
-  async function copySecret(kind: 'seed' | 'wif') {
+  async function copySecret(kind: 'seed' | 'signing-material') {
     if (!createdWallet || !navigator.clipboard) return;
 
-    const secret = kind === 'seed' ? createdWallet.mnemonic : createdWallet.wif;
+    const secret = kind === 'seed'
+      ? createdWallet.mnemonic
+      : createdWallet.signingMaterial.value;
     try {
       await navigator.clipboard.writeText(secret);
       setCopyState(kind);
@@ -205,6 +231,13 @@ export function App() {
     </section>
   );
 
+  const signingMaterialLabel = createdWallet?.signingMaterial.kind === 'private-key'
+    ? copy.privateKey
+    : copy.wif;
+  const copySigningMaterialLabel = createdWallet?.signingMaterial.kind === 'private-key'
+    ? copy.copyPrivateKey
+    : copy.copyWif;
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -229,15 +262,19 @@ export function App() {
               const candidateRoute = getDefaultAssetRoute(candidate.id);
               const candidateWalletAdapter = adapterRegistry.resolveWalletNetwork(candidateRoute.networkId);
               const candidateSession = getWalletSession(sessions, candidateRoute.networkId);
+              const candidateRouteBalance = getAssetRouteBalance(routeBalances, candidateRoute.id);
               const candidateConnected = candidateWalletAdapter !== null
                 && candidateSession.mode !== 'none'
                 && candidateSession.address !== '';
+              const candidateBalance = candidateRouteBalance.address === candidateSession.address
+                ? candidateRouteBalance.balance
+                : null;
               const candidateAvailability = getAssetAvailability(candidate.id);
               return (
                 <button key={candidate.id} type="button" className={`wallet-tile ${candidate.id === assetId ? 'active' : ''}`} onClick={() => selectAsset(candidate.id)}>
                   <div className="wallet-tile-top"><span className="asset-mark">{candidate.mark}</span><span className={`asset-status status-${candidateAvailability}`}>{candidateAvailability === 'ready-next' ? copy.firstIntegration : copy.planned}</span></div>
                   <div><strong>{candidate.symbol}</strong><small>{candidateRoute.standard}</small></div>
-                  <div className="tile-balance">{candidateConnected && candidateSession.balance !== null ? <strong>{candidateSession.balance} {candidate.symbol}</strong> : <span>{copy.noAddress}</span>}</div>
+                  <div className="tile-balance">{candidateConnected && candidateBalance !== null ? <strong>{candidateBalance} {candidate.symbol}</strong> : <span>{copy.noAddress}</span>}</div>
                 </button>
               );
             })}
@@ -268,7 +305,7 @@ export function App() {
               </div>
 
               <div className="wallet-balance-row">
-                <div><span className="muted-label">{copy.walletBalance}</span><strong>{walletAdapter && session.balance !== null ? `${session.balance} ${asset.symbol}` : `— ${asset.symbol}`}</strong></div>
+                <div><span className="muted-label">{copy.walletBalance}</span><strong>{walletAdapter && displayedBalance !== null ? `${displayedBalance} ${asset.symbol}` : `— ${asset.symbol}`}</strong></div>
                 <div className="wallet-empty-copy"><p>{walletAdapter && session.address ? session.address : copy.walletEmpty}</p><small>{copy.walletHint}</small></div>
               </div>
 
@@ -300,7 +337,7 @@ export function App() {
                   {connected && !showExistingForm && (
                     <div className="wallet-actions connected-wallet-actions">
                       <button type="button" className="primary-button" onClick={createWallet}>{copy.createWallet}</button>
-                      <button type="button" className="primary-button" onClick={() => session.address && void refreshBalance(route.networkId, session.address)} disabled={balanceState === 'loading'}>{balanceState === 'loading' ? copy.loadingBalance : copy.refreshBalance}</button>
+                      <button type="button" className="primary-button" onClick={() => session.address && void refreshBalance(route.id, session.address)} disabled={balanceState === 'loading' || !routeAdapter}>{balanceState === 'loading' ? copy.loadingBalance : copy.refreshBalance}</button>
                       <button type="button" className="secondary-button" onClick={() => { setExistingAddress(session.address); setShowExistingForm(true); setAddressError(null); }}>{copy.specifyExisting}</button>
                       {addressError === 'balance' && <span className="inline-error">{copy.balanceError}</span>}
                     </div>
@@ -313,7 +350,7 @@ export function App() {
 
             <section className="network-card">
               <div><span className="muted-label">{copy.route}</span><h3>{network.name}</h3><p>{copy.routeHint}</p></div>
-              <label className="network-select"><span>{copy.network}</span><select value={route.id} onChange={(event) => setRouteId(event.target.value as AssetRouteId)}>{routes.map((candidateRoute) => {
+              <label className="network-select"><span>{copy.network}</span><select value={route.id} onChange={(event) => selectRoute(event.target.value as AssetRouteId)}>{routes.map((candidateRoute) => {
                 const candidateNetwork = getNetwork(candidateRoute.networkId);
                 return <option key={candidateRoute.id} value={candidateRoute.id}>{candidateNetwork.name} · {candidateRoute.standard}</option>;
               })}</select></label>
@@ -330,7 +367,7 @@ export function App() {
             {showBackupSecrets && (
               <div className="secret-grid">
                 <div className="secret-field seed-field"><span>{copy.seedPhrase}</span><code>{createdWallet.mnemonic}</code><button type="button" onClick={() => void copySecret('seed')}>{copyState === 'seed' ? copy.copied : copy.copySeed}</button></div>
-                <div className="secret-field"><span>{copy.wif}</span><code>{createdWallet.wif}</code><button type="button" onClick={() => void copySecret('wif')}>{copyState === 'wif' ? copy.copied : copy.copyWif}</button></div>
+                <div className="secret-field"><span>{signingMaterialLabel}</span><code>{createdWallet.signingMaterial.value}</code><button type="button" onClick={() => void copySecret('signing-material')}>{copyState === 'signing-material' ? copy.copied : copySigningMaterialLabel}</button></div>
                 <div className="secret-field path-field"><span>{copy.derivationPath}</span><code>{createdWallet.derivationPath}</code></div>
               </div>
             )}

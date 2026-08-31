@@ -2,22 +2,26 @@ import type { NetworkId } from '../assets';
 
 export type WalletMode = 'none' | 'created' | 'watch-only';
 
+export type BrowserSigningMaterial =
+  | {
+      kind: 'wif';
+      value: string;
+    }
+  | {
+      kind: 'private-key';
+      value: string;
+    };
+
 export type BrowserCreatedWallet = {
   address: string;
   mnemonic: string;
-  wif: string;
   derivationPath: string;
+  signingMaterial: BrowserSigningMaterial;
 };
 
 export type WalletSession = {
   address: string;
-  balance: string | null;
   mode: WalletMode;
-};
-
-export type WalletBalance = {
-  address: string;
-  balance: string;
 };
 
 export type WalletIdentityMetadata = {
@@ -37,5 +41,4 @@ export interface WalletNetworkAdapter {
   capabilities: WalletNetworkCapabilities;
   createWallet(): BrowserCreatedWallet;
   validatePublicAddress(address: string): boolean;
-  loadBalance(address: string, signal?: AbortSignal): Promise<WalletBalance>;
 }

@@ -57,6 +57,8 @@ This graph is guidance, not permission to import concrete implementations. For e
 
 `Indexer` may publish state/confirmation changes through Application contracts/events; it must not mutate another module's persistence implementation directly.
 
+The chain/network/asset-route registry model and its fail-closed rules are documented in `docs/architecture/ADAPTER_REGISTRY.md`.
+
 ## Enforcement
 
 `tests/Architecture/ModuleBoundariesTest.php` enforces the rules that are practical to check without introducing an architecture-test dependency:
@@ -65,6 +67,9 @@ This graph is guidance, not permission to import concrete implementations. For e
 - Domain code cannot reference forbidden infrastructure/framework namespaces;
 - no module may import another module's `Infrastructure` or `Presentation` namespace;
 - Presentation cannot import its own Infrastructure directly;
+- Blockchain Application cannot import concrete Blockchain Infrastructure adapters;
 - generic dumping-ground directories are rejected.
+
+The adapter-registry invariant suites add runtime-resolution checks on top of these source-level boundaries so a future chain integration cannot bypass the registry with a default/fallback adapter path.
 
 The tests intentionally do not invent domain interfaces before real behavior exists. New ports are introduced together with the first use case that needs them.

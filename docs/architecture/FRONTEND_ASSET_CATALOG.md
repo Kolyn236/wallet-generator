@@ -2,6 +2,8 @@
 
 The React frontend keeps protocol topology separate from wallet runtime support in `frontend/src/assets.ts`.
 
+The runtime adapter model, fail-closed lookup rules and automated guardrails are documented in `docs/architecture/ADAPTER_REGISTRY.md`.
+
 ## Concepts
 
 - `ChainDefinition` describes a blockchain and its `ChainFamily` (`utxo`, `evm`, or `tron`).
@@ -29,5 +31,7 @@ USDT therefore does not define or own a blockchain. Its ERC-20 and TRC-20 choice
 ## Runtime support
 
 Protocol metadata does not imply that a route is implemented. The current frontend availability catalog keeps DOGE and BTC available and ETH/USDT planned, preserving the existing product behavior.
+
+A route that is available must have its own registered `AssetRouteAdapter` and a registered `WalletNetworkAdapter` for its network. Planned routes remain unregistered and fail closed instead of resolving to another asset's runtime.
 
 This catalog is not a transaction abstraction. UTXO, EVM and TRON transaction construction, signing and fee semantics remain chain-family-specific and must not be forced into one universal transaction or fee model.

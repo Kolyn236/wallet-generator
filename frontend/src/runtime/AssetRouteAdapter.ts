@@ -9,6 +9,11 @@ export type AssetRouteCapabilities = {
   localSigning: boolean;
 };
 
+export type AssetRouteBalance = {
+  address: string;
+  balance: string;
+};
+
 export type AssetRouteTransferPanelProps = {
   language: Language;
   assetId: AssetId;
@@ -25,5 +30,6 @@ export interface AssetRouteAdapter {
   assetId: AssetId;
   networkId: NetworkId;
   capabilities: AssetRouteCapabilities;
+  loadBalance(address: string, signal?: AbortSignal): Promise<AssetRouteBalance>;
   renderTransferPanel(props: AssetRouteTransferPanelProps): ReactNode;
 }

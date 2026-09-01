@@ -2,12 +2,40 @@ import { createElement, lazy } from 'react';
 import { getDogecoinBalance } from '../../api';
 import { createDogecoinWallet, isDogecoinMainnetAddress } from '../../wallet/dogecoin';
 import type { AssetRouteAdapter } from '../AssetRouteAdapter';
-import type { WalletNetworkAdapter } from '../WalletNetworkAdapter';
+import type { BrowserCreatedWallet, WalletNetworkAdapter } from '../WalletNetworkAdapter';
 
 const DogecoinTransferPanel = lazy(async () => {
   const module = await import('../../DogecoinTransferPanel');
   return { default: module.DogecoinTransferPanel };
 });
+
+function toBrowserWallet(): BrowserCreatedWallet {
+  const wallet = createDogecoinWallet();
+
+  return {
+    address: wallet.address,
+    mnemonic: wallet.mnemonic,
+    derivationPath: wallet.derivationPath,
+    signingMaterial: {
+      kind: 'wif',
+      value: wallet.wif,
+    },
+  };
+}
+
+function toDogecoinCreatedWallet(wallet: BrowserCreatedWallet | null) {
+  if (!wallet) return null;
+  if (wallet.signingMaterial.kind !== 'wif') {
+    throw new Error('incompatible_signing_material');
+  }
+
+  return {
+    address: wallet.address,
+    mnemonic: wallet.mnemonic,
+    derivationPath: wallet.derivationPath,
+    wif: wallet.signingMaterial.value,
+  };
+}
 
 export const dogecoinMainnetWalletAdapter: WalletNetworkAdapter = {
   networkId: 'dogecoin-mainnet',
@@ -20,12 +48,8 @@ export const dogecoinMainnetWalletAdapter: WalletNetworkAdapter = {
     watchOnly: true,
     localSigning: true,
   },
-  createWallet: createDogecoinWallet,
+  createWallet: toBrowserWallet,
   validatePublicAddress: isDogecoinMainnetAddress,
-  async loadBalance(address, signal) {
-    const result = await getDogecoinBalance(address, signal);
-    return { address: result.address, balance: result.balance };
-  },
 };
 
 export const dogecoinMainnetAssetRouteAdapter: AssetRouteAdapter = {
@@ -37,6 +61,10 @@ export const dogecoinMainnetAssetRouteAdapter: AssetRouteAdapter = {
     transfer: true,
     localSigning: true,
   },
+  async loadBalance(address, signal) {
+    const result = await getDogecoinBalance(address, signal);
+    return { address: result.address, balance: result.balance };
+  },
   renderTransferPanel(props) {
     return createElement(DogecoinTransferPanel, {
       language: props.language,
@@ -46,7 +74,7 @@ export const dogecoinMainnetAssetRouteAdapter: AssetRouteAdapter = {
       networkStandard: props.networkStandard,
       sourceAddress: props.sourceAddress,
       walletMode: props.walletMode,
-      createdWallet: props.createdWallet,
+      createdWallet: toDogecoinCreatedWallet(props.createdWallet),
     });
   },
 };

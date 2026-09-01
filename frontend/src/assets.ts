@@ -37,6 +37,7 @@ export type AssetRouteDefinition = {
 };
 
 export type AssetAvailability = 'ready-next' | 'planned';
+export type AssetRouteAvailability = AssetAvailability;
 
 export type UtxoRatePerKbFeePolicy = {
   kind: 'utxo-rate-per-kb';
@@ -113,11 +114,12 @@ export const assetRoutes: AssetRouteDefinition[] = [
   },
 ];
 
-const assetAvailability: Record<AssetId, AssetAvailability> = {
-  doge: 'ready-next',
-  btc: 'ready-next',
-  eth: 'planned',
-  usdt: 'planned',
+const routeAvailability: Record<AssetRouteId, AssetRouteAvailability> = {
+  'doge-dogecoin-mainnet-native': 'ready-next',
+  'btc-bitcoin-mainnet-native': 'ready-next',
+  'eth-ethereum-mainnet-native': 'planned',
+  'usdt-ethereum-mainnet-erc20': 'planned',
+  'usdt-tron-mainnet-trc20': 'planned',
 };
 
 const utxoFeePolicies: Partial<Record<NetworkId, UtxoRatePerKbFeePolicy>> = {
@@ -165,8 +167,14 @@ export function getAssetRoutes(assetId: AssetId): AssetRouteDefinition[] {
   return assetRoutes.filter((candidate) => candidate.assetId === assetId);
 }
 
+export function getAssetRouteAvailability(routeId: AssetRouteId): AssetRouteAvailability {
+  return routeAvailability[routeId];
+}
+
 export function getDefaultAssetRoute(assetId: AssetId): AssetRouteDefinition {
-  const route = getAssetRoutes(assetId)[0];
+  const routes = getAssetRoutes(assetId);
+  const liveRoute = routes.find((route) => getAssetRouteAvailability(route.id) === 'ready-next');
+  const route = liveRoute ?? routes[0];
 
   if (!route) {
     throw new Error(`No asset route configured for: ${assetId}`);
@@ -176,7 +184,11 @@ export function getDefaultAssetRoute(assetId: AssetId): AssetRouteDefinition {
 }
 
 export function getAssetAvailability(assetId: AssetId): AssetAvailability {
-  return assetAvailability[assetId];
+  return getAssetRoutes(assetId).some(
+    (route) => getAssetRouteAvailability(route.id) === 'ready-next',
+  )
+    ? 'ready-next'
+    : 'planned';
 }
 
 export function getAsset(assetId: AssetId): AssetViewDefinition {

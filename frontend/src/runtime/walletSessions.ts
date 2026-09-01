@@ -5,7 +5,6 @@ export type WalletSessions = Partial<Record<NetworkId, WalletSession>>;
 
 const EMPTY_WALLET_SESSION: WalletSession = {
   address: '',
-  balance: null,
   mode: 'none',
 };
 

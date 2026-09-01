@@ -4,8 +4,14 @@ import {
   prepareEthereumTransaction,
   WalletApiError,
 } from './api';
+import { ethereumMessages } from './ethereumI18n';
 import { type Language, messages } from './i18n';
-import { isEthereumMainnetAddress, type CreatedEthereumWallet } from './wallet/ethereum';
+import {
+  ethereumPrivateKeyMatchesAddress,
+  isEthereumMainnetAddress,
+  normalizeEthereumPrivateKey,
+  type CreatedEthereumWallet,
+} from './wallet/ethereum';
 import {
   buildSignedEthereumTransfer,
   formatWeiToGwei,
@@ -46,6 +52,7 @@ export function EthereumTransferPanel({
   createdWallet,
 }: Props) {
   const copy = messages[language];
+  const ethCopy = ethereumMessages[language];
   const [sender, setSender] = useState(sourceAddress);
   const [privateKey, setPrivateKey] = useState(createdWallet?.privateKey ?? '');
   const [recipient, setRecipient] = useState('');
@@ -58,20 +65,20 @@ export function EthereumTransferPanel({
   const busy = state === 'preparing' || state === 'broadcasting';
   const errorMessage = useMemo(() => {
     switch (error) {
-      case 'form': return copy.ethereumFormError;
+      case 'form': return ethCopy.formError;
       case 'sender-invalid': return copy.senderInvalid;
       case 'recipient-invalid': return copy.recipientInvalid;
-      case 'private-key-required': return copy.privateKeyRequired;
-      case 'private-key-invalid': return copy.privateKeyInvalid;
-      case 'private-key-mismatch': return copy.privateKeyMismatch;
+      case 'private-key-required': return ethCopy.privateKeyRequired;
+      case 'private-key-invalid': return ethCopy.privateKeyInvalid;
+      case 'private-key-mismatch': return ethCopy.privateKeyMismatch;
       case 'same-address': return copy.sameAddress;
-      case 'prepare': return copy.ethereumPrepareError;
-      case 'insufficient-funds': return copy.ethereumInsufficientFunds;
+      case 'prepare': return ethCopy.prepareError;
+      case 'insufficient-funds': return ethCopy.insufficientFunds;
       case 'signing': return copy.signingError;
       case 'broadcast': return copy.broadcastError;
       default: return null;
     }
-  }, [copy, error]);
+  }, [copy, ethCopy, error]);
 
   function resetResult() {
     setSignedTransfer(null);
@@ -107,6 +114,17 @@ export function EthereumTransferPanel({
     }
     if (source.toLowerCase() === destination.toLowerCase()) {
       setError('same-address');
+      return;
+    }
+
+    try {
+      normalizeEthereumPrivateKey(signingKey);
+    } catch {
+      setError('private-key-invalid');
+      return;
+    }
+    if (!ethereumPrivateKeyMatchesAddress(signingKey, source)) {
+      setError('private-key-mismatch');
       return;
     }
 
@@ -183,8 +201,8 @@ export function EthereumTransferPanel({
       <div className="transfer-copy">
         <span className="muted-label">ETH · {networkStandard}</span>
         <h2>{copy.transferTitle}</h2>
-        <p>{copy.ethereumTransferText}</p>
-        <small className="transfer-policy">{copy.ethereumFeeModel}</small>
+        <p>{ethCopy.transferText}</p>
+        <small className="transfer-policy">{ethCopy.feeModel}</small>
       </div>
 
       <form className="transfer-form" onSubmit={prepareTransfer}>
@@ -194,12 +212,12 @@ export function EthereumTransferPanel({
         </label>
         <label>
           <span>{copy.privateKey}</span>
-          <input type="password" value={privateKey} onChange={(event) => { setPrivateKey(event.target.value); resetResult(); }} placeholder={copy.privateKeyPlaceholder} autoComplete="off" spellCheck={false} disabled={busy} />
-          <small className="transfer-policy">{copy.privateKeyHint}</small>
+          <input type="password" value={privateKey} onChange={(event) => { setPrivateKey(event.target.value); resetResult(); }} placeholder={ethCopy.privateKeyPlaceholder} autoComplete="off" spellCheck={false} disabled={busy} />
+          <small className="transfer-policy">{ethCopy.privateKeyHint}</small>
         </label>
         <label>
           <span>{copy.recipient}</span>
-          <input value={recipient} onChange={(event) => { setRecipient(event.target.value); resetResult(); }} placeholder={copy.ethereumRecipientPlaceholder} autoComplete="off" spellCheck={false} disabled={busy} />
+          <input value={recipient} onChange={(event) => { setRecipient(event.target.value); resetResult(); }} placeholder={ethCopy.recipientPlaceholder} autoComplete="off" spellCheck={false} disabled={busy} />
         </label>
         <label>
           <span>{copy.amount}</span>
@@ -209,12 +227,12 @@ export function EthereumTransferPanel({
           </div>
         </label>
 
-        {walletMode === 'watch-only' && <p className="transfer-notice">{copy.ethereumTransferWatchOnly}</p>}
-        {walletMode === 'none' && <p className="transfer-notice">{copy.ethereumTransferAnySender}</p>}
+        {walletMode === 'watch-only' && <p className="transfer-notice">{ethCopy.transferWatchOnly}</p>}
+        {walletMode === 'none' && <p className="transfer-notice">{ethCopy.transferAnySender}</p>}
         {errorMessage && <p className="form-error">{errorMessage}</p>}
 
         <button className="submit-button" type="submit" disabled={busy}>
-          {state === 'preparing' ? copy.ethereumPreparingTransfer : copy.previewTransfer}
+          {state === 'preparing' ? ethCopy.preparingTransfer : copy.previewTransfer}
         </button>
       </form>
 
@@ -225,14 +243,14 @@ export function EthereumTransferPanel({
             <div><dt>{copy.from}</dt><dd>{signedTransfer.from}</dd></div>
             <div><dt>{copy.recipient}</dt><dd>{signedTransfer.to}</dd></div>
             <div><dt>{copy.amount}</dt><dd>{signedTransfer.amountEth} ETH</dd></div>
-            <div><dt>{copy.ethereumNonce}</dt><dd>{signedTransfer.nonce}</dd></div>
-            <div><dt>{copy.ethereumGasLimit}</dt><dd>{signedTransfer.gasLimit}</dd></div>
-            <div><dt>{copy.ethereumBaseFee}</dt><dd>{formatWeiToGwei(signedTransfer.baseFeePerGasWei)} Gwei</dd></div>
-            <div><dt>{copy.ethereumPriorityFee}</dt><dd>{signedTransfer.maxPriorityFeePerGasGwei} Gwei</dd></div>
-            <div><dt>{copy.ethereumMaxFeePerGas}</dt><dd>{signedTransfer.maxFeePerGasGwei} Gwei</dd></div>
-            <div><dt>{copy.ethereumMaxNetworkFee}</dt><dd>{signedTransfer.maxNetworkFeeEth} ETH</dd></div>
-            <div><dt>{copy.ethereumMaxTotal}</dt><dd>{signedTransfer.maxTotalEth} ETH</dd></div>
-            <div className="preview-txid"><dt>{copy.ethereumTxHash}</dt><dd>{signedTransfer.txHash}</dd></div>
+            <div><dt>{ethCopy.nonce}</dt><dd>{signedTransfer.nonce}</dd></div>
+            <div><dt>{ethCopy.gasLimit}</dt><dd>{signedTransfer.gasLimit}</dd></div>
+            <div><dt>{ethCopy.baseFee}</dt><dd>{formatWeiToGwei(signedTransfer.baseFeePerGasWei)} Gwei</dd></div>
+            <div><dt>{ethCopy.priorityFee}</dt><dd>{signedTransfer.maxPriorityFeePerGasGwei} Gwei</dd></div>
+            <div><dt>{ethCopy.maxFeePerGas}</dt><dd>{signedTransfer.maxFeePerGasGwei} Gwei</dd></div>
+            <div><dt>{ethCopy.maxNetworkFee}</dt><dd>{signedTransfer.maxNetworkFeeEth} ETH</dd></div>
+            <div><dt>{ethCopy.maxTotal}</dt><dd>{signedTransfer.maxTotalEth} ETH</dd></div>
+            <div className="preview-txid"><dt>{ethCopy.txHash}</dt><dd>{signedTransfer.txHash}</dd></div>
             <div><dt>{copy.network}</dt><dd>{networkName}</dd></div>
           </dl>
           <small>{copy.previewSignedLocal}</small>
@@ -244,7 +262,7 @@ export function EthereumTransferPanel({
             {state === 'broadcasted' && broadcastTxHash && (
               <div className="broadcast-success">
                 <strong>{copy.broadcastSuccess}</strong>
-                <span>{copy.ethereumBroadcastedTxHash}: <code>{broadcastTxHash}</code></span>
+                <span>{ethCopy.broadcastedTxHash}: <code>{broadcastTxHash}</code></span>
               </div>
             )}
           </div>

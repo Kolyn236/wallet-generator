@@ -9,7 +9,7 @@ The supported application architecture is:
 - Symfony 7.4 backend / blockchain API gateway;
 - React + TypeScript + Vite frontend;
 - browser-local wallet creation and transaction signing;
-- live DOGE, BTC and native ETH frontend/runtime adapters;
+- live DOGE, BTC, native ETH and USDT ERC-20 frontend routes;
 - Ethereum Mainnet backend RPC/capability adapter;
 - Nginx + PHP-FPM;
 - Docker Compose;
@@ -22,7 +22,8 @@ Before architecture work, read:
 - `README.md`;
 - `docs/architecture/ADR-001-modular-monolith.md`;
 - `docs/architecture/MODULE_BOUNDARIES.md`;
-- `docs/architecture/ADAPTER_REGISTRY.md`.
+- `docs/architecture/ADAPTER_REGISTRY.md`;
+- Ethereum/token-specific documents relevant to the change.
 
 ## Core architecture rules
 
@@ -39,52 +40,42 @@ Before architecture work, read:
 
 These rules are mandatory.
 
-1. **Seed phrases, private keys and WIF never reach Symfony.**
-   They remain browser-local and may exist only in active in-memory wallet/transfer state.
+1. **Seed phrases, private keys and WIF never reach Symfony.** They remain browser-local and may exist only in active in-memory wallet/transfer state.
+2. **Do not persist plaintext signing material.** Never write seed/private key/WIF to `localStorage`, `sessionStorage`, IndexedDB, cookies, databases, analytics, application files or telemetry.
+3. **Do not log signing material.** Do not include secrets in HTTP logs, exceptions, debug output, screenshots, fixtures tied to real funds or support examples.
+4. **Broadcast only signed public transaction bytes.** Provider/node APIs may receive raw signed transactions, never signing material.
+5. **Signing and broadcast remain separate operations.** Building/signing a transaction must never automatically publish it.
+6. **Keep secret-bearing sessions ephemeral.** Refreshing or closing the tab may clear an unlocked wallet session. Only explicitly non-secret preferences such as language may be persisted.
+7. **Provider data is untrusted input.** Validate addresses, UTXOs, scripts, amounts, token ABI results, nonce/gas/fee quantities, transaction identities and response shapes before using provider metadata.
+8. **Validate transaction identity locally.** Calculate transaction identity from locally signed raw bytes and compare it with the provider-returned identity after broadcast.
 
-2. **Do not persist plaintext signing material.**
-   Never write seed/private key/WIF to `localStorage`, `sessionStorage`, IndexedDB, cookies, databases, analytics, application files or telemetry.
-
-3. **Do not log signing material.**
-   Do not include secrets in HTTP logs, exceptions, debug output, screenshots, fixtures tied to real funds or support examples.
-
-4. **Broadcast only signed public transaction bytes.**
-   Provider/node APIs may receive raw signed transactions, never signing material.
-
-5. **Signing and broadcast remain separate operations.**
-   Building/signing a transaction must never automatically publish it. Broadcast is a distinct irreversible user action after human-readable review.
-
-6. **Keep secret-bearing sessions ephemeral.**
-   Refreshing or closing the tab may clear an unlocked wallet session. Only explicitly non-secret preferences such as language may be persisted.
-
-7. **Provider data is untrusted input.**
-   Validate addresses, UTXOs, scripts, amounts, nonce/gas/fee quantities, transaction identities and response shapes before using provider metadata.
-
-8. **Validate transaction identity locally.**
-   Calculate the transaction identity from locally signed raw bytes and compare it with the provider-returned identity after broadcast. For DOGE/BTC this is the TXID; for Ethereum this is the transaction hash. Mismatches fail closed.
-
-Fixed public test vectors may use well-known deterministic mnemonics/WIFs/private keys only when they are clearly test-only and must never receive funds. Never commit real wallet secrets.
+Fixed public test vectors may use well-known deterministic mnemonics/WIFs/private keys only when clearly test-only and never funded. Never commit real wallet secrets.
 
 ## Cryptocurrency correctness rules
 
-- DOGE/BTC amounts use integer smallest units internally: `koinu` and `satoshi`. Never use floating-point arithmetic for money.
-- Ethereum wei/nonce/gas/fee values cross backend Application/HTTP boundaries as canonical decimal strings; browser EVM arithmetic uses `bigint`. Never route EVM amounts through JavaScript `number`, PHP float or signed machine-integer arithmetic.
-- Network fee is derived from chain-specific transaction semantics; never force UTXO fee rules onto EVM transactions or vice versa.
-- Never silently alter destination address, amount, input outpoint, change address, nonce, gas values, network or asset route.
-- DOGE and BTC currently spend confirmed UTXOs only.
-- Validate that selected UTXO scripts belong to the source address before signing.
-- Verify that supplied WIF/private-key signing material derives the selected source address before signing.
+- DOGE/BTC amounts use integer smallest units: `koinu` and `satoshi`.
+- Ethereum wei/nonce/gas/fee values cross backend Application/HTTP boundaries as canonical decimal strings; browser EVM arithmetic uses `bigint`.
+- USDT ERC-20 uses 6 decimal places and integer token smallest units. Never use floating-point arithmetic for token amounts.
+- Network fee is derived from chain-specific semantics; never force UTXO fee rules onto EVM transactions or vice versa.
+- Never silently alter destination, amount, input outpoint, change address, token contract, calldata, nonce, gas values, network or asset route.
+- DOGE/BTC spend confirmed UTXOs only and validate selected scripts against the source address.
+- Verify WIF/private-key signing material derives the selected source address before signing.
 - Human-readable review must expose chain-relevant signing inputs and transaction identity before broadcast.
-- Ethereum native transfers use chain ID `1`, EIP-1559 Type-2 serialization, `data = 0x` and an empty access list unless a separate feature explicitly changes that scope.
+- Ethereum uses chain ID `1`, EIP-1559 Type-2 serialization and an empty access list unless a separate feature explicitly changes scope.
 - Ethereum preparation must echo the exact public intent before the browser signs it.
-- Do not change secp256k1 options, derivation paths, DER/RLP encoding, sighash rules or transaction serialization as part of unrelated work.
+- Native ETH uses recipient `to`, native `valueWei` and `data = 0x`.
+- USDT ERC-20 uses the fixed contract `0xdAC17F958D2ee523a2206206994597C13D831ec7`, `valueWei = 0` and locally encoded `transfer(address,uint256)` calldata.
+- USDT network gas is paid in ETH; validate token balance and native ETH gas capacity independently.
+- Do not change secp256k1 options, derivation paths, DER/RLP/ABI encoding, sighash rules or transaction serialization as part of unrelated work.
 - Cryptographic/serialization changes require deterministic regression vectors and a narrowly scoped commit/PR.
 
 Current derivation paths:
 
 - DOGE mainnet legacy P2PKH: `m/44'/3'/0'/0/0`;
 - BTC mainnet legacy P2PKH: `m/44'/0'/0'/0/0`;
-- ETH mainnet: `m/44'/60'/0'/0/0`.
+- Ethereum mainnet: `m/44'/60'/0'/0/0`.
+
+USDT ERC-20 reuses the Ethereum wallet identity; it does not have its own derivation path.
 
 ## Adapter registry invariants
 
@@ -95,9 +86,11 @@ Frontend:
 - registry keys are unique;
 - DOGE resolves only to the Dogecoin runtime;
 - BTC resolves only to the Bitcoin runtime;
-- native ETH resolves only to the Ethereum runtime;
-- USDT ERC-20 remains unregistered until its token-specific route is implemented even though `ethereum-mainnet` wallet identity is live;
-- planned routes remain unregistered until implemented;
+- native ETH resolves only to its Ethereum asset-route runtime;
+- USDT ERC-20 resolves only to its token route runtime;
+- ETH and USDT ERC-20 share the same `ethereum-mainnet` `WalletNetworkAdapter` and wallet session;
+- USDT TRC-20 remains unregistered until a Tron runtime exists;
+- planned routes remain unregistered;
 - unknown route/network lookup fails closed;
 - wallet sessions are network-scoped;
 - balances are asset-route-scoped;
@@ -109,6 +102,7 @@ Backend:
 - behavior is exposed through capability interfaces rather than one universal blockchain interface;
 - registry keys are exact `chain:network` pairs and unique;
 - current registered keys are `dogecoin:mainnet`, `bitcoin:mainnet` and `ethereum:mainnet`;
+- Ethereum exposes native balance, ERC-20 balance, nonce, gas, EIP-1559 fee and raw broadcast capabilities;
 - unknown chain/network lookup throws explicitly;
 - unsupported capabilities throw explicitly;
 - Application code must not import concrete Blockchain Infrastructure adapters.
@@ -117,22 +111,19 @@ Do not bypass a registry with asset-symbol conditionals or fallback behavior.
 
 ## UI and product rules
 
-The UI is bilingual:
-
-- English (`en`);
-- Russian (`ru`).
-
-All user-facing strings should use the translation layer. Language preference may be stored in `localStorage`; signing secrets may not.
+The UI is bilingual: English (`en`) and Russian (`ru`). User-facing strings use the translation layer.
 
 Preserve the current product principles:
 
 - modern, clear fintech-style interface;
 - wallet creation and watch-only connection are distinct;
+- ETH and ERC-20 tokens visibly share an Ethereum wallet identity while showing route-specific balances;
+- token transfers clearly show that gas is paid in the native chain asset;
 - transaction review is human-readable;
 - raw signed transaction bytes are application data, not the primary review UI;
 - successful/failed broadcast status stays tied to the originating transfer flow;
 - mobile layouts remain usable;
-- security-relevant information remains clear in the transaction flow.
+- security-relevant information remains clear.
 
 Do not redesign the UI while performing unrelated backend, registry or cleanup work.
 
@@ -146,13 +137,13 @@ When working on a task:
 4. keep signing, provider, UI and infrastructure concerns separate;
 5. update documentation when supported behavior or architecture changes;
 6. add regression coverage before removing an old safety net;
-7. run the relevant deterministic, architecture, build and backend checks before considering the change finished.
+7. run relevant deterministic, architecture, build and backend checks before considering the change finished.
 
 Avoid generic `Service/`, `Helper/` or `Utils/` dumping grounds. Prefer explicit domain/application concepts and capability contracts.
 
 ## Dependencies
 
-Frontend cryptographic behavior uses pinned audited/open-source primitives already present in the frontend dependency graph. Do not add or replace crypto dependencies casually.
+Frontend cryptographic behavior uses pinned open-source primitives already present in the frontend dependency graph. Do not add or replace crypto dependencies casually.
 
 Backend provider logic belongs behind Application capabilities/ports. Do not scatter provider-specific HTTP/RPC calls across controllers or domain code.
 
@@ -169,6 +160,7 @@ npm run test:adapter-invariants
 npm run test:dogecoin-vector
 npm run test:bitcoin-vector
 npm run test:ethereum-vector
+npm run test:usdt-erc20-vector
 npm run build
 ```
 
@@ -182,37 +174,20 @@ composer analyse
 composer cs:check
 ```
 
-For integrated platform changes run the Docker smoke workflow or verify from the repository root when the change affects runtime/deploy behavior:
+For integrated runtime/deploy changes use the Docker smoke workflow or verify from repository root:
 
 ```bash
 docker compose config --quiet
 docker compose up -d --build
 ```
 
-Verify at minimum for affected live routes:
-
-- React application loads;
-- `GET /api/health` succeeds;
-- local wallet creation derives the expected network address;
-- watch-only public address connection remains public-only;
-- local sign/review remains separate from broadcast;
-- provider-returned transaction identity is checked against the locally calculated identity.
-
 Use deterministic local vectors for cryptographic regression coverage. Do not depend on live mainnet transactions as the only test oracle.
 
 ## Secret/file hygiene
 
-Keep secret and generated transaction files out of Git. Preserve repository ignore rules for `*.wif` and `*.tx`.
+Keep secret and generated transaction files out of Git. Never commit real WIF/private keys, seed phrases, exchange credentials/API tokens, private wallet backups or `.env` files containing secrets.
 
-Never commit:
-
-- a real WIF/private key;
-- a real seed phrase;
-- exchange credentials/API tokens;
-- private wallet backups;
-- `.env` files containing secrets.
-
-Public addresses, TXIDs, transaction hashes, public keys and already-signed raw transactions are public data, but use real mainnet examples sparingly.
+Public addresses, TXIDs, transaction hashes, public keys, token contracts and already-signed raw transactions are public data, but use real mainnet examples sparingly.
 
 ## Network providers
 
@@ -226,13 +201,12 @@ External explorers/providers are infrastructure conveniences, not wallet authori
 
 ## Current roadmap
 
-Current live frontend assets are DOGE mainnet, BTC mainnet legacy P2PKH and native ETH on Ethereum mainnet with EIP-1559 Type-2 browser signing.
+Current live routes are DOGE mainnet, BTC mainnet legacy P2PKH, native ETH and USDT ERC-20 on Ethereum mainnet.
 
 Near-term work:
 
-1. USDT ERC-20 on the shared `ethereum-mainnet` wallet identity;
-2. fee-estimation and transaction-review improvements;
-3. production observability, load testing and operational hardening.
+1. fee-estimation and transaction-review improvements;
+2. production observability, load testing and operational hardening.
 
 Additional chains, token routes, persistence, queues, indexers or browser vault features require a concrete product or load requirement before implementation.
 

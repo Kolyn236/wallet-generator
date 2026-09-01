@@ -195,7 +195,7 @@ final class EthereumJsonRpcClientTest extends TestCase
     {
         $logFile = tempnam(sys_get_temp_dir(), 'ethereum-log-');
         self::assertIsString($logFile);
-        $oldLog = ini_get('error_log');
+        $oldLog = \ini_get('error_log');
         ini_set('error_log', $logFile);
 
         try {

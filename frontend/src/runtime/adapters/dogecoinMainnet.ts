@@ -1,29 +1,43 @@
 import { createElement, lazy } from 'react';
 import { getDogecoinBalance } from '../../api';
-import { createDogecoinWallet, isDogecoinMainnetAddress } from '../../wallet/dogecoin';
+import {
+  createDogecoinWallet,
+  deriveDogecoinWalletFromMnemonic,
+  isDogecoinMainnetAddress,
+  type CreatedDogecoinWallet,
+} from '../../wallet/dogecoin';
 import type { AssetRouteAdapter } from '../AssetRouteAdapter';
-import type { BrowserCreatedWallet, WalletNetworkAdapter } from '../WalletNetworkAdapter';
+import type { BrowserSigningWallet, WalletNetworkAdapter } from '../WalletNetworkAdapter';
 
 const DogecoinTransferPanel = lazy(async () => {
   const module = await import('../../DogecoinTransferPanel');
   return { default: module.DogecoinTransferPanel };
 });
 
-function toBrowserWallet(): BrowserCreatedWallet {
-  const wallet = createDogecoinWallet();
-
-  return {
+function toBrowserWallet(wallet: CreatedDogecoinWallet, origin: 'generated' | 'mnemonic'): BrowserSigningWallet {
+  const base = {
     address: wallet.address,
-    mnemonic: wallet.mnemonic,
     derivationPath: wallet.derivationPath,
     signingMaterial: {
-      kind: 'wif',
+      kind: 'wif' as const,
       value: wallet.wif,
     },
   };
+
+  return origin === 'generated'
+    ? { ...base, origin, generatedMnemonic: wallet.mnemonic }
+    : { ...base, origin };
 }
 
-function toDogecoinCreatedWallet(wallet: BrowserCreatedWallet | null) {
+function createBrowserWallet(): BrowserSigningWallet {
+  return toBrowserWallet(createDogecoinWallet(), 'generated');
+}
+
+function importBrowserMnemonic(mnemonic: string): BrowserSigningWallet {
+  return toBrowserWallet(deriveDogecoinWalletFromMnemonic(mnemonic), 'mnemonic');
+}
+
+function toDogecoinCreatedWallet(wallet: BrowserSigningWallet | null): CreatedDogecoinWallet | null {
   if (!wallet) return null;
   if (wallet.signingMaterial.kind !== 'wif') {
     throw new Error('incompatible_signing_material');
@@ -31,7 +45,7 @@ function toDogecoinCreatedWallet(wallet: BrowserCreatedWallet | null) {
 
   return {
     address: wallet.address,
-    mnemonic: wallet.mnemonic,
+    mnemonic: wallet.origin === 'generated' ? wallet.generatedMnemonic : '',
     derivationPath: wallet.derivationPath,
     wif: wallet.signingMaterial.value,
   };
@@ -45,10 +59,12 @@ export const dogecoinMainnetWalletAdapter: WalletNetworkAdapter = {
   },
   capabilities: {
     localWalletCreation: true,
+    mnemonicImport: true,
     watchOnly: true,
     localSigning: true,
   },
-  createWallet: toBrowserWallet,
+  createWallet: createBrowserWallet,
+  importMnemonic: importBrowserMnemonic,
   validatePublicAddress: isDogecoinMainnetAddress,
 };
 

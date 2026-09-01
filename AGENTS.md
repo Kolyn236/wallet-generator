@@ -9,7 +9,7 @@ The supported application architecture is:
 - Symfony 7.4 backend / blockchain API gateway;
 - React + TypeScript + Vite frontend;
 - browser-local wallet creation and transaction signing;
-- DOGE mainnet and BTC mainnet frontend/runtime adapters;
+- live DOGE, BTC and native ETH frontend/runtime adapters;
 - Ethereum Mainnet backend RPC/capability adapter;
 - Nginx + PHP-FPM;
 - Docker Compose;
@@ -58,30 +58,33 @@ These rules are mandatory.
    Refreshing or closing the tab may clear an unlocked wallet session. Only explicitly non-secret preferences such as language may be persisted.
 
 7. **Provider data is untrusted input.**
-   Validate addresses, UTXOs, scripts, amounts, transaction identities and response shapes before using provider metadata.
+   Validate addresses, UTXOs, scripts, amounts, nonce/gas/fee quantities, transaction identities and response shapes before using provider metadata.
 
-8. **Validate TXID locally.**
-   Calculate the transaction ID from locally signed raw bytes and compare it with the provider-returned identity after broadcast. Mismatches fail closed.
+8. **Validate transaction identity locally.**
+   Calculate the transaction identity from locally signed raw bytes and compare it with the provider-returned identity after broadcast. For DOGE/BTC this is the TXID; for Ethereum this is the transaction hash. Mismatches fail closed.
 
-Fixed public test vectors may use well-known deterministic mnemonics/WIFs only when they are clearly test-only and must never receive funds. Never commit real wallet secrets.
+Fixed public test vectors may use well-known deterministic mnemonics/WIFs/private keys only when they are clearly test-only and must never receive funds. Never commit real wallet secrets.
 
 ## Cryptocurrency correctness rules
 
-- Amounts use integer smallest units internally: `koinu` for DOGE and `satoshi` for BTC. Never use floating-point arithmetic for money.
-- Ethereum wei/nonce/gas/fee values cross backend Application/HTTP boundaries as canonical decimal strings; never route them through PHP float or signed-integer arithmetic.
-- Network fee is derived from transaction inputs/outputs and serialized size; it is not a standalone field serialized into a UTXO transaction.
-- Never silently alter destination address, amount, input outpoint, change address, network or asset route.
+- DOGE/BTC amounts use integer smallest units internally: `koinu` and `satoshi`. Never use floating-point arithmetic for money.
+- Ethereum wei/nonce/gas/fee values cross backend Application/HTTP boundaries as canonical decimal strings; browser EVM arithmetic uses `bigint`. Never route EVM amounts through JavaScript `number`, PHP float or signed machine-integer arithmetic.
+- Network fee is derived from chain-specific transaction semantics; never force UTXO fee rules onto EVM transactions or vice versa.
+- Never silently alter destination address, amount, input outpoint, change address, nonce, gas values, network or asset route.
 - DOGE and BTC currently spend confirmed UTXOs only.
 - Validate that selected UTXO scripts belong to the source address before signing.
-- Verify that the supplied WIF derives the selected source address before signing.
-- Human-readable review must expose source, destination, amount, fee rate, actual fee, change, serialized size and local TXID before broadcast.
-- Do not change secp256k1 signing options, Base58Check constants, derivation paths, DER encoding, sighash rules or transaction serialization as part of unrelated work.
+- Verify that supplied WIF/private-key signing material derives the selected source address before signing.
+- Human-readable review must expose chain-relevant signing inputs and transaction identity before broadcast.
+- Ethereum native transfers use chain ID `1`, EIP-1559 Type-2 serialization, `data = 0x` and an empty access list unless a separate feature explicitly changes that scope.
+- Ethereum preparation must echo the exact public intent before the browser signs it.
+- Do not change secp256k1 options, derivation paths, DER/RLP encoding, sighash rules or transaction serialization as part of unrelated work.
 - Cryptographic/serialization changes require deterministic regression vectors and a narrowly scoped commit/PR.
 
 Current derivation paths:
 
 - DOGE mainnet legacy P2PKH: `m/44'/3'/0'/0/0`;
-- BTC mainnet legacy P2PKH: `m/44'/0'/0'/0/0`.
+- BTC mainnet legacy P2PKH: `m/44'/0'/0'/0/0`;
+- ETH mainnet: `m/44'/60'/0'/0/0`.
 
 ## Adapter registry invariants
 
@@ -92,9 +95,12 @@ Frontend:
 - registry keys are unique;
 - DOGE resolves only to the Dogecoin runtime;
 - BTC resolves only to the Bitcoin runtime;
+- native ETH resolves only to the Ethereum runtime;
+- USDT ERC-20 remains unregistered until its token-specific route is implemented even though `ethereum-mainnet` wallet identity is live;
 - planned routes remain unregistered until implemented;
 - unknown route/network lookup fails closed;
 - wallet sessions are network-scoped;
+- balances are asset-route-scoped;
 - secrets remain browser-memory-only.
 
 Backend:
@@ -146,11 +152,11 @@ Avoid generic `Service/`, `Helper/` or `Utils/` dumping grounds. Prefer explicit
 
 ## Dependencies
 
-Frontend cryptographic behavior uses pinned audited/open-source primitives already present in `frontend/package.json`. Do not add or replace crypto dependencies casually.
+Frontend cryptographic behavior uses pinned audited/open-source primitives already present in the frontend dependency graph. Do not add or replace crypto dependencies casually.
 
-Backend provider logic belongs behind Application capabilities/ports. Do not scatter provider-specific HTTP calls across controllers or domain code.
+Backend provider logic belongs behind Application capabilities/ports. Do not scatter provider-specific HTTP/RPC calls across controllers or domain code.
 
-New dependencies must have a concrete reason, be pinned through the appropriate lock file and stay within the module/security boundaries.
+New dependencies must have a concrete reason, be pinned through the appropriate lock file and stay within module/security boundaries.
 
 ## Testing requirements
 
@@ -162,6 +168,7 @@ npm ci
 npm run test:adapter-invariants
 npm run test:dogecoin-vector
 npm run test:bitcoin-vector
+npm run test:ethereum-vector
 npm run build
 ```
 
@@ -175,21 +182,21 @@ composer analyse
 composer cs:check
 ```
 
-For integrated platform changes also run from the repository root:
+For integrated platform changes run the Docker smoke workflow or verify from the repository root when the change affects runtime/deploy behavior:
 
 ```bash
 docker compose config --quiet
 docker compose up -d --build
 ```
 
-Then verify at minimum:
+Verify at minimum for affected live routes:
 
 - React application loads;
 - `GET /api/health` succeeds;
-- DOGE wallet creation works;
-- BTC wallet creation works;
-- DOGE build/sign/review remains separate from broadcast;
-- BTC build/sign/review remains separate from broadcast.
+- local wallet creation derives the expected network address;
+- watch-only public address connection remains public-only;
+- local sign/review remains separate from broadcast;
+- provider-returned transaction identity is checked against the locally calculated identity.
 
 Use deterministic local vectors for cryptographic regression coverage. Do not depend on live mainnet transactions as the only test oracle.
 
@@ -205,7 +212,7 @@ Never commit:
 - private wallet backups;
 - `.env` files containing secrets.
 
-Public addresses, TXIDs, public keys and already-signed raw transactions are public data, but use real mainnet examples sparingly.
+Public addresses, TXIDs, transaction hashes, public keys and already-signed raw transactions are public data, but use real mainnet examples sparingly.
 
 ## Network providers
 
@@ -213,20 +220,19 @@ External explorers/providers are infrastructure conveniences, not wallet authori
 
 - Provider failures must not trigger re-signing or secret disclosure.
 - Validate provider response shapes and values.
-- Locally calculated TXID must be compared with provider-returned TXID when available.
+- Locally calculated transaction identity must be compared with provider-returned identity when available.
 - Prefer provider adapters behind capabilities instead of direct provider calls from Application/Presentation.
 - A future own-node/RPC adapter should be swappable without changing browser signing behavior.
 
 ## Current roadmap
 
-Current live frontend assets are DOGE mainnet and BTC mainnet legacy P2PKH. Ethereum Mainnet backend capabilities are implemented; the ETH frontend route remains planned until browser-local signing is complete.
+Current live frontend assets are DOGE mainnet, BTC mainnet legacy P2PKH and native ETH on Ethereum mainnet with EIP-1559 Type-2 browser signing.
 
 Near-term work:
 
-1. browser-local Ethereum wallet creation and EIP-1559 Type-2 signing;
-2. USDT ERC-20 on the shared Ethereum wallet identity;
-3. fee-estimation and transaction-review improvements;
-4. production observability, load testing and operational hardening.
+1. USDT ERC-20 on the shared `ethereum-mainnet` wallet identity;
+2. fee-estimation and transaction-review improvements;
+3. production observability, load testing and operational hardening.
 
 Additional chains, token routes, persistence, queues, indexers or browser vault features require a concrete product or load requirement before implementation.
 

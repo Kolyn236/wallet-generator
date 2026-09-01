@@ -19,6 +19,15 @@ export type BitcoinBalanceResponse = {
   unit: 'BTC';
 };
 
+export type EthereumBalanceResponse = {
+  chain: 'ethereum';
+  network: 'mainnet';
+  address: string;
+  balance: string;
+  balanceWei: string;
+  unit: 'ETH';
+};
+
 export type DogecoinFeePolicyResponse = {
   chain: 'dogecoin';
   network: 'mainnet';
@@ -59,6 +68,31 @@ export type BitcoinBroadcastResponse = {
   chain: 'bitcoin';
   network: 'mainnet';
   txid: string;
+};
+
+export type EthereumPrepareResponse = {
+  chain: 'ethereum';
+  network: 'mainnet';
+  chainId: 1;
+  from: string;
+  to: string;
+  valueWei: string;
+  data: string;
+  senderBalanceWei: string;
+  nonce: string;
+  gasLimit: string;
+  feePolicy: {
+    kind: 'eip1559';
+    baseFeePerGasWei: string;
+    maxPriorityFeePerGasWei: string;
+    maxFeePerGasWei: string;
+  };
+};
+
+export type EthereumBroadcastResponse = {
+  chain: 'ethereum';
+  network: 'mainnet';
+  txHash: string;
 };
 
 type ApiErrorResponse = {
@@ -115,6 +149,14 @@ export async function getBitcoinBalance(address: string, signal?: AbortSignal): 
   );
 }
 
+export async function getEthereumBalance(address: string, signal?: AbortSignal): Promise<EthereumBalanceResponse> {
+  return getJson(
+    `/api/chains/ethereum/mainnet/addresses/${encodeURIComponent(address)}/balance`,
+    'ETH balance lookup',
+    signal,
+  );
+}
+
 export async function getDogecoinUtxos(address: string, signal?: AbortSignal): Promise<DogecoinUtxoResponse> {
   return getJson(
     `/api/chains/dogecoin/mainnet/addresses/${encodeURIComponent(address)}/utxos`,
@@ -127,6 +169,18 @@ export async function getBitcoinUtxos(address: string, signal?: AbortSignal): Pr
   return getJson(
     `/api/chains/bitcoin/mainnet/addresses/${encodeURIComponent(address)}/utxos`,
     'BTC UTXO lookup',
+    signal,
+  );
+}
+
+export async function prepareEthereumTransaction(
+  intent: { from: string; to: string; valueWei: string; data: string },
+  signal?: AbortSignal,
+): Promise<EthereumPrepareResponse> {
+  return postJson(
+    '/api/chains/ethereum/mainnet/transactions/prepare',
+    intent,
+    'ETH transaction preparation',
     signal,
   );
 }
@@ -155,10 +209,46 @@ export async function broadcastBitcoinTransaction(
   );
 }
 
+export async function broadcastEthereumTransaction(
+  rawTransaction: string,
+  signal?: AbortSignal,
+): Promise<EthereumBroadcastResponse> {
+  return postRawTransaction(
+    '/api/chains/ethereum/mainnet/transactions/broadcast',
+    rawTransaction,
+    'ETH transaction broadcast',
+    signal,
+  );
+}
+
 async function getJson<T>(url: string, operation: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, {
     method: 'GET',
     headers: { Accept: 'application/json' },
+    cache: 'no-store',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await apiError(response, operation);
+  }
+
+  return (await response.json()) as T;
+}
+
+async function postJson<T>(
+  url: string,
+  payload: unknown,
+  operation: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
     cache: 'no-store',
     signal,
   });
@@ -176,22 +266,7 @@ async function postRawTransaction<T>(
   operation: string,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ rawTransaction }),
-    cache: 'no-store',
-    signal,
-  });
-
-  if (!response.ok) {
-    throw await apiError(response, operation);
-  }
-
-  return (await response.json()) as T;
+  return postJson(url, { rawTransaction }, operation, signal);
 }
 
 async function apiError(response: Response, operation: string): Promise<WalletApiError> {

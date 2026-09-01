@@ -248,7 +248,8 @@ final class EthereumJsonRpcClientTest extends TestCase
             'error' => [
                 'code' => $code,
                 'message' => 'fixture error',
-            ], \JSON_THROW_ON_ERROR));
+            ],
+        ], \JSON_THROW_ON_ERROR));
     }
 }
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { AssetId, AssetRouteId, NetworkId } from '../assets';
 import type { Language } from '../i18n';
-import type { BrowserCreatedWallet, WalletMode } from './WalletNetworkAdapter';
+import type { BrowserSigningWallet, WalletMode } from './WalletNetworkAdapter';
 
 export type AssetRouteCapabilities = {
   balance: boolean;
@@ -22,7 +22,7 @@ export type AssetRouteTransferPanelProps = {
   networkStandard: string;
   sourceAddress: string;
   walletMode: WalletMode;
-  createdWallet: BrowserCreatedWallet | null;
+  createdWallet: BrowserSigningWallet | null;
 };
 
 export interface AssetRouteAdapter {

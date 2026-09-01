@@ -10,9 +10,11 @@
     "test:adapter-registry": "node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/adapter-registry-test.ts",
     "test:adapter-invariants": "npm run test:adapter-registry",
     "test:dogecoin-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/dogecoin-vector-test.ts",
-    "test:bitcoin-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/bitcoin-vector-test.ts"
+    "test:bitcoin-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/bitcoin-vector-test.ts",
+    "test:ethereum-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/ethereum-vector-test.ts"
   },
   "dependencies": {
+    "@noble/curves": "2.3.0",
     "@noble/hashes": "2.3.0",
     "@scure/base": "2.3.0",
     "@scure/bip32": "2.3.0",

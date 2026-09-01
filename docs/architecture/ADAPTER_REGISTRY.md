@@ -2,7 +2,7 @@
 
 This document defines the registry model and the invariants that keep cryptocurrency runtime behavior explicit and fail-closed.
 
-The current live runtime support is limited to Dogecoin mainnet and Bitcoin mainnet. Ethereum, ERC-20, TRON and TRC-20 appear only as architecture/catalog concepts where noted below; this document does not claim that those runtimes are implemented.
+The current live frontend runtime support is limited to Dogecoin mainnet and Bitcoin mainnet. Ethereum Mainnet now has a backend chain adapter and public RPC capabilities, but the frontend ETH route remains unavailable until the browser-local wallet/signing runtime is implemented. ERC-20, TRON and TRC-20 remain architecture/catalog concepts only.
 
 ## Core concepts
 
@@ -26,7 +26,7 @@ Chain family is intentionally not a universal transaction interface. UTXO, EVM a
 
 ### Network
 
-A **Network** is a concrete environment of one chain, such as `dogecoin-mainnet`, `bitcoin-mainnet` or future `ethereum-mainnet`.
+A **Network** is a concrete environment of one chain, such as `dogecoin-mainnet`, `bitcoin-mainnet` or `ethereum-mainnet`.
 
 Wallet identity and active browser wallet sessions are network-scoped. This is important for account-based chains: one Ethereum account/address can own multiple assets without creating a second wallet identity.
 
@@ -44,13 +44,13 @@ An **Asset Route** joins one asset to one network and records how that asset exi
 
 Examples in the catalog:
 
-| Asset route | Asset | Network | Kind | Runtime status |
+| Asset route | Asset | Network | Kind | Frontend runtime status |
 | --- | --- | --- | --- | --- |
 | `doge-dogecoin-mainnet-native` | DOGE | Dogecoin mainnet | native | live |
 | `btc-bitcoin-mainnet-native` | BTC | Bitcoin mainnet | native | live |
-| `eth-ethereum-mainnet-native` | ETH | Ethereum mainnet | native | planned metadata only |
-| `usdt-ethereum-mainnet-erc20` | USDT | Ethereum mainnet | token / ERC-20 | planned metadata only |
-| `usdt-tron-mainnet-trc20` | USDT | Tron mainnet | token / TRC-20 | planned metadata only |
+| `eth-ethereum-mainnet-native` | ETH | Ethereum mainnet | native | planned |
+| `usdt-ethereum-mainnet-erc20` | USDT | Ethereum mainnet | token / ERC-20 | planned |
+| `usdt-tron-mainnet-trc20` | USDT | Tron mainnet | token / TRC-20 | planned |
 
 A route is the correct runtime selection and balance key because `ETH on Ethereum`, `USDT on Ethereum` and `USDT on Tron` are different asset state/execution paths even when some of them share a wallet identity.
 
@@ -128,7 +128,7 @@ Changing the wallet identity on a network invalidates every asset-route balance 
 
 ### Why ETH and ERC-20 share an Ethereum wallet
 
-When Ethereum support is implemented, native ETH and ERC-20 assets on Ethereum use the same Ethereum wallet/network identity because they use the same Ethereum account/address space.
+When Ethereum frontend support is implemented, native ETH and ERC-20 assets on Ethereum use the same Ethereum wallet/network identity because they use the same Ethereum account/address space.
 
 That does **not** mean their balances or asset routes are the same. Native ETH and an ERC-20 token each own route-scoped balance/runtime behavior.
 
@@ -138,7 +138,7 @@ USDT is an asset, not a blockchain.
 
 `USDT ERC-20` is carried by Ethereum and will use the Ethereum wallet/network adapter. `USDT TRC-20` is carried by Tron and will use a Tron wallet/network adapter. They therefore require separate asset routes and separate route runtime behavior.
 
-Neither route is implemented today.
+Neither token route is implemented today.
 
 ## Route availability
 
@@ -185,14 +185,24 @@ It must not become a fat universal blockchain interface.
 
 ### Capability interfaces
 
-Implemented behavior is exposed through separate capabilities, currently including:
+Implemented behavior is exposed through separate capabilities.
+
+UTXO capabilities currently include:
 
 - `AddressBalanceCapability`;
 - `UtxoLookupCapability`;
 - `UtxoFeeRateCapability`;
 - `RawTransactionBroadcastCapability`.
 
-A future non-UTXO adapter should implement only capabilities that make sense for that chain family rather than fake UTXO methods.
+Ethereum Mainnet introduces EVM-specific capabilities for the public chain state needed by a browser-local signer:
+
+- `EvmNativeBalanceCapability`;
+- `EvmPendingNonceCapability`;
+- `EvmGasEstimateCapability`;
+- `Eip1559FeeQuoteCapability`;
+- `RawTransactionBroadcastCapability`.
+
+Ethereum deliberately does not implement `UtxoLookupCapability` or `UtxoFeeRateCapability`. Unsupported capability lookup fails closed through the registry rather than faking UTXO semantics on an account-based chain.
 
 ### `ChainAdapterRegistry`
 
@@ -202,11 +212,12 @@ A future non-UTXO adapter should implement only capabilities that make sense for
 chain:network
 ```
 
-Current registered runtime keys are:
+Current registered backend runtime keys are:
 
 ```text
 dogecoin:mainnet
 bitcoin:mainnet
+ethereum:mainnet
 ```
 
 Registry behavior is fail-closed:
@@ -216,7 +227,36 @@ Registry behavior is fail-closed:
 - requesting a capability the selected adapter does not implement throws `UnsupportedChainCapability`;
 - no lookup falls back to another chain adapter.
 
-Dogecoin application use cases resolve the Dogecoin adapter. Bitcoin application use cases resolve the Bitcoin adapter. Tests intentionally exercise the real registry boundary rather than mocking it away.
+Dogecoin application use cases resolve the Dogecoin adapter. Bitcoin application use cases resolve the Bitcoin adapter. Ethereum application use cases resolve only `ethereum:mainnet` and require EVM capabilities from that adapter. Tests intentionally exercise the real registry boundary rather than mocking it away.
+
+### Ethereum provider boundary
+
+The Ethereum adapter uses a focused JSON-RPC client configured by `ETHEREUM_RPC_URL`.
+
+It supports only the RPC methods needed for the current backend feature:
+
+```text
+eth_chainId
+eth_getBalance
+eth_getTransactionCount
+eth_estimateGas
+eth_feeHistory
+eth_sendRawTransaction
+```
+
+Before Ethereum state or broadcast is used, the provider must identify itself as chain ID `1`. A provider connected to another EVM network fails closed with `provider_wrong_chain`.
+
+Ethereum quantities are validated as canonical hex quantities and converted losslessly to canonical decimal strings using arbitrary-precision arithmetic. Wei, nonce, gas, fee values and other EVM quantities are never routed through PHP floating point or signed-integer conversion.
+
+The EIP-1559 fee quote uses `eth_feeHistory` and the documented wallet policy:
+
+```text
+maxFeePerGas = 2 * baseFeePerGas + maxPriorityFeePerGas
+```
+
+This is a wallet fee-selection policy, not a protocol constant. Missing or malformed EIP-1559 data fails explicitly instead of silently falling back to legacy `gasPrice`.
+
+The prepare endpoint exposes only public transaction intent and public chain state. The broadcast endpoint accepts only a signed raw Ethereum transaction. Symfony never receives a mnemonic/private key and never signs Ethereum transactions.
 
 ## Module boundaries
 
@@ -261,10 +301,15 @@ Backend tests verify that:
 - unknown chains and networks throw explicitly even when known adapters are present;
 - unsupported capabilities throw explicitly;
 - Dogecoin and Bitcoin resolve and delegate only to their own adapters;
-- a Dogecoin use case cannot silently use the Bitcoin adapter and vice versa;
+- Ethereum Mainnet resolves exactly to the Ethereum adapter;
+- Ethereum does not expose UTXO lookup or UTXO fee-rate capabilities;
+- a wrong Ethereum network key fails closed;
+- Ethereum quantities beyond signed int64 and up to uint256 size are handled without truncation;
+- RPC chain ID, canonical quantities, JSON response shape and transaction hashes are validated;
+- no test requires a live Ethereum RPC provider;
 - Presentation/Application dependency direction does not bypass Infrastructure boundaries.
 
-CI runs these guardrails explicitly in addition to the full PHPUnit suite, PHPStan, PHP-CS-Fixer, frontend TypeScript build, Dogecoin and Bitcoin deterministic vectors, Docker smoke tests and the platform Nginx image build.
+The `Quality Gate` workflow runs PHP syntax linting, the full PHPUnit suite, PHPStan, PHP-CS-Fixer, frontend adapter invariants, deterministic DOGE/BTC vectors and the frontend TypeScript/Vite build for pull requests and `main`. The separate `Integration Smoke` workflow runs Docker/Compose boot and HTTP/route smoke checks on `main` or when started manually.
 
 ## Adding a future live route
 

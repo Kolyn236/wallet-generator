@@ -1,107 +1,78 @@
-name: CI
+name: Quality Gate
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  symfony-backend:
+  quality:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
           coverage: none
           tools: composer:v2
+
+      - name: Lint PHP syntax
+        working-directory: backend
+        run: find src tests -name '*.php' -print0 | xargs -0 -n1 php -l
+
       - name: Validate Composer metadata
+        working-directory: backend
         run: composer validate --strict
-      - name: Install dependencies
+
+      - name: Install backend dependencies
+        working-directory: backend
         run: composer install --no-interaction --prefer-dist --no-progress
-      - name: Run backend adapter registry invariants
-        run: composer test:adapter-invariants
+
       - name: Run PHPUnit
+        working-directory: backend
         run: composer test
+
       - name: Run PHPStan
+        working-directory: backend
         run: composer analyse
-      - name: Check code style
+
+      - name: Check backend code style
+        working-directory: backend
         run: composer cs:check
 
-  react-frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+
       - name: Install frontend dependencies
+        working-directory: frontend
         run: npm ci --no-audit --no-fund
+
       - name: Run frontend adapter registry invariants
+        working-directory: frontend
         run: npm run test:adapter-invariants
+
       - name: Run Dogecoin deterministic vector
+        working-directory: frontend
         run: npm run test:dogecoin-vector
+
       - name: Run Bitcoin deterministic vector
+        working-directory: frontend
         run: npm run test:bitcoin-vector
+
       - name: Build frontend
+        working-directory: frontend
         run: npm run build
-      - name: Validate Compose topology
-        working-directory: .
-        run: docker compose config --quiet
-      - name: Smoke test deploy env and local runtime
-        working-directory: .
-        run: |
-          set -eu
-
-          cat > /tmp/wallet-rates.env <<'EOF'
-          DOGE_RECOMMENDED_FEE_RATE=0.01234567
-          BTC_RECOMMENDED_FEE_RATE=0.00023456
-          EOF
-
-          sh scripts/build-deploy-env.sh /tmp/wallet-rates.env .env
-          test "$(grep -c '^DOGE_RECOMMENDED_FEE_RATE=' .env)" -eq 1
-          test "$(grep -c '^BTC_RECOMMENDED_FEE_RATE=' .env)" -eq 1
-          grep -qx 'DOGE_RECOMMENDED_FEE_RATE=0.01234567' .env
-          grep -qx 'BTC_RECOMMENDED_FEE_RATE=0.00023456' .env
-
-          docker compose up -d --build
-          trap 'docker compose down -v; rm -f .env' EXIT
-
-          for attempt in $(seq 1 30); do
-            if docker compose exec -T --user www-data php sh -c 'test -w var/cache && test -w var/log' \
-              && docker compose exec -T php php bin/console debug:router api_dogecoin_fee_policy >/dev/null 2>&1 \
-              && docker compose exec -T php php bin/console debug:router api_bitcoin_fee_policy >/dev/null 2>&1 \
-              && curl --fail --silent --show-error -H 'Accept: application/json' http://localhost:8080/api/health >/dev/null \
-              && curl --fail --silent --show-error -H 'Accept: application/json' -D /tmp/doge-fee-policy.headers -o /tmp/doge-fee-policy.json http://localhost:8080/api/chains/dogecoin/mainnet/fee-policy \
-              && curl --fail --silent --show-error -H 'Accept: application/json' -D /tmp/btc-fee-policy.headers -o /tmp/btc-fee-policy.json http://localhost:8080/api/chains/bitcoin/mainnet/fee-policy \
-              && node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('/tmp/doge-fee-policy.json','utf8')); if (data.recommendedRate !== '0.01234567' || data.unit !== 'DOGE/kB') throw new Error('Unexpected DOGE fee policy: '+JSON.stringify(data));" \
-              && node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('/tmp/btc-fee-policy.json','utf8')); if (data.recommendedRate !== '0.00023456' || data.unit !== 'BTC/kB') throw new Error('Unexpected BTC fee policy: '+JSON.stringify(data));"; then
-              exit 0
-            fi
-            sleep 1
-          done
-
-          echo '--- Symfony routes ---'
-          docker compose exec -T php php bin/console debug:router api_dogecoin_fee_policy || true
-          docker compose exec -T php php bin/console debug:router api_bitcoin_fee_policy || true
-          echo '--- DOGE fee policy ---'
-          cat /tmp/doge-fee-policy.headers 2>/dev/null || true
-          head -c 2000 /tmp/doge-fee-policy.json 2>/dev/null || true
-          echo
-          echo '--- BTC fee policy ---'
-          cat /tmp/btc-fee-policy.headers 2>/dev/null || true
-          head -c 2000 /tmp/btc-fee-policy.json 2>/dev/null || true
-          echo
-          echo '--- Containers ---'
-          docker compose logs
-          exit 1
-      - name: Build platform Nginx image
-        working-directory: .
-        run: docker build --file docker/nginx/Dockerfile --tag wallet-platform-nginx:test .

@@ -24,6 +24,13 @@ services:
         arguments:
             $recommendedRateBtcPerKb: '%env(string:BTC_RECOMMENDED_FEE_RATE)%'
 
+    App\Blockchain\Infrastructure\EthereumJsonRpcClient:
+        arguments:
+            $rpcUrl: '%env(string:ETHEREUM_RPC_URL)%'
+
+    App\Blockchain\Infrastructure\EthereumJsonRpcTransport:
+        alias: App\Blockchain\Infrastructure\NativeEthereumJsonRpcTransport
+
     App\Blockchain\Application\DogecoinBalanceProvider:
         alias: App\Blockchain\Infrastructure\BlockCypherDogecoinBalanceProvider
 

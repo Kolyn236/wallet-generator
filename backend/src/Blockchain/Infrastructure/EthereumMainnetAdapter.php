@@ -1,0 +1,61 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Blockchain\Infrastructure;
+
+use App\Blockchain\Application\ChainAdapter;
+use App\Blockchain\Application\Eip1559FeeQuote;
+use App\Blockchain\Application\Eip1559FeeQuoteCapability;
+use App\Blockchain\Application\EvmGasEstimateCapability;
+use App\Blockchain\Application\EvmNativeBalanceCapability;
+use App\Blockchain\Application\EvmPendingNonceCapability;
+use App\Blockchain\Application\EvmTransactionIntent;
+use App\Blockchain\Application\RawTransactionBroadcastCapability;
+use App\Blockchain\Domain\EthereumAddress;
+
+final readonly class EthereumMainnetAdapter implements ChainAdapter, EvmNativeBalanceCapability, EvmPendingNonceCapability, EvmGasEstimateCapability, Eip1559FeeQuoteCapability, RawTransactionBroadcastCapability
+{
+    public function __construct(private EthereumJsonRpcClient $rpc)
+    {
+    }
+
+    public function chain(): string
+    {
+        return 'ethereum';
+    }
+
+    public function network(): string
+    {
+        return 'mainnet';
+    }
+
+    public function nativeBalanceWei(string $address): string
+    {
+        return $this->rpc->balanceWei(EthereumAddress::fromString($address)->value);
+    }
+
+    public function pendingNonce(string $address): string
+    {
+        return $this->rpc->pendingNonce(EthereumAddress::fromString($address)->value);
+    }
+
+    public function estimateGas(EvmTransactionIntent $intent): string
+    {
+        return $this->rpc->estimateGas($intent);
+    }
+
+    public function eip1559FeeQuote(): Eip1559FeeQuote
+    {
+        return $this->rpc->feeQuote();
+    }
+
+    public function broadcastRawTransaction(string $rawTransaction): string
+    {
+        if (1 !== preg_match('/^0x(?:[0-9a-fA-F]{2})+$/', $rawTransaction)) {
+            throw new \InvalidArgumentException('Invalid signed Ethereum raw transaction.');
+        }
+
+        return $this->rpc->broadcast($rawTransaction);
+    }
+}

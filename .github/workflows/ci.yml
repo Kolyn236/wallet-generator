@@ -73,6 +73,10 @@ jobs:
         working-directory: frontend
         run: npm run test:bitcoin-vector
 
+      - name: Run Ethereum deterministic vector
+        working-directory: frontend
+        run: npm run test:ethereum-vector
+
       - name: Build frontend
         working-directory: frontend
         run: npm run build

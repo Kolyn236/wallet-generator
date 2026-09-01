@@ -22,7 +22,7 @@ import {
   withAssetRouteBalance,
   type AssetRouteBalances,
 } from './runtime/assetRouteBalances';
-import type { BrowserCreatedWallet } from './runtime/WalletNetworkAdapter';
+import type { BrowserSigningWallet } from './runtime/WalletNetworkAdapter';
 import {
   createWalletSessions,
   getWalletSession,
@@ -51,9 +51,12 @@ export function App() {
   const [existingAddress, setExistingAddress] = useState('');
   const [showExistingForm, setShowExistingForm] = useState(false);
   const [addressError, setAddressError] = useState<'invalid' | 'balance' | null>(null);
+  const [mnemonicInput, setMnemonicInput] = useState('');
+  const [showRecoveryForm, setShowRecoveryForm] = useState(false);
+  const [mnemonicError, setMnemonicError] = useState<'invalid' | null>(null);
   const [showBackupSecrets, setShowBackupSecrets] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('none');
-  const createdWalletRefs = useRef<Partial<Record<NetworkId, BrowserCreatedWallet>>>({});
+  const signingWalletRefs = useRef<Partial<Record<NetworkId, BrowserSigningWallet>>>({});
 
   const copy = messages[language];
   const liveCopy = platformCopy[language];
@@ -68,9 +71,13 @@ export function App() {
   const balanceState = routeBalance.status;
   const displayedBalance = routeBalance.address === session.address ? routeBalance.balance : null;
   const connected = walletAdapter !== null && session.mode !== 'none' && session.address !== '';
-  const createdWallet = walletAdapter !== null && session.mode === 'created'
-    ? createdWalletRefs.current[route.networkId] ?? null
+  const signingWallet = walletAdapter !== null && session.mode === 'local-signing'
+    ? signingWalletRefs.current[route.networkId] ?? null
     : null;
+  const generatedWallet = signingWallet?.origin === 'generated' ? signingWallet : null;
+  const mnemonicWordCount = mnemonicInput.trim() === ''
+    ? 0
+    : mnemonicInput.trim().split(/\s+/).length;
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -97,9 +104,36 @@ export function App() {
   function resetWalletUi() {
     setExistingAddress('');
     setShowExistingForm(false);
+    setAddressError(null);
+    setMnemonicInput('');
+    setShowRecoveryForm(false);
+    setMnemonicError(null);
     setShowBackupSecrets(false);
     setCopyState('none');
+  }
+
+  function openExistingWalletForm() {
+    setShowExistingForm(true);
+    setShowRecoveryForm(false);
+    setMnemonicInput('');
+    setMnemonicError(null);
     setAddressError(null);
+  }
+
+  function openRecoveryForm() {
+    setShowRecoveryForm(true);
+    setShowExistingForm(false);
+    setExistingAddress('');
+    setAddressError(null);
+    setMnemonicError(null);
+    setShowBackupSecrets(false);
+    setCopyState('none');
+  }
+
+  function cancelRecovery() {
+    setMnemonicInput('');
+    setShowRecoveryForm(false);
+    setMnemonicError(null);
   }
 
   function selectAsset(nextAssetId: AssetId) {
@@ -111,6 +145,7 @@ export function App() {
   function selectRoute(nextRouteId: AssetRouteId) {
     setRouteId(nextRouteId);
     setAddressError(null);
+    setMnemonicError(null);
   }
 
   async function refreshBalance(nextRouteId: AssetRouteId, address: string): Promise<boolean> {
@@ -156,16 +191,46 @@ export function App() {
 
     const wallet = walletAdapter.createWallet();
     const networkId = walletAdapter.networkId;
-    createdWalletRefs.current[networkId] = wallet;
+    signingWalletRefs.current[networkId] = wallet;
     setSessions((current) => withWalletSession(current, networkId, {
       address: wallet.address,
-      mode: 'created',
+      mode: 'local-signing',
     }));
     setRouteBalances((current) => invalidateAssetRouteBalancesForNetwork(current, networkId));
     resetWalletUi();
 
     if (routeAdapter && routeAdapter.networkId === networkId) {
       void refreshBalance(route.id, wallet.address);
+    }
+  }
+
+  async function restoreWalletFromMnemonic(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!walletAdapter || !walletAdapter.capabilities.mnemonicImport) return;
+
+    try {
+      const wallet = walletAdapter.importMnemonic(mnemonicInput);
+      const networkId = walletAdapter.networkId;
+      signingWalletRefs.current[networkId] = wallet;
+      setSessions((current) => withWalletSession(current, networkId, {
+        address: wallet.address,
+        mode: 'local-signing',
+      }));
+      setRouteBalances((current) => invalidateAssetRouteBalancesForNetwork(current, networkId));
+      setMnemonicInput('');
+      setShowRecoveryForm(false);
+      setMnemonicError(null);
+      setShowExistingForm(false);
+      setExistingAddress('');
+      setAddressError(null);
+      setShowBackupSecrets(false);
+      setCopyState('none');
+
+      if (routeAdapter && routeAdapter.networkId === networkId) {
+        await refreshBalance(route.id, wallet.address);
+      }
+    } catch {
+      setMnemonicError('invalid');
     }
   }
 
@@ -179,13 +244,16 @@ export function App() {
       return;
     }
 
-    delete createdWalletRefs.current[walletAdapter.networkId];
+    delete signingWalletRefs.current[walletAdapter.networkId];
     setSessions((current) => withWalletSession(current, walletAdapter.networkId, {
       address,
       mode: 'watch-only',
     }));
     setRouteBalances((current) => invalidateAssetRouteBalancesForNetwork(current, walletAdapter.networkId));
     setShowExistingForm(false);
+    setShowRecoveryForm(false);
+    setMnemonicInput('');
+    setMnemonicError(null);
     setShowBackupSecrets(false);
     setCopyState('none');
 
@@ -193,11 +261,11 @@ export function App() {
   }
 
   async function copySecret(kind: 'seed' | 'signing-material') {
-    if (!createdWallet || !navigator.clipboard) return;
+    if (!generatedWallet || !navigator.clipboard) return;
 
     const secret = kind === 'seed'
-      ? createdWallet.mnemonic
-      : createdWallet.signingMaterial.value;
+      ? generatedWallet.generatedMnemonic
+      : generatedWallet.signingMaterial.value;
     try {
       await navigator.clipboard.writeText(secret);
       setCopyState(kind);
@@ -206,8 +274,8 @@ export function App() {
     }
   }
 
-  const modeLabel = session.mode === 'created'
-    ? copy.createdLocally
+  const modeLabel = session.mode === 'local-signing'
+    ? signingWallet?.origin === 'mnemonic' ? copy.restoredFromSeed : copy.createdLocally
     : session.mode === 'watch-only'
       ? copy.watchOnly
       : copy.noWallet;
@@ -233,10 +301,10 @@ export function App() {
     </section>
   );
 
-  const signingMaterialLabel = createdWallet?.signingMaterial.kind === 'private-key'
+  const signingMaterialLabel = generatedWallet?.signingMaterial.kind === 'private-key'
     ? copy.privateKey
     : copy.wif;
-  const copySigningMaterialLabel = createdWallet?.signingMaterial.kind === 'private-key'
+  const copySigningMaterialLabel = generatedWallet?.signingMaterial.kind === 'private-key'
     ? copy.copyPrivateKey
     : copy.copyWif;
 
@@ -313,11 +381,39 @@ export function App() {
 
               {walletAdapter ? (
                 <>
-                  {!connected && !showExistingForm && (
+                  {!connected && !showExistingForm && !showRecoveryForm && (
                     <div className="wallet-actions wallet-choice-actions">
                       <button type="button" className="primary-button" onClick={createWallet}>{copy.createWallet}</button>
-                      <button type="button" className="secondary-button" onClick={() => { setShowExistingForm(true); setAddressError(null); }}>{copy.specifyExisting}</button>
+                      <button type="button" className="secondary-button" onClick={openRecoveryForm} disabled={!walletAdapter.capabilities.mnemonicImport}>{copy.recoverWallet}</button>
+                      <button type="button" className="secondary-button" onClick={openExistingWalletForm}>{copy.specifyExisting}</button>
                     </div>
+                  )}
+
+                  {showRecoveryForm && (
+                    <form className="address-connect-form seed-recovery-form" onSubmit={restoreWalletFromMnemonic}>
+                      <div className="connect-form-heading"><strong>{copy.recoveryTitle}</strong><p>{copy.recoveryHint}</p></div>
+                      <label>
+                        <span>{copy.seedPhrase}</span>
+                        <textarea
+                          value={mnemonicInput}
+                          onChange={(event) => { setMnemonicInput(event.target.value); setMnemonicError(null); }}
+                          placeholder={copy.mnemonicPlaceholder}
+                          autoComplete="off"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          rows={4}
+                        />
+                      </label>
+                      <div className="seed-recovery-meta">
+                        <small>{copy.mnemonicWordCount}: {mnemonicWordCount}</small>
+                        <small>{copy.derivationPath}: <code>{walletAdapter.identity.derivationPath}</code></small>
+                      </div>
+                      {mnemonicError === 'invalid' && <p className="form-error">{copy.invalidMnemonic}</p>}
+                      <div className="connect-form-footer"><small>{copy.mnemonicPrivacy}</small><div className="connect-form-footer-actions">
+                        <button type="submit" className="primary-button" disabled={mnemonicInput.trim() === ''}>{copy.restoreWallet}</button>
+                        <button type="button" className="text-button" onClick={cancelRecovery}>{copy.cancel}</button>
+                      </div></div>
+                    </form>
                   )}
 
                   {showExistingForm && (
@@ -336,17 +432,18 @@ export function App() {
                     </form>
                   )}
 
-                  {connected && !showExistingForm && (
+                  {connected && !showExistingForm && !showRecoveryForm && (
                     <div className="wallet-actions connected-wallet-actions">
                       <button type="button" className="primary-button" onClick={createWallet}>{copy.createWallet}</button>
+                      <button type="button" className="secondary-button" onClick={openRecoveryForm} disabled={!walletAdapter.capabilities.mnemonicImport}>{copy.recoverWallet}</button>
                       <button type="button" className="primary-button" onClick={() => session.address && void refreshBalance(route.id, session.address)} disabled={balanceState === 'loading' || !routeAdapter}>{balanceState === 'loading' ? copy.loadingBalance : copy.refreshBalance}</button>
-                      <button type="button" className="secondary-button" onClick={() => { setExistingAddress(session.address); setShowExistingForm(true); setAddressError(null); }}>{copy.specifyExisting}</button>
+                      <button type="button" className="secondary-button" onClick={() => { setExistingAddress(session.address); openExistingWalletForm(); }}>{copy.specifyExisting}</button>
                       {addressError === 'balance' && <span className="inline-error">{copy.balanceError}</span>}
                     </div>
                   )}
                 </>
               ) : (
-                <div className="wallet-actions"><button type="button" className="primary-button" disabled>{copy.createWallet}</button><button type="button" className="secondary-button" disabled>{copy.specifyExisting}</button><span>{copy.planned}</span></div>
+                <div className="wallet-actions"><button type="button" className="primary-button" disabled>{copy.createWallet}</button><button type="button" className="secondary-button" disabled>{copy.recoverWallet}</button><button type="button" className="secondary-button" disabled>{copy.specifyExisting}</button><span>{copy.planned}</span></div>
               )}
             </section>
 
@@ -360,7 +457,7 @@ export function App() {
           </div>
         </section>
 
-        {createdWallet && (
+        {generatedWallet && (
           <section className="backup-card" aria-live="polite">
             <div className="backup-card-header"><div><span className="muted-label">{asset.symbol} · BIP39 / BIP44</span><h2>{copy.backupTitle}</h2><p>{copy.backupText}</p></div>
               <button type="button" className="backup-toggle" onClick={() => { setShowBackupSecrets((value) => !value); setCopyState('none'); }}>{showBackupSecrets ? copy.hideBackup : copy.revealBackup}</button>
@@ -368,9 +465,9 @@ export function App() {
             <div className="backup-warning">{liveCopy.reloadWarning}</div>
             {showBackupSecrets && (
               <div className="secret-grid">
-                <div className="secret-field seed-field"><span>{copy.seedPhrase}</span><code>{createdWallet.mnemonic}</code><button type="button" onClick={() => void copySecret('seed')}>{copyState === 'seed' ? copy.copied : copy.copySeed}</button></div>
-                <div className="secret-field"><span>{signingMaterialLabel}</span><code>{createdWallet.signingMaterial.value}</code><button type="button" onClick={() => void copySecret('signing-material')}>{copyState === 'signing-material' ? copy.copied : copySigningMaterialLabel}</button></div>
-                <div className="secret-field path-field"><span>{copy.derivationPath}</span><code>{createdWallet.derivationPath}</code></div>
+                <div className="secret-field seed-field"><span>{copy.seedPhrase}</span><code>{generatedWallet.generatedMnemonic}</code><button type="button" onClick={() => void copySecret('seed')}>{copyState === 'seed' ? copy.copied : copy.copySeed}</button></div>
+                <div className="secret-field"><span>{signingMaterialLabel}</span><code>{generatedWallet.signingMaterial.value}</code><button type="button" onClick={() => void copySecret('signing-material')}>{copyState === 'signing-material' ? copy.copied : copySigningMaterialLabel}</button></div>
+                <div className="secret-field path-field"><span>{copy.derivationPath}</span><code>{generatedWallet.derivationPath}</code></div>
               </div>
             )}
           </section>
@@ -386,7 +483,7 @@ export function App() {
               networkStandard: route.standard,
               sourceAddress: session.address,
               walletMode: session.mode,
-              createdWallet,
+              createdWallet: signingWallet,
             })}
           </Suspense>
         ) : unavailableTransferPanel}

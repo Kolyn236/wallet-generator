@@ -8,6 +8,10 @@ import {
   dogecoinMainnetAssetRouteAdapter,
   dogecoinMainnetWalletAdapter,
 } from './adapters/dogecoinMainnet';
+import {
+  ethereumMainnetAssetRouteAdapter,
+  ethereumMainnetWalletAdapter,
+} from './adapters/ethereumMainnet';
 import type { WalletNetworkAdapter } from './WalletNetworkAdapter';
 
 export type AdapterRegistryOptions = {
@@ -69,9 +73,11 @@ export const adapterRegistry = createAdapterRegistry({
   walletNetworkAdapters: [
     dogecoinMainnetWalletAdapter,
     bitcoinMainnetWalletAdapter,
+    ethereumMainnetWalletAdapter,
   ],
   assetRouteAdapters: [
     dogecoinMainnetAssetRouteAdapter,
     bitcoinMainnetAssetRouteAdapter,
+    ethereumMainnetAssetRouteAdapter,
   ],
 });

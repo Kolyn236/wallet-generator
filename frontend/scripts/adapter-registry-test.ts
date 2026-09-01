@@ -18,6 +18,10 @@ import {
   dogecoinMainnetWalletAdapter,
 } from '../src/runtime/adapters/dogecoinMainnet.ts';
 import {
+  ethereumMainnetAssetRouteAdapter,
+  ethereumMainnetWalletAdapter,
+} from '../src/runtime/adapters/ethereumMainnet.ts';
+import {
   createAssetRouteBalances,
   getAssetRouteBalance,
   invalidateAssetRouteBalancesForNetwork,
@@ -74,25 +78,34 @@ assert.strictEqual(
   adapterRegistry.resolveWalletNetwork('bitcoin-mainnet'),
   bitcoinMainnetWalletAdapter,
 );
+assert.strictEqual(
+  adapterRegistry.resolveAssetRoute('eth-ethereum-mainnet-native'),
+  ethereumMainnetAssetRouteAdapter,
+);
+assert.strictEqual(
+  adapterRegistry.resolveWalletNetwork('ethereum-mainnet'),
+  ethereumMainnetWalletAdapter,
+);
 assert.notStrictEqual(dogecoinMainnetAssetRouteAdapter, bitcoinMainnetAssetRouteAdapter);
+assert.notStrictEqual(bitcoinMainnetAssetRouteAdapter, ethereumMainnetAssetRouteAdapter);
 assert.notStrictEqual(dogecoinMainnetWalletAdapter, bitcoinMainnetWalletAdapter);
+assert.notStrictEqual(bitcoinMainnetWalletAdapter, ethereumMainnetWalletAdapter);
 
 assert.equal(getAssetRouteAvailability('doge-dogecoin-mainnet-native'), 'ready-next');
 assert.equal(getAssetRouteAvailability('btc-bitcoin-mainnet-native'), 'ready-next');
-assert.equal(getAssetRouteAvailability('eth-ethereum-mainnet-native'), 'planned');
+assert.equal(getAssetRouteAvailability('eth-ethereum-mainnet-native'), 'ready-next');
 assert.equal(getAssetRouteAvailability('usdt-ethereum-mainnet-erc20'), 'planned');
 assert.equal(getAssetRouteAvailability('usdt-tron-mainnet-trc20'), 'planned');
 
-assert.equal(adapterRegistry.resolveAssetRoute('eth-ethereum-mainnet-native'), null);
 assert.equal(adapterRegistry.resolveAssetRoute('usdt-ethereum-mainnet-erc20'), null);
 assert.equal(adapterRegistry.resolveAssetRoute('usdt-tron-mainnet-trc20'), null);
-assert.equal(adapterRegistry.resolveWalletNetwork('ethereum-mainnet'), null);
 assert.equal(adapterRegistry.resolveWalletNetwork('tron-mainnet'), null);
 
 for (const unknownRoute of [
   'unknown-route',
   'btc-dogecoin-mainnet-native',
   'doge-bitcoin-mainnet-native',
+  'eth-bitcoin-mainnet-native',
 ]) {
   assert.equal(
     adapterRegistry.resolveAssetRoute(unknownRoute),
@@ -104,6 +117,7 @@ for (const unknownNetwork of [
   'unknown-network',
   'dogecoin-testnet',
   'bitcoin-testnet',
+  'ethereum-sepolia',
 ]) {
   assert.equal(
     adapterRegistry.resolveWalletNetwork(unknownNetwork),
@@ -115,10 +129,12 @@ for (const unknownNetwork of [
 const builtInWalletAdapters = [
   dogecoinMainnetWalletAdapter,
   bitcoinMainnetWalletAdapter,
+  ethereumMainnetWalletAdapter,
 ];
 const builtInAssetRouteAdapters = [
   dogecoinMainnetAssetRouteAdapter,
   bitcoinMainnetAssetRouteAdapter,
+  ethereumMainnetAssetRouteAdapter,
 ];
 assert.equal(
   new Set(builtInWalletAdapters.map((adapter) => adapter.networkId)).size,
@@ -147,8 +163,16 @@ assert.throws(
 );
 
 const independentRegistry = createAdapterRegistry({
-  walletNetworkAdapters: [dogecoinMainnetWalletAdapter, bitcoinMainnetWalletAdapter],
-  assetRouteAdapters: [dogecoinMainnetAssetRouteAdapter, bitcoinMainnetAssetRouteAdapter],
+  walletNetworkAdapters: [
+    dogecoinMainnetWalletAdapter,
+    bitcoinMainnetWalletAdapter,
+    ethereumMainnetWalletAdapter,
+  ],
+  assetRouteAdapters: [
+    dogecoinMainnetAssetRouteAdapter,
+    bitcoinMainnetAssetRouteAdapter,
+    ethereumMainnetAssetRouteAdapter,
+  ],
 });
 assert.strictEqual(
   independentRegistry.resolveAssetRoute('doge-dogecoin-mainnet-native'),
@@ -158,6 +182,11 @@ assert.strictEqual(
   independentRegistry.resolveAssetRoute('btc-bitcoin-mainnet-native'),
   bitcoinMainnetAssetRouteAdapter,
 );
+assert.strictEqual(
+  independentRegistry.resolveAssetRoute('eth-ethereum-mainnet-native'),
+  ethereumMainnetAssetRouteAdapter,
+);
+assert.equal(independentRegistry.resolveAssetRoute('usdt-ethereum-mainnet-erc20'), null);
 assert.equal(independentRegistry.resolveAssetRoute('unknown-route'), null);
 
 let sessions = createWalletSessions();
@@ -169,14 +198,19 @@ sessions = withWalletSession(sessions, 'bitcoin-mainnet', {
   address: '1-bitcoin-session',
   mode: 'created',
 });
+sessions = withWalletSession(sessions, 'ethereum-mainnet', {
+  address: '0x1111111111111111111111111111111111111111',
+  mode: 'created',
+});
 
 assert.equal(getWalletSession(sessions, 'dogecoin-mainnet').address, 'D-dogecoin-session');
 assert.equal(getWalletSession(sessions, 'bitcoin-mainnet').address, '1-bitcoin-session');
-assert.deepEqual(getWalletSession(sessions, 'ethereum-mainnet'), {
-  address: '',
-  mode: 'none',
-});
+assert.equal(
+  getWalletSession(sessions, 'ethereum-mainnet').address,
+  '0x1111111111111111111111111111111111111111',
+);
 assert.equal('balance' in getWalletSession(sessions, 'dogecoin-mainnet'), false);
+assert.equal('balance' in getWalletSession(sessions, 'ethereum-mainnet'), false);
 
 let balances = createAssetRouteBalances();
 balances = withAssetRouteBalance(balances, 'doge-dogecoin-mainnet-native', {
@@ -234,6 +268,28 @@ assert.throws(
     assetSymbol: 'BTC',
     networkName: 'Bitcoin',
     networkStandard: 'BTC mainnet · P2PKH',
+  }),
+  /incompatible_signing_material/,
+);
+
+const incompatibleEthereumWallet = {
+  address: '1BitcoinOnlySigningMaterial',
+  mnemonic: 'test only',
+  derivationPath: "m/44'/0'/0'/0/0",
+  signingMaterial: {
+    kind: 'wif' as const,
+    value: 'test-only-wif',
+  },
+};
+assert.throws(
+  () => ethereumMainnetAssetRouteAdapter.renderTransferPanel({
+    ...transferProps,
+    assetId: 'eth',
+    assetSymbol: 'ETH',
+    networkName: 'Ethereum',
+    networkStandard: 'Ethereum mainnet · EIP-1559',
+    sourceAddress: '0x0000000000000000000000000000000000000000',
+    createdWallet: incompatibleEthereumWallet,
   }),
   /incompatible_signing_material/,
 );

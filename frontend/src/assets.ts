@@ -96,7 +96,7 @@ export const assetRoutes: AssetRouteDefinition[] = [
     assetId: 'eth',
     networkId: 'ethereum-mainnet',
     kind: 'native',
-    standard: 'EVM mainnet',
+    standard: 'Ethereum mainnet · EIP-1559',
   },
   {
     id: 'usdt-ethereum-mainnet-erc20',
@@ -117,7 +117,7 @@ export const assetRoutes: AssetRouteDefinition[] = [
 const routeAvailability: Record<AssetRouteId, AssetRouteAvailability> = {
   'doge-dogecoin-mainnet-native': 'ready-next',
   'btc-bitcoin-mainnet-native': 'ready-next',
-  'eth-ethereum-mainnet-native': 'planned',
+  'eth-ethereum-mainnet-native': 'ready-next',
   'usdt-ethereum-mainnet-erc20': 'planned',
   'usdt-tron-mainnet-trc20': 'planned',
 };

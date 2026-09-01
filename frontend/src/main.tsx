@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { DonationCard } from './DonationCard';
 import './styles.css';
 import './wallets.css';
 import './wallet.css';
@@ -14,5 +15,6 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <App />
+    <DonationCard />
   </StrictMode>,
 );

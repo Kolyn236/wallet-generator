@@ -93,7 +93,7 @@ export const ethereumMainnetAssetRouteAdapter: AssetRouteAdapter = {
       networkName: props.networkName,
       networkStandard: props.networkStandard,
       sourceAddress: props.sourceAddress,
-      walletMode: props.walletMode,
+      walletMode: props.walletMode === 'local-signing' ? 'created' : props.walletMode,
       createdWallet: toEthereumCreatedWallet(props.createdWallet),
     });
   },
@@ -118,7 +118,7 @@ export const usdtEthereumMainnetAssetRouteAdapter: AssetRouteAdapter = {
       networkName: props.networkName,
       networkStandard: props.networkStandard,
       sourceAddress: props.sourceAddress,
-      walletMode: props.walletMode,
+      walletMode: props.walletMode === 'local-signing' ? 'created' : props.walletMode,
       createdWallet: toEthereumCreatedWallet(props.createdWallet),
     });
   },

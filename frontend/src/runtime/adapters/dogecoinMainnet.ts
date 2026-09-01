@@ -89,7 +89,7 @@ export const dogecoinMainnetAssetRouteAdapter: AssetRouteAdapter = {
       networkName: props.networkName,
       networkStandard: props.networkStandard,
       sourceAddress: props.sourceAddress,
-      walletMode: props.walletMode,
+      walletMode: props.walletMode === 'local-signing' ? 'created' : props.walletMode,
       createdWallet: toDogecoinCreatedWallet(props.createdWallet),
     });
   },

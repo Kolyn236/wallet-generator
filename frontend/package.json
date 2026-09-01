@@ -14,7 +14,6 @@
     "test:ethereum-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/ethereum-vector-test.ts"
   },
   "dependencies": {
-    "@noble/curves": "2.3.0",
     "@noble/hashes": "2.3.0",
     "@scure/base": "2.3.0",
     "@scure/bip32": "2.3.0",

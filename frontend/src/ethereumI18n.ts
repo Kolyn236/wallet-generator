@@ -26,10 +26,10 @@ export const ethereumMessages: Record<Language, {
   recipientPlaceholder: string;
 }> = {
   en: {
-    transferText: 'Symfony prepares only public Ethereum state: pending nonce, gas estimate and EIP-1559 fee quote. The private key stays in this browser and signs the Type-2 transaction locally.',
+    transferText: 'The server provides only public Ethereum state such as pending nonce, gas estimate and EIP-1559 fee data. Your private key stays in this browser and signs the Type-2 transaction locally.',
     feeModel: 'EIP-1559 · chain ID 1 · empty access list for native ETH transfers.',
     privateKeyPlaceholder: '0x… private key for the sender address',
-    privateKeyHint: 'The Ethereum private key is used only in browser memory to sign the Type-2 transaction. It is never sent to Symfony.',
+    privateKeyHint: 'The Ethereum private key stays in browser memory and is used only for local signing. It is never sent to the server.',
     privateKeyRequired: 'Enter the private key for the sender address.',
     privateKeyInvalid: 'Enter a valid 32-byte secp256k1 private key.',
     privateKeyMismatch: 'This private key does not belong to the sender address.',
@@ -51,10 +51,10 @@ export const ethereumMessages: Record<Language, {
     recipientPlaceholder: '0x destination address',
   },
   ru: {
-    transferText: 'Symfony подготавливает только публичное состояние Ethereum: pending nonce, gas estimate и EIP-1559 fee quote. Private key остаётся в браузере и локально подписывает Type-2 транзакцию.',
+    transferText: 'Сервер получает только публичные параметры Ethereum: pending nonce, gas estimate и данные комиссии EIP-1559. Ваш private key остаётся в браузере и локально подписывает Type-2 транзакцию.',
     feeModel: 'EIP-1559 · chain ID 1 · пустой access list для обычного ETH-перевода.',
     privateKeyPlaceholder: '0x… private key адреса отправителя',
-    privateKeyHint: 'Ethereum private key используется только в памяти браузера для подписи Type-2 транзакции и никогда не отправляется в Symfony.',
+    privateKeyHint: 'Ethereum private key остаётся только в памяти браузера и используется для локальной подписи. На сервер он никогда не отправляется.',
     privateKeyRequired: 'Укажите private key адреса отправителя.',
     privateKeyInvalid: 'Укажите корректный 32-байтовый secp256k1 private key.',
     privateKeyMismatch: 'Этот private key не соответствует адресу отправителя.',

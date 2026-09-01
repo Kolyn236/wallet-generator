@@ -15,7 +15,7 @@ export const usdtMessages: Record<Language, {
   ethGasNotice: string;
 }> = {
   en: {
-    transferText: 'USDT uses the same Ethereum wallet identity as ETH. The browser builds ERC-20 transfer calldata, Symfony prepares public gas/nonce/fee data, and the private key signs locally.',
+    transferText: 'USDT uses the same Ethereum wallet identity as ETH. The browser builds ERC-20 transfer calldata, the server provides public gas/nonce/fee data, and your private key signs locally without leaving the browser.',
     feeModel: 'USDT ERC-20 · Ethereum Mainnet · network fees are paid in ETH.',
     formError: 'Fill in valid sender, recipient and a positive USDT amount with up to 6 decimals.',
     preparingTransfer: 'Checking USDT balance, estimating gas and signing…',
@@ -29,7 +29,7 @@ export const usdtMessages: Record<Language, {
     ethGasNotice: 'The token amount is paid in USDT; Ethereum gas is paid separately in ETH.',
   },
   ru: {
-    transferText: 'USDT использует тот же Ethereum-кошелёк, что и ETH. Браузер собирает calldata ERC-20 transfer, Symfony получает публичные gas/nonce/fee параметры, а private key подписывает транзакцию локально.',
+    transferText: 'USDT использует тот же Ethereum-кошелёк, что и ETH. Браузер собирает calldata ERC-20 transfer, сервер получает публичные gas/nonce/fee параметры, а ваш private key подписывает транзакцию локально и не покидает браузер.',
     feeModel: 'USDT ERC-20 · Ethereum Mainnet · комиссия сети оплачивается в ETH.',
     formError: 'Укажите корректные адреса и положительную сумму USDT не более чем с 6 знаками после запятой.',
     preparingTransfer: 'Проверяем USDT, оцениваем gas и подписываем…',

@@ -77,6 +77,10 @@ jobs:
         working-directory: frontend
         run: npm run test:ethereum-vector
 
+      - name: Run USDT ERC-20 deterministic vector
+        working-directory: frontend
+        run: npm run test:usdt-erc20-vector
+
       - name: Build frontend
         working-directory: frontend
         run: npm run build

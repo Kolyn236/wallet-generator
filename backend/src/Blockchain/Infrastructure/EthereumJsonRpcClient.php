@@ -7,11 +7,13 @@ namespace App\Blockchain\Infrastructure;
 use App\Blockchain\Application\Eip1559FeeQuote;
 use App\Blockchain\Application\EthereumRpcFailed;
 use App\Blockchain\Application\EvmTransactionIntent;
+use App\Blockchain\Domain\EthereumAddress;
 use App\Blockchain\Domain\EvmQuantity;
 
 final readonly class EthereumJsonRpcClient
 {
     private const int REQUEST_ID = 1;
+    private const string ERC20_BALANCE_OF_SELECTOR = '70a08231';
 
     public function __construct(
         private string $rpcUrl,
@@ -25,6 +27,32 @@ final readonly class EthereumJsonRpcClient
         $this->assertMainnet();
 
         return $this->quantityResult('eth_getBalance', [$address, 'latest'], 'balance');
+    }
+
+    public function erc20Balance(string $contractAddress, string $holderAddress): string
+    {
+        $this->assertMainnet();
+
+        $contract = EthereumAddress::fromString($contractAddress)->value;
+        $holder = EthereumAddress::fromString($holderAddress)->value;
+        $data = '0x'.self::ERC20_BALANCE_OF_SELECTOR.str_pad(strtolower(substr($holder, 2)), 64, '0', \STR_PAD_LEFT);
+        $result = $this->call('eth_call', [[
+            'to' => $contract,
+            'data' => $data,
+        ], 'latest'], 'erc20_balance');
+
+        if (!\is_string($result) || 1 !== preg_match('/^0x[0-9a-fA-F]{64}$/', $result)) {
+            throw new EthereumRpcFailed('provider_unexpected_response');
+        }
+
+        $hex = ltrim(substr($result, 2), '0');
+        $quantity = '0x'.('' === $hex ? '0' : $hex);
+
+        try {
+            return EvmQuantity::fromHex($quantity)->decimal;
+        } catch (\InvalidArgumentException $exception) {
+            throw new EthereumRpcFailed('provider_unexpected_response', null, $exception);
+        }
     }
 
     public function pendingNonce(string $address): string

@@ -6,15 +6,20 @@ Current live frontend routes:
 
 - DOGE / Dogecoin mainnet;
 - BTC / Bitcoin mainnet legacy P2PKH;
-- ETH / Ethereum mainnet EIP-1559.
+- ETH / Ethereum mainnet EIP-1559;
+- USDT / Ethereum mainnet ERC-20.
 
-Wallet sessions are network-scoped and kept in browser memory. DOGE/BTC use WIF-backed UTXO signing; Ethereum uses the same BIP39/BIP44 wallet model with derivation path `m/44'/60'/0'/0/0` and browser-local private-key signing for EIP-1559 Type-2 transactions.
+Wallet sessions are network-scoped and kept in browser memory. DOGE/BTC use WIF-backed UTXO signing; Ethereum uses the BIP39/BIP44 derivation path `m/44'/60'/0'/0/0` and browser-local private-key signing for EIP-1559 Type-2 transactions.
 
-For native ETH transfers, the browser sends only public intent (`from`, `to`, `valueWei`, `data`) to Symfony. The backend returns public preparation state (pending nonce, gas limit and EIP-1559 fees), the browser signs locally, and broadcast is a separate explicit action. The local Ethereum transaction hash is compared with the provider-returned hash after broadcast.
+ETH and USDT ERC-20 deliberately share the same `ethereum-mainnet` wallet session/address/private key while keeping independent asset-route balances and transfer runtimes. Switching between ETH and USDT does not create a second Ethereum wallet.
 
-Seed phrases, private keys and WIF must never be sent to Symfony or persisted in browser storage. Existing DOGE/BTC senders may enter a matching WIF in the transfer flow; existing Ethereum senders may enter a matching private key. Both remain browser-local.
+For native ETH transfers, the browser sends public intent (`from`, `to`, `valueWei`, `data`) to Symfony. For USDT, `to` is the fixed Ethereum Mainnet USDT contract, `valueWei` is zero and `data` is the locally encoded ERC-20 `transfer(address,uint256)` calldata. Symfony returns public preparation state (pending nonce, gas limit and EIP-1559 fees), the browser signs locally, and broadcast is a separate explicit action.
 
-USDT ERC-20 remains a separate planned asset route on the same `ethereum-mainnet` wallet identity. Registering native ETH does not make the token route executable.
+USDT balance loading uses the fixed token contract through the backend `eth_call balanceOf(address)` capability. USDT uses 6 decimal places. Ethereum gas for token transfers is paid in ETH.
+
+Seed phrases, private keys and WIF must never be sent to Symfony or persisted in browser storage. Existing DOGE/BTC senders may enter a matching WIF in the transfer flow; existing Ethereum/USDT senders may enter a matching Ethereum private key. Both remain browser-local.
+
+USDT TRC-20 remains planned and does not resolve through the Ethereum route.
 
 ## Local development
 
@@ -24,6 +29,7 @@ npm run test:adapter-invariants
 npm run test:dogecoin-vector
 npm run test:bitcoin-vector
 npm run test:ethereum-vector
+npm run test:usdt-erc20-vector
 npm run build
 npm run dev
 ```

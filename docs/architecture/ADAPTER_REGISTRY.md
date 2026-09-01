@@ -8,9 +8,10 @@ Current live frontend routes are:
 doge-dogecoin-mainnet-native
 btc-bitcoin-mainnet-native
 eth-ethereum-mainnet-native
+usdt-ethereum-mainnet-erc20
 ```
 
-USDT ERC-20 and USDT TRC-20 remain planned routes. A live Ethereum wallet identity does not make the ERC-20 route executable by itself.
+USDT TRC-20 remains planned. It must never resolve through the Ethereum ERC-20 runtime.
 
 ## Core concepts
 
@@ -32,7 +33,7 @@ Chain family must not become one universal transaction interface. UTXO, EVM and 
 
 ### Network
 
-A **Network** is a concrete environment of one chain, such as:
+A **Network** is a concrete environment of one chain:
 
 ```text
 dogecoin-mainnet
@@ -41,15 +42,11 @@ ethereum-mainnet
 tron-mainnet
 ```
 
-Browser wallet identity is network-scoped. This is especially important for Ethereum: one Ethereum account can own native ETH and multiple ERC-20 assets without creating separate wallet identities.
+Browser wallet identity is network-scoped. One Ethereum account can own native ETH and multiple ERC-20 assets without creating separate wallet identities.
 
-### Asset
+### Asset and asset route
 
-An **Asset** is the economic unit shown to the user, for example DOGE, BTC, ETH or USDT.
-
-USDT is an asset, not a blockchain.
-
-### Asset route
+An **Asset** is the economic unit shown to the user, for example DOGE, BTC, ETH or USDT. USDT is an asset, not a blockchain.
 
 An **Asset Route** joins one asset to one network and identifies how that asset executes on that network.
 
@@ -58,7 +55,7 @@ An **Asset Route** joins one asset to one network and identifies how that asset 
 | `doge-dogecoin-mainnet-native` | DOGE | Dogecoin mainnet | native | live |
 | `btc-bitcoin-mainnet-native` | BTC | Bitcoin mainnet | native | live |
 | `eth-ethereum-mainnet-native` | ETH | Ethereum mainnet | native | live |
-| `usdt-ethereum-mainnet-erc20` | USDT | Ethereum mainnet | ERC-20 token | planned |
+| `usdt-ethereum-mainnet-erc20` | USDT | Ethereum mainnet | ERC-20 token | live |
 | `usdt-tron-mainnet-trc20` | USDT | Tron mainnet | TRC-20 token | planned |
 
 The route, not the asset symbol alone, is the runtime selection and balance key.
@@ -83,14 +80,7 @@ bitcoin-mainnet
 ethereum-mainnet
 ```
 
-Wallet sessions are keyed by `networkId` and contain only public identity/session state:
-
-```text
-address
-mode
-```
-
-They deliberately contain no balance.
+Wallet sessions are keyed by `networkId` and contain public identity/session state only. They deliberately contain no balance.
 
 ## Browser signing material
 
@@ -101,15 +91,13 @@ wif
 private-key
 ```
 
-DOGE/BTC use `kind = wif` for their legacy P2PKH runtime.
-
-Ethereum uses `kind = private-key` with derivation path:
+DOGE/BTC use `kind = wif` for legacy P2PKH. Ethereum uses `kind = private-key` with derivation path:
 
 ```text
 m/44'/60'/0'/0/0
 ```
 
-Route adapters narrow the signing-material kind before passing it to chain-specific transfer code. Supplying the wrong kind fails closed.
+Native ETH and USDT ERC-20 consume the same Ethereum signing material through separate asset-route adapters. Supplying the wrong signing-material kind fails closed.
 
 Seed phrases, WIFs and private keys remain browser-memory-only. Registry guardrails reject secret persistence through browser storage APIs.
 
@@ -120,37 +108,31 @@ Seed phrases, WIFs and private keys remain browser-memory-only. Registry guardra
 - `routeId`;
 - `assetId`;
 - `networkId`;
-- route-specific capability metadata;
+- route-specific capabilities;
 - asset balance loading;
-- route-specific transfer runtime/UI entry point.
+- route-specific transfer runtime/UI.
 
 A route adapter may register only when its catalog asset/network identity matches and its required wallet-network adapter is already registered.
 
-Current live route adapters are separate runtime objects for DOGE, BTC and native ETH.
+Native ETH and USDT ERC-20 are different route adapter objects even though both depend on `ethereumMainnetWalletAdapter`.
 
-## Route-scoped balances
+## Shared Ethereum identity, separate balances
 
 Frontend balances are keyed by `routeId`, not by network:
-
-```text
-assetRouteBalances[routeId]
-```
-
-For Ethereum this permits:
 
 ```text
 ethereum-mainnet wallet session
 address: 0xABC...
 
 eth-ethereum-mainnet-native balance       1.25 ETH
-usdt-ethereum-mainnet-erc20 balance       future independent value
+usdt-ethereum-mainnet-erc20 balance       500 USDT
 ```
 
-Changing the Ethereum wallet identity invalidates balances for every asset route on `ethereum-mainnet`, including the future ERC-20 route.
+Changing the Ethereum wallet identity invalidates every asset-route balance on `ethereum-mainnet`, so ETH and USDT are cleared together before new reads complete.
 
-## Ethereum native route
+## Native ETH route
 
-The live native ETH route owns:
+The native ETH route owns:
 
 - Ethereum address validation;
 - BIP39/BIP44 local wallet creation;
@@ -161,42 +143,27 @@ The live native ETH route owns:
 - local transaction-hash calculation;
 - explicit signed-raw broadcast.
 
-The browser sends Symfony only public intent:
+Native transfer intent uses the recipient as `to`, the ETH amount as `valueWei` and empty calldata.
 
-```text
-from
-to
-valueWei
-data
-```
+## USDT ERC-20 route
 
-Symfony returns public preparation state:
+USDT ERC-20 reuses the Ethereum wallet identity but owns token-specific behavior:
 
-```text
-chainId
-senderBalanceWei
-nonce
-gasLimit
-baseFeePerGasWei
-maxPriorityFeePerGasWei
-maxFeePerGasWei
-```
+- fixed Ethereum Mainnet USDT contract;
+- 6-decimal amount parsing/formatting;
+- token balance loading through `eth_call balanceOf(address)`;
+- local ABI encoding of `transfer(address,uint256)`;
+- EIP-1559 preparation with `to = token contract`, `valueWei = 0` and transfer calldata;
+- token-balance validation plus native ETH gas-balance validation;
+- browser-local Type-2 signing and explicit broadcast.
 
-The browser verifies the private key belongs to the sender, signs locally and compares its local transaction hash with the provider-returned hash after broadcast.
-
-The native ETH route always selects `ethereum-mainnet`; it does not fall back to another EVM chain.
-
-## Why ETH and ERC-20 share one Ethereum wallet
-
-Native ETH and ERC-20 assets use the same Ethereum account/address space, so they share the `ethereum-mainnet` wallet session.
-
-They do **not** share asset-route balance or transfer behavior. Native ETH is live; USDT ERC-20 remains unregistered/planned until its token-specific runtime exists.
+The fixed contract and route details are documented in `USDT_ERC20.md`.
 
 ## Why USDT ERC-20 and USDT TRC-20 are separate routes
 
-`USDT ERC-20` is carried by Ethereum and uses an Ethereum account identity.
+`USDT ERC-20` is carried by Ethereum and uses the Ethereum account/address space.
 
-`USDT TRC-20` is carried by Tron and will require a Tron wallet/network runtime.
+`USDT TRC-20` is carried by Tron and requires a Tron wallet/network runtime. It remains planned and unregistered.
 
 The two routes must never resolve to each other.
 
@@ -213,14 +180,12 @@ Rules:
 5. unknown network lookup returns `null`;
 6. unknown asset-route lookup returns `null`;
 7. planned routes remain unregistered;
-8. every route marked live must resolve to its own runtime adapter;
+8. every route marked live resolves to its own runtime adapter;
 9. no default adapter or chain fallback exists.
 
 ## Backend capability adapters
 
-Backend `ChainAdapter` contains chain/network identity only.
-
-Implemented behavior is exposed through capability interfaces rather than a fat universal blockchain interface.
+Backend `ChainAdapter` contains chain/network identity only. Behavior is exposed through capabilities rather than a fat universal blockchain interface.
 
 UTXO capabilities include:
 
@@ -232,12 +197,15 @@ UTXO capabilities include:
 Ethereum capabilities include:
 
 - `EvmNativeBalanceCapability`;
+- `Erc20BalanceCapability`;
 - `EvmPendingNonceCapability`;
 - `EvmGasEstimateCapability`;
 - `Eip1559FeeQuoteCapability`;
 - `RawTransactionBroadcastCapability`.
 
 Ethereum deliberately does not implement UTXO capabilities.
+
+The USDT HTTP balance use case chooses the fixed USDT contract itself. The public API does not accept an arbitrary contract address and then pass it blindly to the capability.
 
 ## Backend chain registry
 
@@ -256,52 +224,34 @@ Rules:
 - unsupported capability throws `UnsupportedChainCapability`;
 - no lookup falls back to another chain adapter.
 
-Ethereum additionally verifies the provider reports `eth_chainId == 1` before state/broadcast operations.
-
-## Module boundaries
-
-Registry behavior must preserve the modular-monolith dependency direction:
-
-```text
-Presentation -> Application <- Infrastructure
-                    |
-                    v
-                  Domain
-```
-
-Important rules:
-
-- Presentation must not import Blockchain Infrastructure directly;
-- Blockchain Application must not import concrete Infrastructure adapters;
-- concrete adapters live in Infrastructure and implement Application-owned contracts/capabilities;
-- modules must not import another module's Infrastructure or Presentation layer.
+Ethereum verifies the provider reports `eth_chainId == 1` before state/broadcast operations.
 
 ## Automated guardrails
 
 Frontend invariant tests verify that:
 
-- all live DOGE/BTC/ETH routes have exact route and wallet-network adapters;
-- USDT ERC-20 and TRC-20 remain unregistered while planned;
+- all live DOGE/BTC/ETH/USDT-ERC20 routes have exact route and wallet-network adapters;
+- TRC-20 remains unregistered while planned;
+- ETH and USDT resolve to different route adapters but the same Ethereum wallet-network adapter;
 - built-in registry keys are unique;
 - unknown route/network keys fail closed;
-- DOGE, BTC and ETH resolve only to their own runtime objects;
 - wallet sessions remain network-scoped and balance-free;
 - balances remain asset-route-scoped;
-- changing an Ethereum wallet invalidates ETH and future ERC-20 balances together;
+- changing an Ethereum wallet invalidates ETH and USDT balances together;
 - DOGE/BTC reject private-key signing material;
-- Ethereum rejects WIF signing material;
+- Ethereum routes reject WIF signing material;
 - wallet secrets are not persisted in browser storage.
 
 Deterministic frontend vectors cover:
 
 - DOGE derivation/signing;
 - BTC derivation/signing;
-- ETH BIP39/BIP44 derivation;
-- EIP-1559 Type-2 serialization and transaction hashing.
+- ETH BIP39/BIP44 derivation and Type-2 serialization/hash;
+- USDT 6-decimal conversion, ERC-20 calldata and deterministic Type-2 signing.
 
-Backend tests verify exact registry/capability resolution, wrong-network failure, Ethereum quantity safety and provider-response validation without requiring a live RPC provider.
+Backend tests verify exact registry/capability resolution, Ethereum mainnet checks, ERC-20 `eth_call` encoding/result validation, quantity safety and provider-response validation without a live RPC provider.
 
-`Quality Gate` runs the deterministic vectors, frontend registry invariants, frontend build and backend quality checks. `Integration Smoke` owns Docker/Compose runtime verification separately.
+`Quality Gate` runs deterministic vectors, frontend registry invariants, frontend build and backend quality checks. `Integration Smoke` owns Docker/Compose runtime verification separately.
 
 ## Adding a future live route
 

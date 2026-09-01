@@ -64,6 +64,7 @@ jobs:
               && docker compose exec -T php php bin/console debug:router api_dogecoin_fee_policy >/dev/null 2>&1 \
               && docker compose exec -T php php bin/console debug:router api_bitcoin_fee_policy >/dev/null 2>&1 \
               && docker compose exec -T php php bin/console debug:router api_ethereum_balance >/dev/null 2>&1 \
+              && docker compose exec -T php php bin/console debug:router api_ethereum_usdt_erc20_balance >/dev/null 2>&1 \
               && docker compose exec -T php php bin/console debug:router api_ethereum_prepare >/dev/null 2>&1 \
               && docker compose exec -T php php bin/console debug:router api_ethereum_broadcast >/dev/null 2>&1 \
               && curl --fail --silent --show-error -H 'Accept: application/json' http://localhost:8080/api/health >/dev/null \
@@ -80,6 +81,7 @@ jobs:
           docker compose exec -T php php bin/console debug:router api_dogecoin_fee_policy || true
           docker compose exec -T php php bin/console debug:router api_bitcoin_fee_policy || true
           docker compose exec -T php php bin/console debug:router api_ethereum_balance || true
+          docker compose exec -T php php bin/console debug:router api_ethereum_usdt_erc20_balance || true
           docker compose exec -T php php bin/console debug:router api_ethereum_prepare || true
           docker compose exec -T php php bin/console debug:router api_ethereum_broadcast || true
           echo '--- DOGE fee policy ---'

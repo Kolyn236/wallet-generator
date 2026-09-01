@@ -103,7 +103,7 @@ export const assetRoutes: AssetRouteDefinition[] = [
     assetId: 'usdt',
     networkId: 'ethereum-mainnet',
     kind: 'token',
-    standard: 'ERC-20',
+    standard: 'Ethereum mainnet · ERC-20',
   },
   {
     id: 'usdt-tron-mainnet-trc20',
@@ -118,7 +118,7 @@ const routeAvailability: Record<AssetRouteId, AssetRouteAvailability> = {
   'doge-dogecoin-mainnet-native': 'ready-next',
   'btc-bitcoin-mainnet-native': 'ready-next',
   'eth-ethereum-mainnet-native': 'ready-next',
-  'usdt-ethereum-mainnet-erc20': 'planned',
+  'usdt-ethereum-mainnet-erc20': 'ready-next',
   'usdt-tron-mainnet-trc20': 'planned',
 };
 

@@ -7,6 +7,7 @@ namespace App\Blockchain\Infrastructure;
 use App\Blockchain\Application\ChainAdapter;
 use App\Blockchain\Application\Eip1559FeeQuote;
 use App\Blockchain\Application\Eip1559FeeQuoteCapability;
+use App\Blockchain\Application\Erc20BalanceCapability;
 use App\Blockchain\Application\EvmGasEstimateCapability;
 use App\Blockchain\Application\EvmNativeBalanceCapability;
 use App\Blockchain\Application\EvmPendingNonceCapability;
@@ -14,7 +15,7 @@ use App\Blockchain\Application\EvmTransactionIntent;
 use App\Blockchain\Application\RawTransactionBroadcastCapability;
 use App\Blockchain\Domain\EthereumAddress;
 
-final readonly class EthereumMainnetAdapter implements ChainAdapter, EvmNativeBalanceCapability, EvmPendingNonceCapability, EvmGasEstimateCapability, Eip1559FeeQuoteCapability, RawTransactionBroadcastCapability
+final readonly class EthereumMainnetAdapter implements ChainAdapter, EvmNativeBalanceCapability, Erc20BalanceCapability, EvmPendingNonceCapability, EvmGasEstimateCapability, Eip1559FeeQuoteCapability, RawTransactionBroadcastCapability
 {
     public function __construct(private EthereumJsonRpcClient $rpc)
     {
@@ -33,6 +34,14 @@ final readonly class EthereumMainnetAdapter implements ChainAdapter, EvmNativeBa
     public function nativeBalanceWei(string $address): string
     {
         return $this->rpc->balanceWei(EthereumAddress::fromString($address)->value);
+    }
+
+    public function erc20Balance(string $contractAddress, string $holderAddress): string
+    {
+        return $this->rpc->erc20Balance(
+            EthereumAddress::fromString($contractAddress)->value,
+            EthereumAddress::fromString($holderAddress)->value,
+        );
     }
 
     public function pendingNonce(string $address): string

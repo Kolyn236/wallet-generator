@@ -48,11 +48,10 @@ export type Eip1559Signature = {
   s: string;
 };
 
-export type SignedEthereumTransfer = Eip1559TransactionFields & {
+export type SignedEip1559Transaction = Eip1559TransactionFields & {
   from: string;
   senderBalanceWei: string;
   baseFeePerGasWei: string;
-  amountEth: string;
   maxPriorityFeePerGasGwei: string;
   maxFeePerGasGwei: string;
   maxNetworkFeeWei: string;
@@ -61,6 +60,10 @@ export type SignedEthereumTransfer = Eip1559TransactionFields & {
   maxTotalEth: string;
   rawTransaction: string;
   txHash: string;
+};
+
+export type SignedEthereumTransfer = SignedEip1559Transaction & {
+  amountEth: string;
 };
 
 type RlpValue = Uint8Array | RlpValue[];
@@ -115,28 +118,23 @@ export function serializeEip1559Transaction(
   return `0x02${bytesToHex(encoded)}`;
 }
 
-export function buildSignedEthereumTransfer(input: {
+export function signPreparedEip1559Transaction(input: {
   privateKey: string;
   sourceAddress: string;
-  recipientAddress: string;
-  amountEth: string;
   prepared: PreparedEthereumTransactionData;
-}): SignedEthereumTransfer {
+}): SignedEip1559Transaction {
   const source = input.sourceAddress.trim();
-  const recipient = input.recipientAddress.trim();
   if (!isEthereumMainnetAddress(source)) throw new Error('invalid_sender');
-  if (!isEthereumMainnetAddress(recipient)) throw new Error('invalid_recipient');
-  if (source.toLowerCase() === recipient.toLowerCase()) throw new Error('same_address');
   if (!ethereumPrivateKeyMatchesAddress(input.privateKey, source)) {
     normalizeEthereumPrivateKey(input.privateKey);
     throw new Error('wallet_key_mismatch');
   }
 
-  const valueWei = parseEthToWei(input.amountEth);
-  assertPreparedIntent(input.prepared, source, recipient, valueWei);
+  assertPreparedEnvelope(input.prepared, source);
 
   const nonce = decimalBigInt(input.prepared.nonce, 'invalid_nonce');
   const gasLimit = decimalBigInt(input.prepared.gasLimit, 'invalid_gas_limit');
+  const valueWei = decimalBigInt(input.prepared.valueWei, 'invalid_amount');
   const maxPriorityFeePerGas = decimalBigInt(input.prepared.feePolicy.maxPriorityFeePerGasWei, 'invalid_fee');
   const maxFeePerGas = decimalBigInt(input.prepared.feePolicy.maxFeePerGasWei, 'invalid_fee');
   const senderBalance = decimalBigInt(input.prepared.senderBalanceWei, 'invalid_balance');
@@ -147,7 +145,7 @@ export function buildSignedEthereumTransfer(input: {
   if (maxFeePerGas < maxPriorityFeePerGas) throw new Error('invalid_fee');
 
   const maxNetworkFee = gasLimit * maxFeePerGas;
-  const maxTotal = BigInt(valueWei) + maxNetworkFee;
+  const maxTotal = valueWei + maxNetworkFee;
   if (maxTotal > senderBalance) throw new Error('insufficient_funds');
 
   const fields: Eip1559TransactionFields = {
@@ -156,9 +154,9 @@ export function buildSignedEthereumTransfer(input: {
     maxPriorityFeePerGasWei: maxPriorityFeePerGas.toString(),
     maxFeePerGasWei: maxFeePerGas.toString(),
     gasLimit: gasLimit.toString(),
-    to: recipient,
-    valueWei,
-    data: '0x',
+    to: input.prepared.to,
+    valueWei: valueWei.toString(),
+    data: input.prepared.data,
   };
 
   const signingPayload = concatBytes(Uint8Array.of(0x02), rlpEncode(unsignedFields(fields)));
@@ -187,7 +185,6 @@ export function buildSignedEthereumTransfer(input: {
       from: source,
       senderBalanceWei: senderBalance.toString(),
       baseFeePerGasWei: input.prepared.feePolicy.baseFeePerGasWei,
-      amountEth: formatWeiToEth(valueWei),
       maxPriorityFeePerGasGwei: formatWeiToGwei(maxPriorityFeePerGas.toString()),
       maxFeePerGasGwei: formatWeiToGwei(maxFeePerGas.toString()),
       maxNetworkFeeWei: maxNetworkFee.toString(),
@@ -202,23 +199,62 @@ export function buildSignedEthereumTransfer(input: {
   }
 }
 
-function assertPreparedIntent(
+export function buildSignedEthereumTransfer(input: {
+  privateKey: string;
+  sourceAddress: string;
+  recipientAddress: string;
+  amountEth: string;
+  prepared: PreparedEthereumTransactionData;
+}): SignedEthereumTransfer {
+  const source = input.sourceAddress.trim();
+  const recipient = input.recipientAddress.trim();
+  if (!isEthereumMainnetAddress(source)) throw new Error('invalid_sender');
+  if (!isEthereumMainnetAddress(recipient)) throw new Error('invalid_recipient');
+  if (source.toLowerCase() === recipient.toLowerCase()) throw new Error('same_address');
+
+  const valueWei = parseEthToWei(input.amountEth);
+  assertPreparedIntent(input.prepared, source, recipient, valueWei, '0x');
+  const signed = signPreparedEip1559Transaction({
+    privateKey: input.privateKey,
+    sourceAddress: source,
+    prepared: input.prepared,
+  });
+
+  return {
+    ...signed,
+    amountEth: formatWeiToEth(valueWei),
+  };
+}
+
+export function assertPreparedIntent(
   prepared: PreparedEthereumTransactionData,
   source: string,
-  recipient: string,
+  to: string,
   valueWei: string,
+  data: string,
 ): void {
+  assertPreparedEnvelope(prepared, source);
+
+  if (prepared.to.toLowerCase() !== to.toLowerCase()
+    || prepared.valueWei !== valueWei
+    || prepared.data.toLowerCase() !== data.toLowerCase()
+  ) {
+    throw new Error('prepared_transaction_mismatch');
+  }
+}
+
+function assertPreparedEnvelope(prepared: PreparedEthereumTransactionData, source: string): void {
   if (prepared.chain !== 'ethereum'
     || prepared.network !== 'mainnet'
     || prepared.chainId !== 1
     || prepared.feePolicy.kind !== 'eip1559'
     || prepared.from.toLowerCase() !== source.toLowerCase()
-    || prepared.to.toLowerCase() !== recipient.toLowerCase()
-    || prepared.valueWei !== valueWei
-    || prepared.data !== '0x'
+    || !isEthereumMainnetAddress(prepared.to)
   ) {
     throw new Error('prepared_transaction_mismatch');
   }
+
+  strictHexBytes(prepared.data, 'prepared_transaction_mismatch');
 }
 
 function unsignedFields(fields: Eip1559TransactionFields): RlpValue[] {

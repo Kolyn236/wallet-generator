@@ -1,5 +1,6 @@
 import { createElement, lazy } from 'react';
 import { getEthereumBalance } from '../../api';
+import { getUsdtErc20Balance } from '../../usdtApi';
 import {
   createEthereumWallet,
   isEthereumMainnetAddress,
@@ -11,6 +12,11 @@ import type { BrowserCreatedWallet, WalletNetworkAdapter } from '../WalletNetwor
 const EthereumTransferPanel = lazy(async () => {
   const module = await import('../../EthereumTransferPanel');
   return { default: module.EthereumTransferPanel };
+});
+
+const UsdtErc20TransferPanel = lazy(async () => {
+  const module = await import('../../UsdtErc20TransferPanel');
+  return { default: module.UsdtErc20TransferPanel };
 });
 
 function toBrowserWallet(): BrowserCreatedWallet {
@@ -71,6 +77,31 @@ export const ethereumMainnetAssetRouteAdapter: AssetRouteAdapter = {
   },
   renderTransferPanel(props) {
     return createElement(EthereumTransferPanel, {
+      language: props.language,
+      networkName: props.networkName,
+      networkStandard: props.networkStandard,
+      sourceAddress: props.sourceAddress,
+      walletMode: props.walletMode,
+      createdWallet: toEthereumCreatedWallet(props.createdWallet),
+    });
+  },
+};
+
+export const usdtEthereumMainnetAssetRouteAdapter: AssetRouteAdapter = {
+  routeId: 'usdt-ethereum-mainnet-erc20',
+  assetId: 'usdt',
+  networkId: 'ethereum-mainnet',
+  capabilities: {
+    balance: true,
+    transfer: true,
+    localSigning: true,
+  },
+  async loadBalance(address, signal) {
+    const result = await getUsdtErc20Balance(address, signal);
+    return { address: result.address, balance: result.balance };
+  },
+  renderTransferPanel(props) {
+    return createElement(UsdtErc20TransferPanel, {
       language: props.language,
       networkName: props.networkName,
       networkStandard: props.networkStandard,

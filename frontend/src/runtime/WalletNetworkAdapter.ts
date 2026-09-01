@@ -1,6 +1,6 @@
 import type { NetworkId } from '../assets';
 
-export type WalletMode = 'none' | 'created' | 'watch-only';
+export type WalletMode = 'none' | 'local-signing' | 'watch-only';
 
 export type BrowserSigningMaterial =
   | {
@@ -12,12 +12,20 @@ export type BrowserSigningMaterial =
       value: string;
     };
 
-export type BrowserCreatedWallet = {
+type BrowserSigningWalletBase = {
   address: string;
-  mnemonic: string;
   derivationPath: string;
   signingMaterial: BrowserSigningMaterial;
 };
+
+export type BrowserSigningWallet =
+  | (BrowserSigningWalletBase & {
+      origin: 'generated';
+      generatedMnemonic: string;
+    })
+  | (BrowserSigningWalletBase & {
+      origin: 'mnemonic';
+    });
 
 export type WalletSession = {
   address: string;
@@ -31,6 +39,7 @@ export type WalletIdentityMetadata = {
 
 export type WalletNetworkCapabilities = {
   localWalletCreation: boolean;
+  mnemonicImport: boolean;
   watchOnly: boolean;
   localSigning: boolean;
 };
@@ -39,6 +48,7 @@ export interface WalletNetworkAdapter {
   networkId: NetworkId;
   identity: WalletIdentityMetadata;
   capabilities: WalletNetworkCapabilities;
-  createWallet(): BrowserCreatedWallet;
+  createWallet(): BrowserSigningWallet;
+  importMnemonic(mnemonic: string): BrowserSigningWallet;
   validatePublicAddress(address: string): boolean;
 }

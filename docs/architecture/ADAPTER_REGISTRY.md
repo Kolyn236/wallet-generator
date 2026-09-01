@@ -67,6 +67,7 @@ The route, not the asset symbol alone, is the runtime selection and balance key.
 - `networkId`;
 - wallet identity metadata;
 - local wallet creation when supported;
+- BIP39 mnemonic recovery when supported;
 - public-address validation;
 - wallet/network capability metadata.
 
@@ -80,16 +81,37 @@ bitcoin-mainnet
 ethereum-mainnet
 ```
 
-Wallet sessions are keyed by `networkId` and contain public identity/session state only. They deliberately contain no balance.
+All three live wallet-network adapters support English BIP39 mnemonic recovery using their fixed current derivation path. Import is an explicit network operation: selecting Bitcoin derives the Bitcoin identity, selecting Dogecoin derives the Dogecoin identity, and selecting either ETH or USDT ERC-20 derives the shared `ethereum-mainnet` identity.
+
+Wallet sessions are keyed by `networkId` and contain public identity/session state only. They deliberately contain no balance and no mnemonic/private signing material.
+
+Session modes are:
+
+```text
+none
+local-signing
+watch-only
+```
+
+`local-signing` intentionally covers both locally generated wallets and wallets recovered from a mnemonic. Signing capability, rather than how the key was obtained, is the session-level distinction.
 
 ## Browser signing material
 
-The generic browser wallet contract discriminates signing material explicitly:
+The generic `BrowserSigningWallet` contract discriminates signing material explicitly:
 
 ```text
 wif
 private-key
 ```
+
+and records its in-memory origin:
+
+```text
+generated
+mnemonic
+```
+
+A generated wallet temporarily carries `generatedMnemonic` so the backup UI can show the newly created seed. A wallet recovered from an entered mnemonic does **not** carry that mnemonic after derivation. The recovery form clears its mnemonic state after successful import or cancellation; only the derived signing material remains in the active browser-memory signing wallet.
 
 DOGE/BTC use `kind = wif` for legacy P2PKH. Ethereum uses `kind = private-key` with derivation path:
 
@@ -128,14 +150,14 @@ eth-ethereum-mainnet-native balance       1.25 ETH
 usdt-ethereum-mainnet-erc20 balance       500 USDT
 ```
 
-Changing the Ethereum wallet identity invalidates every asset-route balance on `ethereum-mainnet`, so ETH and USDT are cleared together before new reads complete.
+Changing or recovering the Ethereum wallet identity invalidates every asset-route balance on `ethereum-mainnet`, so ETH and USDT are cleared together before new reads complete.
 
 ## Native ETH route
 
 The native ETH route owns:
 
 - Ethereum address validation;
-- BIP39/BIP44 local wallet creation;
+- BIP39/BIP44 local wallet creation and recovery;
 - browser-local secp256k1 private-key signing;
 - native ETH balance loading;
 - public transaction preparation through Symfony;
@@ -156,6 +178,8 @@ USDT ERC-20 reuses the Ethereum wallet identity but owns token-specific behavior
 - EIP-1559 preparation with `to = token contract`, `valueWei = 0` and transfer calldata;
 - token-balance validation plus native ETH gas-balance validation;
 - browser-local Type-2 signing and explicit broadcast.
+
+Recovering the Ethereum identity from a seed therefore unlocks both native ETH and USDT ERC-20 signing for that one `ethereum-mainnet` wallet session. There is no separate USDT seed or derivation path.
 
 The fixed contract and route details are documented in `USDT_ERC20.md`.
 
@@ -231,6 +255,10 @@ Ethereum verifies the provider reports `eth_chainId == 1` before state/broadcast
 Frontend invariant tests verify that:
 
 - all live DOGE/BTC/ETH/USDT-ERC20 routes have exact route and wallet-network adapters;
+- every live wallet-network adapter exposes mnemonic recovery;
+- fixed public BIP39 vectors recover the expected DOGE/BTC/Ethereum identity;
+- recovered signing wallets do not retain the entered mnemonic;
+- invalid BIP39 mnemonics fail closed;
 - TRC-20 remains unregistered while planned;
 - ETH and USDT resolve to different route adapters but the same Ethereum wallet-network adapter;
 - built-in registry keys are unique;

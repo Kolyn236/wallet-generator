@@ -106,20 +106,37 @@
   gap: 9px;
 }
 
-.address-connect-row input {
+.address-connect-row input,
+.seed-recovery-form textarea {
   min-width: 0;
-  height: 42px;
   padding: 0 12px;
   border: 1px solid #45433c;
   border-radius: 11px;
   outline: none;
   background: #24231f;
   color: #fff;
+  font: inherit;
   text-transform: none;
   letter-spacing: 0;
 }
 
-.address-connect-row input:focus {
+.address-connect-row input {
+  height: 42px;
+}
+
+.seed-recovery-form textarea {
+  min-height: 98px;
+  padding-top: 11px;
+  padding-bottom: 11px;
+  resize: vertical;
+  line-height: 1.55;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.address-connect-row input:focus,
+.seed-recovery-form textarea:focus {
   border-color: #f4ca55;
   box-shadow: 0 0 0 3px rgba(244, 202, 85, .1);
 }
@@ -131,6 +148,23 @@
   border-radius: 11px;
   font-size: 12px;
   font-weight: 800;
+}
+
+.seed-recovery-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 12px;
+  color: #8f8b82;
+}
+
+.seed-recovery-meta small {
+  line-height: 1.45;
+}
+
+.seed-recovery-meta code {
+  color: #bdb8ad;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .address-connect-form > small {
@@ -156,5 +190,9 @@
 
   .address-connect-row {
     grid-template-columns: 1fr;
+  }
+
+  .seed-recovery-meta {
+    flex-direction: column;
   }
 }

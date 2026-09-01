@@ -52,6 +52,8 @@ for (const route of liveRoutes) {
   const walletAdapter = adapterRegistry.resolveWalletNetwork(route.networkId);
   assert.ok(walletAdapter, `Live asset route has no wallet network adapter: ${route.id}`);
   assert.equal(walletAdapter.networkId, route.networkId);
+  assert.equal(walletAdapter.capabilities.mnemonicImport, true);
+  assert.equal(typeof walletAdapter.importMnemonic, 'function');
   assert.equal('loadBalance' in walletAdapter, false, 'Wallet network adapters must not own asset balance loading.');
 }
 
@@ -201,6 +203,32 @@ assert.strictEqual(
 assert.equal(independentRegistry.resolveAssetRoute('usdt-tron-mainnet-trc20'), null);
 assert.equal(independentRegistry.resolveAssetRoute('unknown-route'), null);
 
+const standardMnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const recoveredDogecoin = dogecoinMainnetWalletAdapter.importMnemonic(standardMnemonic);
+assert.equal(recoveredDogecoin.origin, 'mnemonic');
+assert.equal(recoveredDogecoin.address, 'DBus3bamQjgJULBJtYXpEzDWQRwF5iwxgC');
+assert.equal(recoveredDogecoin.derivationPath, "m/44'/3'/0'/0/0");
+assert.equal('generatedMnemonic' in recoveredDogecoin, false);
+
+const recoveredBitcoin = bitcoinMainnetWalletAdapter.importMnemonic(standardMnemonic);
+assert.equal(recoveredBitcoin.origin, 'mnemonic');
+assert.equal(recoveredBitcoin.address, '1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA');
+assert.equal(recoveredBitcoin.derivationPath, "m/44'/0'/0'/0/0");
+assert.equal('generatedMnemonic' in recoveredBitcoin, false);
+
+const recoveredEthereum = ethereumMainnetWalletAdapter.importMnemonic('test test test test test test test test test test test junk');
+assert.equal(recoveredEthereum.origin, 'mnemonic');
+assert.equal(recoveredEthereum.address, '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266');
+assert.equal(recoveredEthereum.derivationPath, "m/44'/60'/0'/0/0");
+assert.equal('generatedMnemonic' in recoveredEthereum, false);
+
+for (const walletAdapter of builtInWalletAdapters) {
+  assert.throws(
+    () => walletAdapter.importMnemonic('not a valid bip39 seed phrase'),
+    /Invalid BIP39 mnemonic/,
+  );
+}
+
 let sessions = createWalletSessions();
 sessions = withWalletSession(sessions, 'dogecoin-mainnet', {
   address: 'D-dogecoin-session',
@@ -208,11 +236,11 @@ sessions = withWalletSession(sessions, 'dogecoin-mainnet', {
 });
 sessions = withWalletSession(sessions, 'bitcoin-mainnet', {
   address: '1-bitcoin-session',
-  mode: 'created',
+  mode: 'local-signing',
 });
 sessions = withWalletSession(sessions, 'ethereum-mainnet', {
   address: '0x1111111111111111111111111111111111111111',
-  mode: 'created',
+  mode: 'local-signing',
 });
 
 assert.equal(getWalletSession(sessions, 'dogecoin-mainnet').address, 'D-dogecoin-session');
@@ -252,7 +280,7 @@ assert.equal(getAssetRouteBalance(balances, 'doge-dogecoin-mainnet-native').bala
 
 const incompatibleWallet = {
   address: '0x0000000000000000000000000000000000000000',
-  mnemonic: 'test only',
+  origin: 'mnemonic' as const,
   derivationPath: "m/44'/60'/0'/0/0",
   signingMaterial: {
     kind: 'private-key' as const,
@@ -266,7 +294,7 @@ const transferProps = {
   networkName: 'Dogecoin',
   networkStandard: 'DOGE mainnet · P2PKH',
   sourceAddress: 'D-test',
-  walletMode: 'created' as const,
+  walletMode: 'local-signing' as const,
   createdWallet: incompatibleWallet,
 };
 assert.throws(
@@ -286,7 +314,7 @@ assert.throws(
 
 const incompatibleEthereumWallet = {
   address: '1BitcoinOnlySigningMaterial',
-  mnemonic: 'test only',
+  origin: 'mnemonic' as const,
   derivationPath: "m/44'/0'/0'/0/0",
   signingMaterial: {
     kind: 'wif' as const,

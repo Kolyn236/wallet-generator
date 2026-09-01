@@ -87,7 +87,7 @@ export const bitcoinMainnetAssetRouteAdapter: AssetRouteAdapter = {
       networkName: props.networkName,
       networkStandard: props.networkStandard,
       sourceAddress: props.sourceAddress,
-      walletMode: props.walletMode,
+      walletMode: props.walletMode === 'local-signing' ? 'created' : props.walletMode,
       createdWallet: toBitcoinCreatedWallet(props.createdWallet),
     });
   },

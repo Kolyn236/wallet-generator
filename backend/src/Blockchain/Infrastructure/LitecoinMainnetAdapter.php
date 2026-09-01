@@ -11,10 +11,11 @@ use App\Blockchain\Application\UtxoFeeRate;
 use App\Blockchain\Application\UtxoFeeRateCapability;
 use App\Blockchain\Application\UtxoLookupCapability;
 use App\Blockchain\Domain\AddressBalance;
+use App\Blockchain\Domain\LegacyP2pkhAddress;
 
 final readonly class LitecoinMainnetAdapter implements ChainAdapter, AddressBalanceCapability, UtxoLookupCapability, UtxoFeeRateCapability, RawTransactionBroadcastCapability
 {
-    private const string ADDRESS_PATTERN = '/^L[1-9A-HJ-NP-Za-km-z]{25,34}$/';
+    private const int P2PKH_VERSION = 0x30;
 
     public function __construct(
         private BlockCypherUtxoMainnetClient $client,
@@ -27,14 +28,14 @@ final readonly class LitecoinMainnetAdapter implements ChainAdapter, AddressBala
 
     public function getConfirmedBalance(string $address): AddressBalance
     {
-        self::assertAddress($address);
-        return new AddressBalance($address, $this->client->balance('ltc', 'litecoin', $address));
+        $validated = LegacyP2pkhAddress::fromString($address, self::P2PKH_VERSION);
+        return new AddressBalance($validated->value, $this->client->balance('ltc', 'litecoin', $validated->value));
     }
 
     public function getConfirmedUtxos(string $address): array
     {
-        self::assertAddress($address);
-        return $this->client->utxos('ltc', 'litecoin', $address);
+        $validated = LegacyP2pkhAddress::fromString($address, self::P2PKH_VERSION);
+        return $this->client->utxos('ltc', 'litecoin', $validated->value);
     }
 
     public function feeRate(): UtxoFeeRate
@@ -45,12 +46,5 @@ final readonly class LitecoinMainnetAdapter implements ChainAdapter, AddressBala
     public function broadcastRawTransaction(string $rawTransaction): string
     {
         return $this->client->broadcast('ltc', 'litecoin', $rawTransaction);
-    }
-
-    private static function assertAddress(string $address): void
-    {
-        if (1 !== preg_match(self::ADDRESS_PATTERN, $address)) {
-            throw new \InvalidArgumentException('Invalid Litecoin mainnet legacy P2PKH address.');
-        }
     }
 }

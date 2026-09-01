@@ -27,13 +27,14 @@ export function deriveEthereumWalletFromMnemonic(mnemonic: string): CreatedEther
   const seed = mnemonicToSeedSync(normalizedMnemonic);
   const root = HDKey.fromMasterSeed(seed);
   const account = root.derive(ETHEREUM_DERIVATION_PATH);
+  let privateKeyBytes: Uint8Array | null = null;
 
   try {
     if (!account.privateKey) {
       throw new Error('Ethereum child key derivation failed.');
     }
 
-    const privateKeyBytes = account.privateKey.slice();
+    privateKeyBytes = account.privateKey.slice();
 
     return {
       address: ethereumAddressFromPrivateKey(privateKeyBytes),
@@ -42,6 +43,7 @@ export function deriveEthereumWalletFromMnemonic(mnemonic: string): CreatedEther
       derivationPath: ETHEREUM_DERIVATION_PATH,
     };
   } finally {
+    privateKeyBytes?.fill(0);
     seed.fill(0);
     account.wipePrivateData();
     root.wipePrivateData();
@@ -60,6 +62,7 @@ export function normalizeEthereumPrivateKey(privateKey: string): Uint8Array {
 
   const bytes = hexToBytes(normalized);
   if (!secp256k1.utils.isValidSecretKey(bytes)) {
+    bytes.fill(0);
     throw new Error('invalid_private_key');
   }
 
@@ -67,18 +70,23 @@ export function normalizeEthereumPrivateKey(privateKey: string): Uint8Array {
 }
 
 export function ethereumAddressFromPrivateKey(privateKey: string | Uint8Array): string {
-  const privateKeyBytes = typeof privateKey === 'string'
+  const ownsPrivateKeyBytes = typeof privateKey === 'string';
+  const privateKeyBytes = ownsPrivateKeyBytes
     ? normalizeEthereumPrivateKey(privateKey)
     : privateKey;
 
-  if (!secp256k1.utils.isValidSecretKey(privateKeyBytes)) {
-    throw new Error('invalid_private_key');
+  try {
+    if (!secp256k1.utils.isValidSecretKey(privateKeyBytes)) {
+      throw new Error('invalid_private_key');
+    }
+
+    const uncompressedPublicKey = secp256k1.getPublicKey(privateKeyBytes, false);
+    const addressBytes = keccak_256(uncompressedPublicKey.subarray(1)).subarray(12);
+
+    return `0x${bytesToHex(addressBytes)}`;
+  } finally {
+    if (ownsPrivateKeyBytes) privateKeyBytes.fill(0);
   }
-
-  const uncompressedPublicKey = secp256k1.getPublicKey(privateKeyBytes, false);
-  const addressBytes = keccak_256(uncompressedPublicKey.subarray(1)).subarray(12);
-
-  return `0x${bytesToHex(addressBytes)}`;
 }
 
 export function ethereumPrivateKeyMatchesAddress(privateKey: string, address: string): boolean {

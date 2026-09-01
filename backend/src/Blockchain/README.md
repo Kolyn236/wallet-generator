@@ -45,4 +45,4 @@ This is a deterministic wallet fee-selection policy, not an Ethereum protocol co
 
 The prepare endpoint accepts only public transaction intent (`from`, `to`, `valueWei`, `data`). Symfony never generates or receives mnemonic/private-key material and never signs a transaction. Broadcast accepts only a signed raw transaction and does not log it.
 
-The frontend ETH route remains unavailable until the separate browser-wallet/signing PR is complete.
+The live frontend ETH route consumes this contract: Symfony prepares public chain state, the browser signs an EIP-1559 Type-2 transaction locally, and the browser compares its local transaction hash with the provider-returned hash after explicit broadcast.

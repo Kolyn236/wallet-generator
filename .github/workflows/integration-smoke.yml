@@ -4,6 +4,19 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'docker/**'
+      - 'compose.yaml'
+      - 'deploy/**'
+      - 'scripts/build-deploy-env.sh'
+      - '.env.example'
+      - 'backend/.env'
+      - 'backend/.env.example'
+      - 'backend/config/**'
+      - 'backend/composer.json'
+      - 'backend/composer.lock'
+      - 'frontend/**'
+      - '.github/workflows/integration-smoke.yml'
   workflow_dispatch:
 
 permissions:

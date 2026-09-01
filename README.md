@@ -10,7 +10,7 @@ Wallet creation and transaction signing happen in browser memory. Symfony is the
 Browser
    |
    |  network-scoped wallet sessions
-   |  local DOGE / BTC / ETH signers
+   |  local DOGE / BTC / Ethereum signers
    v
 Nginx :8080
    |---- / ----------> React + TypeScript
@@ -26,14 +26,14 @@ Live frontend routes:
 
 - DOGE / Dogecoin mainnet — legacy P2PKH;
 - BTC / Bitcoin mainnet — legacy P2PKH;
-- ETH / Ethereum mainnet — native ETH with EIP-1559 Type-2 transactions.
+- ETH / Ethereum mainnet — native ETH with EIP-1559 Type-2 transactions;
+- USDT / Ethereum mainnet — ERC-20 with EIP-1559 Type-2 transactions.
 
-Planned token routes:
+Planned route:
 
-- USDT ERC-20 on Ethereum mainnet;
 - USDT TRC-20 on Tron mainnet.
 
-USDT routes remain non-executable until their own asset-route adapters exist. Native ETH becoming live does not implicitly enable ERC-20.
+ETH and USDT ERC-20 share one `ethereum-mainnet` wallet identity. They do not share balances or transfer adapters: native ETH and USDT remain separate asset routes.
 
 ## Wallet derivation
 
@@ -43,9 +43,10 @@ Locally created wallets use BIP39 mnemonics and BIP44 derivation:
 DOGE  m/44'/3'/0'/0/0
 BTC   m/44'/0'/0'/0/0
 ETH   m/44'/60'/0'/0/0
+USDT  same ethereum-mainnet wallet identity as ETH
 ```
 
-DOGE/BTC expose WIF signing material for their legacy P2PKH runtime. Ethereum exposes a browser-local secp256k1 private key. All signing material remains in the active browser session only.
+DOGE/BTC expose WIF signing material for their legacy P2PKH runtime. Ethereum routes use a browser-local secp256k1 private key. All signing material remains in the active browser session only.
 
 ## Quick start
 
@@ -82,7 +83,7 @@ BTC_RECOMMENDED_FEE_RATE=0.00010000
 ETHEREUM_RPC_URL=
 ```
 
-`ETHEREUM_RPC_URL` is required for ETH balance/prepare/broadcast operations. Configure an Ethereum Mainnet JSON-RPC URL through deployment secrets/runtime environment. The backend checks `eth_chainId == 1` before Ethereum operations and fails closed on another EVM network.
+`ETHEREUM_RPC_URL` is required for ETH and USDT ERC-20 Ethereum operations. Configure an Ethereum Mainnet JSON-RPC URL through deployment secrets/runtime environment. The backend checks `eth_chainId == 1` before Ethereum operations and fails closed on another EVM network.
 
 DOGE/BTC fee-rate values remain operator-controlled defaults. Ethereum fee preparation uses live provider state through `eth_estimateGas` and `eth_feeHistory`.
 
@@ -174,19 +175,19 @@ Symfony -> provider
 
 Amounts use integer smallest units internally (`koinu` / `satoshi`). DOGE/BTC spend confirmed UTXOs only. The browser calculates the local TXID and verifies the provider-returned TXID.
 
-## Ethereum transfer flow
+## Ethereum transaction flow
 
-Native ETH uses an account-based EIP-1559 flow rather than UTXO semantics.
+Native ETH and ERC-20 token transfers share the same EIP-1559 signing engine.
 
 ```text
-Browser
-from / to / valueWei / data=0x
+Browser public intent
+from / to / valueWei / data
         |
         v
 Symfony -> Ethereum Mainnet JSON-RPC
         |
         +--> verify chainId = 1
-        +--> sender balance
+        +--> sender native ETH balance
         +--> pending nonce
         +--> eth_estimateGas
         +--> eth_feeHistory
@@ -197,6 +198,7 @@ public preparation snapshot
         v
 Browser
 verify private key <-> sender
+verify returned intent exactly
 sign Type-2 transaction locally
 calculate local transaction hash
         |
@@ -232,9 +234,44 @@ The Type-2 signer encodes:
 ])
 ```
 
-Native ETH transfers currently use an empty access list and `data = 0x`.
+Native ETH uses the recipient as `to`, the ETH amount as `valueWei` and `data = 0x`.
 
-EVM quantities cross the backend Application/HTTP boundary as canonical decimal strings. Browser arithmetic uses `bigint`; wei/gas/nonce/fee values are never routed through JavaScript `number` or PHP floating point.
+## USDT ERC-20
+
+Ethereum Mainnet USDT uses the fixed contract:
+
+```text
+0xdAC17F958D2ee523a2206206994597C13D831ec7
+```
+
+USDT uses 6 decimal places. The balance path calls the fixed contract with `eth_call balanceOf(address)`; the browser encodes `transfer(address,uint256)` locally for sending.
+
+For a USDT transfer the public Ethereum prepare intent is:
+
+```text
+from     = sender Ethereum address
+to       = USDT contract
+valueWei = 0
+data     = ERC-20 transfer(recipient, amount) calldata
+```
+
+The browser verifies the returned prepare snapshot against that exact contract/value/calldata before signing. The token amount is paid in USDT while Ethereum network fees are paid separately in ETH.
+
+USDT and ETH use the same `ethereum-mainnet` wallet session but route-scoped balances:
+
+```text
+ethereum-mainnet wallet session
+address: 0x...
+
+eth-ethereum-mainnet-native       -> ETH balance + native transfer
+usdt-ethereum-mainnet-erc20       -> USDT balance + ERC-20 transfer
+```
+
+Changing the Ethereum wallet invalidates both route balances together. USDT TRC-20 remains a separate unimplemented Tron route and never falls back to the ERC-20 runtime.
+
+## EVM amount and fee correctness
+
+EVM quantities cross the backend Application/HTTP boundary as canonical decimal strings. Browser arithmetic uses `bigint`; wei/gas/nonce/fee/token-unit values are never routed through JavaScript `number` or PHP floating point.
 
 The current EIP-1559 wallet policy is:
 
@@ -244,10 +281,17 @@ maxFeePerGas = 2 * baseFeePerGas + maxPriorityFeePerGas
 
 This is a wallet policy, not an Ethereum protocol constant. Missing gas/fee data fails explicitly instead of falling back to a legacy `gasPrice` transaction.
 
-Before signing, the browser conservatively checks that the sender balance can cover:
+Before signing, native ETH checks:
 
 ```text
-valueWei + gasLimit * maxFeePerGas
+valueWei + gasLimit * maxFeePerGas <= sender ETH balance
+```
+
+USDT checks both:
+
+```text
+USDT amount <= sender USDT balance
+gasLimit * maxFeePerGas <= sender ETH balance
 ```
 
 ## Backend API
@@ -274,34 +318,16 @@ Ethereum:
 
 ```text
 GET  /api/chains/ethereum/mainnet/addresses/{address}/balance
+GET  /api/chains/ethereum/mainnet/tokens/usdt/addresses/{address}/balance
 POST /api/chains/ethereum/mainnet/transactions/prepare
 POST /api/chains/ethereum/mainnet/transactions/broadcast
 ```
 
-Ethereum prepare accepts only:
-
-```text
-from
-to
-valueWei
-data
-```
-
-Broadcast accepts only `rawTransaction`. Symfony never signs Ethereum transactions.
+Ethereum prepare accepts only `from`, `to`, `valueWei` and `data`. Broadcast accepts only `rawTransaction`. Symfony never signs Ethereum transactions.
 
 ## Frontend runtime model
 
 Wallet identity is network-scoped while balances and execution behavior are asset-route-scoped.
-
-```text
-ethereum-mainnet wallet session
-address: 0x...
-
-eth-ethereum-mainnet-native       -> live native ETH balance/transfer
-usdt-ethereum-mainnet-erc20       -> planned token balance/transfer
-```
-
-This lets ETH and future ERC-20 assets share one Ethereum account identity without sharing balances or transfer implementations.
 
 Runtime lookup is explicit:
 
@@ -333,11 +359,12 @@ npm run test:adapter-invariants
 npm run test:dogecoin-vector
 npm run test:bitcoin-vector
 npm run test:ethereum-vector
+npm run test:usdt-erc20-vector
 npm run build
 npm run dev
 ```
 
-Ethereum deterministic coverage includes BIP39/BIP44 derivation and a public EIP-1559 Type-2 serialization/hash vector. Tests do not require funded accounts or a live Ethereum RPC provider.
+Deterministic frontend coverage includes DOGE/BTC transaction vectors, Ethereum wallet/Type-2 serialization vectors and USDT ERC-20 amount/calldata/signing vectors. Tests do not require funded accounts or a live Ethereum RPC provider.
 
 Production-like local build:
 
@@ -347,7 +374,7 @@ docker compose up --build
 
 ## CI
 
-`Quality Gate` runs source checks, backend tests/static analysis/style, frontend adapter invariants, deterministic DOGE/BTC/ETH vectors and the TypeScript/Vite build.
+`Quality Gate` runs source checks, backend tests/static analysis/style, frontend adapter invariants, deterministic DOGE/BTC/ETH/USDT vectors and the TypeScript/Vite build.
 
 `Integration Smoke` owns Docker/Compose runtime checks and is restricted to deploy/runtime-sensitive changes on `main` or manual execution.
 
@@ -357,13 +384,14 @@ docker compose up --build
 - `docs/architecture/MODULE_BOUNDARIES.md`
 - `docs/architecture/ADAPTER_REGISTRY.md`
 - `docs/architecture/ETHEREUM_BACKEND.md`
+- `docs/architecture/ETHEREUM_FRONTEND.md`
+- `docs/architecture/USDT_ERC20.md`
 
 ## Roadmap
 
 Near-term work is intentionally narrow:
 
-1. USDT ERC-20 on the existing `ethereum-mainnet` wallet identity;
-2. fee-estimation and transaction-review improvements;
-3. production observability, load testing and operational hardening.
+1. fee-estimation and transaction-review improvements;
+2. production observability, load testing and operational hardening.
 
 Additional chains, token routes, persistence, queues, indexers or browser vault features should be introduced only for a concrete product or load requirement.

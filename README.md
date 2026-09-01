@@ -2,10 +2,7 @@
 
 A multi-chain non-custodial wallet platform built with a **Symfony 7.4 modular monolith + React/TypeScript frontend**.
 
-The supported V1 backend is intentionally stateless: private keys and seed phrases stay in browser memory, while Symfony acts as a blockchain API gateway. The repository has one supported application runtime; the original educational Python wallet has been retired and remains available only through Git history.
-
-> [!WARNING]
-> This project is under active development and has not been professionally audited. Do not use it for substantial funds. Never put real WIF/private keys/seed phrases into issues, logs, screenshots or external services.
+The supported runtime is intentionally stateless: private keys and seed phrases stay in browser memory, while Symfony acts as a blockchain API gateway. The repository has one supported application runtime.
 
 ## Current status
 
@@ -35,9 +32,9 @@ The frontend is multi-asset and network-aware:
 
 DOGE and BTC can both create wallets locally in browser memory, attach existing public addresses in watch-only mode, load confirmed balance/UTXOs, build and sign legacy P2PKH transactions locally, review fee/change/TXID and explicitly broadcast the already-signed raw transaction through Symfony.
 
-The Ethereum backend can now validate Ethereum addresses, read native ETH balances, obtain a pending nonce, estimate gas for a public transaction intent, produce an EIP-1559 fee quote and broadcast an already-signed raw Ethereum transaction. It never creates or receives an Ethereum private key and does not make ETH live in the frontend yet.
+The Ethereum backend can validate Ethereum addresses, read native ETH balances, obtain a pending nonce, estimate gas for a public transaction intent, produce an EIP-1559 fee quote and broadcast an already-signed raw Ethereum transaction. It never creates or receives an Ethereum private key and does not make ETH live in the frontend yet.
 
-Bitcoin wallet creation uses BIP39 + BIP44 with derivation path `m/44'/0'/0'/0/0`. Dogecoin uses `m/44'/3'/0'/0/0`. The first BTC integration intentionally supports mainnet legacy P2PKH only; SegWit (`bc1...`) is a separate follow-up because it changes address/script and transaction-signing rules.
+Bitcoin wallet creation uses BIP39 + BIP44 with derivation path `m/44'/0'/0'/0/0`. Dogecoin uses `m/44'/3'/0'/0/0`. The first BTC integration intentionally supports mainnet legacy P2PKH only; SegWit (`bc1...`) requires separate address/script and transaction-signing support.
 
 ## Quick start
 
@@ -101,9 +98,9 @@ React fetches the current UTXO fee policies from Symfony with `cache: no-store`.
 - Docker Compose;
 - PHPUnit, PHPStan, PHP-CS-Fixer and GitHub Actions.
 
-PostgreSQL, Redis and RabbitMQ are **not required by the V1 runtime**. They may be introduced later for concrete infrastructure needs such as a public blockchain indexer, cache/rate limiting or asynchronous background processing.
+PostgreSQL, Redis and RabbitMQ are **not required by the current runtime**. They should be introduced only for a concrete persistence, indexing, cache/rate-limiting or asynchronous-processing requirement.
 
-## V1 security model
+## Security model
 
 The application is non-custodial.
 
@@ -191,7 +188,7 @@ A custom fee rate is explicitly shown as a user override. Too-low rates may dela
 
 ## Ethereum backend flow
 
-The Ethereum backend is a public-state gateway for a future browser-local EIP-1559 signer.
+The Ethereum backend is a public-state gateway for a browser-local EIP-1559 signer.
 
 ```text
 Browser public intent
@@ -210,7 +207,7 @@ Symfony -> Ethereum Mainnet JSON-RPC
 Public preparation snapshot
     |
     v
-future browser-local signing
+browser-local signing
     |
     v
 signed raw Type-2 transaction
@@ -285,7 +282,7 @@ Local sign/review
 Explicit broadcast
 ```
 
-For token assets the network is a first-class choice. For example USDT already exposes both `ERC-20` and `TRC-20` in the UI model even though those adapters are not implemented yet. Ethereum backend availability does not make the ETH frontend route live by itself.
+For token assets the network is a first-class choice. For example USDT exposes both `ERC-20` and `TRC-20` in the catalog even though those adapters are not implemented yet. Ethereum backend availability does not make the ETH frontend route live by itself.
 
 ## Adapter registries
 
@@ -329,7 +326,7 @@ Architecture decisions:
 - `docs/architecture/ADR-001-modular-monolith.md`
 - `docs/architecture/MODULE_BOUNDARIES.md`
 - `docs/architecture/ADAPTER_REGISTRY.md`
-- `docs/architecture/MIGRATION_PLAN.md`
+- `docs/architecture/ETHEREUM_BACKEND.md`
 
 ## Development
 
@@ -369,18 +366,13 @@ docker compose up --build
 
 The Nginx image builds React from the committed npm lock file, serves the static frontend and forwards `/api/*` to Symfony.
 
-## Platform evolution
+## Roadmap
 
-The project originally started as an educational Python Dogecoin wallet lab. That implementation has passed its runtime-retirement milestone; Git history preserves it for archaeology without keeping a second supported application path.
+Near-term work is intentionally narrow:
 
-Completed platform milestones include:
+1. browser-local Ethereum wallet creation and EIP-1559 Type-2 signing;
+2. USDT ERC-20 on the shared Ethereum wallet identity;
+3. fee-estimation and transaction-review improvements;
+4. production observability, load testing and operational hardening.
 
-1. Symfony modular boundaries and architecture tests;
-2. React multi-wallet / multi-network application shell;
-3. client-side DOGE wallet creation/signing + blockchain gateway;
-4. client-side BTC legacy P2PKH wallet creation/signing + blockchain gateway;
-5. frontend/backend adapter registries with fail-closed invariant tests;
-6. deterministic DOGE and BTC browser derivation/signing vectors;
-7. Ethereum Mainnet backend RPC/capability adapter for public state, EIP-1559 preparation and signed-raw broadcast.
-
-Next roadmap items include the browser-local Ethereum wallet/signing flow, USDT ERC-20, Bitcoin SegWit and fee-estimation improvements, optional cache/indexer infrastructure when load requires it, an encrypted local browser vault, and production hardening/observability/load testing.
+Additional chains, token routes, persistence, queues, indexers or browser vault features should be added only when there is a concrete product or load requirement.

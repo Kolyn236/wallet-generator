@@ -2,11 +2,11 @@
 
 ## Status
 
-Accepted. The initial runtime migration is complete; this ADR describes the supported Symfony modular-monolith architecture and its extension boundaries.
+Accepted. This ADR describes the supported Symfony modular-monolith architecture and its extension boundaries.
 
 ## Context
 
-The project originated as an educational Dogecoin wallet lab and has evolved into a multi-chain non-custodial wallet platform. The supported runtime is now React/TypeScript in the browser plus a Symfony backend. Historical implementation code is retained by Git history, not as a parallel application runtime.
+The project is a multi-chain non-custodial wallet platform with a React/TypeScript browser runtime and a Symfony backend.
 
 The platform must support multiple chains/assets without forcing UTXO, EVM and other chain families into one misleading transaction abstraction. Wallet secrets must remain outside the Symfony trust boundary.
 
@@ -23,11 +23,11 @@ Use a modular monolith with:
 - explicit chain/network adapters and capability interfaces;
 - GitHub Actions for deterministic, architecture, backend and integration checks.
 
-PostgreSQL, Redis, RabbitMQ and Messenger are optional future infrastructure rather than mandatory V1 runtime dependencies. Add them only for concrete persistence, indexing, caching, rate-limiting or asynchronous-processing requirements.
+PostgreSQL, Redis, RabbitMQ and Messenger are optional infrastructure rather than mandatory runtime dependencies. Add them only for concrete persistence, indexing, caching, rate-limiting or asynchronous-processing requirements.
 
 ## Module boundaries
 
-Initial backend modules:
+Backend modules:
 
 - `Wallet` — wallet/address concepts and ownership metadata when needed;
 - `Asset` — chains, networks, native assets and tokens;
@@ -53,11 +53,12 @@ Presentation must not import Infrastructure directly. Application owns capabilit
 
 Do not force all currencies into one `CryptoWallet::create/balance/send` abstraction. UTXO and account-based chains have different transaction, fee and state semantics.
 
-Use chain-family-aware capabilities and exact chain/network adapter identity. Current live backend keys are:
+Use chain-family-aware capabilities and exact chain/network adapter identity. Current registered backend keys are:
 
 ```text
 dogecoin:mainnet
 bitcoin:mainnet
+ethereum:mainnet
 ```
 
 Unknown keys and unsupported capabilities fail closed.
@@ -69,7 +70,7 @@ Wallet creation and transaction signing are browser responsibilities.
 Symfony may receive:
 
 - public addresses;
-- public balance/UTXO requests;
+- public balance/UTXO/transaction-preparation requests;
 - already-signed raw transactions.
 
 Symfony must not receive or persist plaintext WIF/private keys/seed phrases.
@@ -78,22 +79,25 @@ If server-side custody is ever proposed, it requires a separate architecture/sec
 
 ## Provider boundary
 
-External explorers/providers are Infrastructure implementations, not sources of wallet authority. Application code depends on capabilities/ports. Provider responses are validated, and locally calculated transaction identity is checked against the provider response after broadcast.
+External explorers/providers are Infrastructure implementations, not sources of wallet authority. Application code depends on capabilities/ports. Provider responses are validated, and transaction identity is validated locally where the browser signer supports it.
 
-A future node/RPC provider can replace third-party HTTP providers without changing browser signing behavior or public API contracts.
+A node/RPC provider can replace a third-party provider without changing browser signing behavior or public API contracts.
 
-## Runtime-retirement checkpoint
+## Supported runtime boundary
 
-The migration checkpoint for retiring the original educational runtime has been satisfied:
+The repository has one supported React/Symfony runtime.
+
+Current platform invariants include:
 
 1. DOGE browser wallet creation/signing is implemented;
 2. BTC browser wallet creation/signing is implemented;
 3. deterministic frontend signer vectors protect both live UTXO integrations;
 4. Symfony exposes the supported blockchain gateway APIs;
-5. frontend/backend adapter registries have fail-closed architecture tests;
-6. Docker and CI validate the supported platform directly.
+5. Ethereum Mainnet backend state/preparation/broadcast capabilities are registered at `ethereum:mainnet`;
+6. frontend/backend adapter registries have fail-closed architecture tests;
+7. Docker and CI validate the supported platform directly.
 
-The retired implementation should not be restored as a required runtime, CI dependency or supported alternative. Historical code remains accessible through repository history.
+Do not introduce a parallel application runtime or restore retired implementation paths as supported alternatives.
 
 ## Consequences
 

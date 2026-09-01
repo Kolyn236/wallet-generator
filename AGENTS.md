@@ -2,27 +2,27 @@
 
 ## Project overview
 
-`doge-wallet-generator` is a multi-chain non-custodial wallet platform.
+`wallet-generator` is a multi-chain non-custodial wallet platform.
 
 The supported application architecture is:
 
 - Symfony 7.4 backend / blockchain API gateway;
 - React + TypeScript + Vite frontend;
 - browser-local wallet creation and transaction signing;
-- DOGE mainnet and BTC mainnet runtime adapters;
+- DOGE mainnet and BTC mainnet frontend/runtime adapters;
+- Ethereum Mainnet backend RPC/capability adapter;
 - Nginx + PHP-FPM;
 - Docker Compose;
 - GitHub Actions.
 
-The original educational implementation has been retired from the application runtime. Do not introduce a parallel wallet implementation or an alternate signing path outside the supported React/Symfony architecture.
+There is one supported React/Symfony application runtime. Do not introduce a parallel wallet implementation or an alternate signing path outside this architecture.
 
 Before architecture work, read:
 
 - `README.md`;
 - `docs/architecture/ADR-001-modular-monolith.md`;
 - `docs/architecture/MODULE_BOUNDARIES.md`;
-- `docs/architecture/ADAPTER_REGISTRY.md`;
-- `docs/architecture/MIGRATION_PLAN.md`.
+- `docs/architecture/ADAPTER_REGISTRY.md`.
 
 ## Core architecture rules
 
@@ -33,7 +33,7 @@ Before architecture work, read:
 5. **Presentation does not import Infrastructure.** Application owns ports/capabilities; Infrastructure implements them.
 6. **Do not force every chain into one universal wallet/blockchain interface.** UTXO, EVM and TRON semantics differ. Model concrete capabilities.
 7. **Runtime lookup fails closed.** Unknown or unimplemented chain/network/asset routes must not resolve to another asset's adapter.
-8. **Do not add persistence or asynchronous infrastructure without a concrete runtime requirement.** PostgreSQL, Redis, RabbitMQ and Messenger are not required by the current V1 runtime.
+8. **Do not add persistence or asynchronous infrastructure without a concrete runtime requirement.** PostgreSQL, Redis, RabbitMQ and Messenger are not required by the current runtime.
 
 ## Security invariants
 
@@ -68,6 +68,7 @@ Fixed public test vectors may use well-known deterministic mnemonics/WIFs only w
 ## Cryptocurrency correctness rules
 
 - Amounts use integer smallest units internally: `koinu` for DOGE and `satoshi` for BTC. Never use floating-point arithmetic for money.
+- Ethereum wei/nonce/gas/fee values cross backend Application/HTTP boundaries as canonical decimal strings; never route them through PHP float or signed-integer arithmetic.
 - Network fee is derived from transaction inputs/outputs and serialized size; it is not a standalone field serialized into a UTXO transaction.
 - Never silently alter destination address, amount, input outpoint, change address, network or asset route.
 - DOGE and BTC currently spend confirmed UTXOs only.
@@ -99,8 +100,9 @@ Frontend:
 Backend:
 
 - `ChainAdapter` carries chain/network identity only;
-- behavior is exposed through capability interfaces such as balance, UTXO lookup, fee policy and raw-transaction broadcast;
+- behavior is exposed through capability interfaces rather than one universal blockchain interface;
 - registry keys are exact `chain:network` pairs and unique;
+- current registered keys are `dogecoin:mainnet`, `bitcoin:mainnet` and `ethereum:mainnet`;
 - unknown chain/network lookup throws explicitly;
 - unsupported capabilities throw explicitly;
 - Application code must not import concrete Blockchain Infrastructure adapters.
@@ -124,7 +126,7 @@ Preserve the current product principles:
 - raw signed transaction bytes are application data, not the primary review UI;
 - successful/failed broadcast status stays tied to the originating transfer flow;
 - mobile layouts remain usable;
-- security warnings remain visible.
+- security-relevant information remains clear in the transaction flow.
 
 Do not redesign the UI while performing unrelated backend, registry or cleanup work.
 
@@ -217,15 +219,15 @@ External explorers/providers are infrastructure conveniences, not wallet authori
 
 ## Current roadmap
 
-Current supported live assets are DOGE mainnet and BTC mainnet legacy P2PKH.
+Current live frontend assets are DOGE mainnet and BTC mainnet legacy P2PKH. Ethereum Mainnet backend capabilities are implemented; the ETH frontend route remains planned until browser-local signing is complete.
 
-Near-term evolution may include:
+Near-term work:
 
-1. Bitcoin SegWit/Taproot support with separate deterministic vectors;
-2. dynamic fee estimation;
-3. EVM/token adapters;
-4. optional indexer/cache/queue infrastructure when load or provider independence requires it;
-5. encrypted local browser vault;
-6. production hardening, observability and load testing.
+1. browser-local Ethereum wallet creation and EIP-1559 Type-2 signing;
+2. USDT ERC-20 on the shared Ethereum wallet identity;
+3. fee-estimation and transaction-review improvements;
+4. production observability, load testing and operational hardening.
+
+Additional chains, token routes, persistence, queues, indexers or browser vault features require a concrete product or load requirement before implementation.
 
 Roadmap items do not authorize bundling unrelated changes into the current task.

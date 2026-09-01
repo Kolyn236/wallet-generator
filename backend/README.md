@@ -1,8 +1,16 @@
 # Symfony backend
 
-This directory is the new Symfony 7.4 LTS / PHP 8.4 backend introduced alongside the existing Python Dogecoin reference implementation.
+The backend is the supported Symfony 7.4 LTS / PHP 8.4 blockchain API gateway for the wallet platform.
 
-The migration is intentionally incremental. Do not remove or bypass the Python wallet code until feature parity is covered by tests and the migration plan explicitly retires it.
+It is intentionally non-custodial: wallet creation and transaction signing stay in the browser. Symfony receives public chain data requests and already-signed raw transactions only.
+
+Current backend chain registrations:
+
+- `dogecoin:mainnet`;
+- `bitcoin:mainnet`;
+- `ethereum:mainnet`.
+
+Chain behavior is exposed through capability-specific adapters. UTXO and EVM behavior are intentionally not forced into one universal blockchain interface.
 
 ## Local Docker environment
 
@@ -12,16 +20,20 @@ From the repository root:
 docker compose up --build
 ```
 
-The PHP container runs `composer install` before starting PHP-FPM.
+The current Compose runtime contains:
 
-Services:
+- PHP-FPM / Symfony;
+- Nginx serving the React build and proxying `/api/*`.
 
-- API through Nginx: `http://localhost:8080`;
-- health endpoint: `http://localhost:8080/api/health`;
-- PostgreSQL: `localhost:5432`;
-- Redis: `localhost:6379`;
-- RabbitMQ AMQP: `localhost:5672`;
-- RabbitMQ management UI: `http://localhost:15672` (`guest` / `guest`, local development only).
+Open the application at `http://localhost:8080`.
+
+Health endpoint:
+
+```text
+GET http://localhost:8080/api/health
+```
+
+PostgreSQL, Redis and RabbitMQ are not part of the current runtime. Add stateful or asynchronous infrastructure only when a concrete product or load requirement needs it.
 
 ## Local PHP commands
 
@@ -34,12 +46,25 @@ composer analyse
 composer cs:check
 ```
 
-The bootstrap intentionally does not use PostgreSQL, Redis or RabbitMQ yet. Their services are present so the next focused infrastructure changes can wire Doctrine, Cache/Lock and Messenger without changing the development topology again.
+## Runtime configuration
 
-## Existing Python reference
+The backend reads operator configuration from environment variables, including:
 
-From the repository root the existing check remains:
-
-```bash
-python3 doge_wallet.py --self-test
+```dotenv
+DOGE_RECOMMENDED_FEE_RATE=0.01
+BTC_RECOMMENDED_FEE_RATE=0.00010000
+ETHEREUM_RPC_URL=
 ```
+
+`ETHEREUM_RPC_URL` is required only for Ethereum endpoints. Provider credentials must remain outside Git and must not be logged.
+
+## Architecture
+
+The backend is a modular monolith. Application capabilities define provider-independent contracts; Infrastructure implements concrete provider/chain adapters; Presentation does not import Infrastructure directly.
+
+See:
+
+- `../docs/architecture/ADR-001-modular-monolith.md`;
+- `../docs/architecture/MODULE_BOUNDARIES.md`;
+- `../docs/architecture/ADAPTER_REGISTRY.md`;
+- `../docs/architecture/ETHEREUM_BACKEND.md`.

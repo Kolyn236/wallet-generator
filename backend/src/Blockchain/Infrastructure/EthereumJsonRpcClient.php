@@ -200,7 +200,7 @@ final readonly class EthereumJsonRpcClient
             $this->fail('provider_rpc_error', $response->status, $operation, $startedAt);
         }
 
-        if (!array_key_exists('result', $decoded)) {
+        if (!\array_key_exists('result', $decoded)) {
             $this->fail('provider_unexpected_response', $response->status, $operation, $startedAt);
         }
 

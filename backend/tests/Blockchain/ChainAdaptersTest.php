@@ -78,8 +78,6 @@ final class ChainAdaptersTest extends TestCase
         self::assertInstanceOf(EvmGasEstimateCapability::class, $ethereum);
         self::assertInstanceOf(Eip1559FeeQuoteCapability::class, $ethereum);
         self::assertInstanceOf(RawTransactionBroadcastCapability::class, $ethereum);
-        self::assertNotInstanceOf(UtxoLookupCapability::class, $ethereum);
-        self::assertNotInstanceOf(UtxoFeeRateCapability::class, $ethereum);
 
         foreach ([UtxoLookupCapability::class, UtxoFeeRateCapability::class] as $capability) {
             try {

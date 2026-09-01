@@ -13,6 +13,7 @@ import {
 } from './assets';
 import { getHealth } from './api';
 import { type Language, messages } from './i18n';
+import { platformCopy } from './platformCopy';
 import { adapterRegistry } from './runtime/adapterRegistry';
 import {
   createAssetRouteBalances,
@@ -55,6 +56,7 @@ export function App() {
   const createdWalletRefs = useRef<Partial<Record<NetworkId, BrowserCreatedWallet>>>({});
 
   const copy = messages[language];
+  const liveCopy = platformCopy[language];
   const asset = getAsset(assetId);
   const route = getAssetRoute(routeId);
   const routes = getAssetRoutes(assetId);
@@ -253,10 +255,10 @@ export function App() {
       </header>
 
       <main id="top">
-        <section className="intro"><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1><p className="intro-copy">{copy.subtitle}</p></section>
+        <section className="intro"><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1><p className="intro-copy">{liveCopy.subtitle}</p></section>
 
         <section className="wallet-tiles-section" id="wallets">
-          <div className="section-title-row"><div><span className="muted-label">{copy.myWallets}</span><p>{copy.walletTilesHint}</p></div></div>
+          <div className="section-title-row"><div><span className="muted-label">{copy.myWallets}</span><p>{liveCopy.walletTilesHint}</p></div></div>
           <div className="wallet-tiles">
             {assets.map((candidate) => {
               const candidateRoute = getDefaultAssetRoute(candidate.id);
@@ -363,7 +365,7 @@ export function App() {
             <div className="backup-card-header"><div><span className="muted-label">{asset.symbol} · BIP39 / BIP44</span><h2>{copy.backupTitle}</h2><p>{copy.backupText}</p></div>
               <button type="button" className="backup-toggle" onClick={() => { setShowBackupSecrets((value) => !value); setCopyState('none'); }}>{showBackupSecrets ? copy.hideBackup : copy.revealBackup}</button>
             </div>
-            <div className="backup-warning">{copy.reloadWarning}</div>
+            <div className="backup-warning">{liveCopy.reloadWarning}</div>
             {showBackupSecrets && (
               <div className="secret-grid">
                 <div className="secret-field seed-field"><span>{copy.seedPhrase}</span><code>{createdWallet.mnemonic}</code><button type="button" onClick={() => void copySecret('seed')}>{copyState === 'seed' ? copy.copied : copy.copySeed}</button></div>
@@ -389,7 +391,7 @@ export function App() {
           </Suspense>
         ) : unavailableTransferPanel}
 
-        <section className="security-card" id="security"><div className="security-icon">✓</div><div><h2>{copy.securityTitle}</h2><p>{copy.securityText}</p><small>{copy.noStorage}</small></div></section>
+        <section className="security-card" id="security"><div className="security-icon">✓</div><div><h2>{copy.securityTitle}</h2><p>{liveCopy.securityText}</p><small>{copy.noStorage}</small></div></section>
       </main>
     </div>
   );

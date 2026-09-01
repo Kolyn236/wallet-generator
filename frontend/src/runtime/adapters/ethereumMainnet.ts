@@ -3,11 +3,12 @@ import { getEthereumBalance } from '../../api';
 import { getUsdtErc20Balance } from '../../usdtApi';
 import {
   createEthereumWallet,
+  deriveEthereumWalletFromMnemonic,
   isEthereumMainnetAddress,
   type CreatedEthereumWallet,
 } from '../../wallet/ethereum';
 import type { AssetRouteAdapter } from '../AssetRouteAdapter';
-import type { BrowserCreatedWallet, WalletNetworkAdapter } from '../WalletNetworkAdapter';
+import type { BrowserSigningWallet, WalletNetworkAdapter } from '../WalletNetworkAdapter';
 
 const EthereumTransferPanel = lazy(async () => {
   const module = await import('../../EthereumTransferPanel');
@@ -19,21 +20,30 @@ const UsdtErc20TransferPanel = lazy(async () => {
   return { default: module.UsdtErc20TransferPanel };
 });
 
-function toBrowserWallet(): BrowserCreatedWallet {
-  const wallet = createEthereumWallet();
-
-  return {
+function toBrowserWallet(wallet: CreatedEthereumWallet, origin: 'generated' | 'mnemonic'): BrowserSigningWallet {
+  const base = {
     address: wallet.address,
-    mnemonic: wallet.mnemonic,
     derivationPath: wallet.derivationPath,
     signingMaterial: {
-      kind: 'private-key',
+      kind: 'private-key' as const,
       value: wallet.privateKey,
     },
   };
+
+  return origin === 'generated'
+    ? { ...base, origin, generatedMnemonic: wallet.mnemonic }
+    : { ...base, origin };
 }
 
-function toEthereumCreatedWallet(wallet: BrowserCreatedWallet | null): CreatedEthereumWallet | null {
+function createBrowserWallet(): BrowserSigningWallet {
+  return toBrowserWallet(createEthereumWallet(), 'generated');
+}
+
+function importBrowserMnemonic(mnemonic: string): BrowserSigningWallet {
+  return toBrowserWallet(deriveEthereumWalletFromMnemonic(mnemonic), 'mnemonic');
+}
+
+function toEthereumCreatedWallet(wallet: BrowserSigningWallet | null): CreatedEthereumWallet | null {
   if (!wallet) return null;
   if (wallet.signingMaterial.kind !== 'private-key') {
     throw new Error('incompatible_signing_material');
@@ -41,7 +51,7 @@ function toEthereumCreatedWallet(wallet: BrowserCreatedWallet | null): CreatedEt
 
   return {
     address: wallet.address,
-    mnemonic: wallet.mnemonic,
+    mnemonic: wallet.origin === 'generated' ? wallet.generatedMnemonic : '',
     derivationPath: wallet.derivationPath,
     privateKey: wallet.signingMaterial.value,
   };
@@ -55,10 +65,12 @@ export const ethereumMainnetWalletAdapter: WalletNetworkAdapter = {
   },
   capabilities: {
     localWalletCreation: true,
+    mnemonicImport: true,
     watchOnly: true,
     localSigning: true,
   },
-  createWallet: toBrowserWallet,
+  createWallet: createBrowserWallet,
+  importMnemonic: importBrowserMnemonic,
   validatePublicAddress: isEthereumMainnetAddress,
 };
 

@@ -1,29 +1,43 @@
 import { createElement, lazy } from 'react';
 import { getBitcoinBalance } from '../../api';
-import { createBitcoinWallet, isBitcoinMainnetAddress } from '../../wallet/bitcoin';
+import {
+  createBitcoinWallet,
+  deriveBitcoinWalletFromMnemonic,
+  isBitcoinMainnetAddress,
+  type CreatedBitcoinWallet,
+} from '../../wallet/bitcoin';
 import type { AssetRouteAdapter } from '../AssetRouteAdapter';
-import type { BrowserCreatedWallet, WalletNetworkAdapter } from '../WalletNetworkAdapter';
+import type { BrowserSigningWallet, WalletNetworkAdapter } from '../WalletNetworkAdapter';
 
 const BitcoinTransferPanel = lazy(async () => {
   const module = await import('../../BitcoinTransferPanel');
   return { default: module.BitcoinTransferPanel };
 });
 
-function toBrowserWallet(): BrowserCreatedWallet {
-  const wallet = createBitcoinWallet();
-
-  return {
+function toBrowserWallet(wallet: CreatedBitcoinWallet, origin: 'generated' | 'mnemonic'): BrowserSigningWallet {
+  const base = {
     address: wallet.address,
-    mnemonic: wallet.mnemonic,
     derivationPath: wallet.derivationPath,
     signingMaterial: {
-      kind: 'wif',
+      kind: 'wif' as const,
       value: wallet.wif,
     },
   };
+
+  return origin === 'generated'
+    ? { ...base, origin, generatedMnemonic: wallet.mnemonic }
+    : { ...base, origin };
 }
 
-function toBitcoinCreatedWallet(wallet: BrowserCreatedWallet | null) {
+function createBrowserWallet(): BrowserSigningWallet {
+  return toBrowserWallet(createBitcoinWallet(), 'generated');
+}
+
+function importBrowserMnemonic(mnemonic: string): BrowserSigningWallet {
+  return toBrowserWallet(deriveBitcoinWalletFromMnemonic(mnemonic), 'mnemonic');
+}
+
+function toBitcoinCreatedWallet(wallet: BrowserSigningWallet | null): CreatedBitcoinWallet | null {
   if (!wallet) return null;
   if (wallet.signingMaterial.kind !== 'wif') {
     throw new Error('incompatible_signing_material');
@@ -31,7 +45,7 @@ function toBitcoinCreatedWallet(wallet: BrowserCreatedWallet | null) {
 
   return {
     address: wallet.address,
-    mnemonic: wallet.mnemonic,
+    mnemonic: wallet.origin === 'generated' ? wallet.generatedMnemonic : '',
     derivationPath: wallet.derivationPath,
     wif: wallet.signingMaterial.value,
   };
@@ -45,10 +59,12 @@ export const bitcoinMainnetWalletAdapter: WalletNetworkAdapter = {
   },
   capabilities: {
     localWalletCreation: true,
+    mnemonicImport: true,
     watchOnly: true,
     localSigning: true,
   },
-  createWallet: toBrowserWallet,
+  createWallet: createBrowserWallet,
+  importMnemonic: importBrowserMnemonic,
   validatePublicAddress: isBitcoinMainnetAddress,
 };
 

@@ -90,6 +90,7 @@ export function buildSignedUsdtErc20Transfer(input: {
     throw new Error('invalid_token_balance');
   }
   const tokenBalance = BigInt(input.tokenBalanceSmallestUnit);
+  if (tokenBalance > UINT256_MAX) throw new Error('invalid_token_balance');
   if (BigInt(amountSmallestUnit) > tokenBalance) throw new Error('insufficient_token_funds');
 
   const data = buildUsdtErc20TransferData(recipient, amountSmallestUnit);

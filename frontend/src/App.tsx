@@ -325,41 +325,39 @@ export function App() {
       <main id="top">
         <section className="intro"><p className="eyebrow">{copy.eyebrow}</p><h1>{copy.title}</h1><p className="intro-copy">{liveCopy.subtitle}</p></section>
 
-        <section className="wallet-tiles-section" id="wallets">
-          <div className="section-title-row"><div><span className="muted-label">{copy.myWallets}</span><p>{liveCopy.walletTilesHint}</p></div></div>
-          <div className="wallet-tiles">
-            {assets.map((candidate) => {
-              const candidateRoute = getDefaultAssetRoute(candidate.id);
-              const candidateWalletAdapter = adapterRegistry.resolveWalletNetwork(candidateRoute.networkId);
-              const candidateSession = getWalletSession(sessions, candidateRoute.networkId);
-              const candidateRouteBalance = getAssetRouteBalance(routeBalances, candidateRoute.id);
-              const candidateConnected = candidateWalletAdapter !== null
-                && candidateSession.mode !== 'none'
-                && candidateSession.address !== '';
-              const candidateBalance = candidateRouteBalance.address === candidateSession.address
-                ? candidateRouteBalance.balance
-                : null;
-              const candidateAvailability = getAssetAvailability(candidate.id);
-              return (
-                <button key={candidate.id} type="button" className={`wallet-tile ${candidate.id === assetId ? 'active' : ''}`} onClick={() => selectAsset(candidate.id)}>
-                  <div className="wallet-tile-top"><span className="asset-mark">{candidate.mark}</span><span className={`asset-status status-${candidateAvailability}`}>{candidateAvailability === 'ready-next' ? copy.firstIntegration : copy.planned}</span></div>
-                  <div><strong>{candidate.symbol}</strong><small>{candidateRoute.standard}</small></div>
-                  <div className="tile-balance">{candidateConnected && candidateBalance !== null ? <strong>{candidateBalance} {candidate.symbol}</strong> : <span>{copy.noAddress}</span>}</div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="wallet-layout">
+        <section className="wallet-layout" id="wallets">
           <aside className="asset-panel">
             <div className="section-heading"><span>{copy.selectAsset}</span><strong>{assets.length}</strong></div>
             <div className="asset-list">
               {assets.map((candidate) => {
+                const candidateRoute = getDefaultAssetRoute(candidate.id);
+                const candidateWalletAdapter = adapterRegistry.resolveWalletNetwork(candidateRoute.networkId);
+                const candidateSession = getWalletSession(sessions, candidateRoute.networkId);
+                const candidateRouteBalance = getAssetRouteBalance(routeBalances, candidateRoute.id);
+                const candidateConnected = candidateWalletAdapter !== null
+                  && candidateSession.mode !== 'none'
+                  && candidateSession.address !== '';
+                const candidateBalance = candidateRouteBalance.address === candidateSession.address
+                  ? candidateRouteBalance.balance
+                  : null;
                 const candidateAvailability = getAssetAvailability(candidate.id);
+                const candidateBalanceLabel = !candidateConnected
+                  ? copy.noAddress
+                  : candidateRouteBalance.status === 'loading'
+                    ? copy.loadingBalance
+                    : candidateRouteBalance.status === 'error'
+                      ? copy.balanceError
+                      : candidateBalance !== null
+                        ? `${candidateBalance} ${candidate.symbol}`
+                        : `— ${candidate.symbol}`;
                 return (
                   <button key={candidate.id} type="button" className={`asset-item ${candidate.id === assetId ? 'active' : ''}`} onClick={() => selectAsset(candidate.id)}>
-                    <span className="asset-mark">{candidate.mark}</span><span className="asset-copy"><strong>{candidate.symbol}</strong><small>{candidate.name}</small></span>
+                    <span className="asset-mark">{candidate.mark}</span>
+                    <span className="asset-copy">
+                      <strong>{candidate.symbol}</strong>
+                      <small className="asset-name">{candidate.name}</small>
+                      <small className={`asset-balance ${candidateBalance !== null ? 'has-balance' : ''}`}>{candidateBalanceLabel}</small>
+                    </span>
                     <span className={`asset-status status-${candidateAvailability}`}>{candidateAvailability === 'ready-next' ? copy.firstIntegration : copy.planned}</span>
                   </button>
                 );

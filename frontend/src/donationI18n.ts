@@ -11,7 +11,7 @@ export const donationMessages: Record<Language, {
 }> = {
   en: {
     eyebrow: 'Support the project',
-    title: 'Like Wallet Platform? Buy the developer a coffee ☕',
+    title: 'Like Wallet Platform? Support the developer ☕',
     text: 'If this project saved you time or taught you something useful, you can support its development with a crypto donation.',
     copy: 'Copy',
     copied: 'Copied',
@@ -20,7 +20,7 @@ export const donationMessages: Record<Language, {
   },
   ru: {
     eyebrow: 'Поддержать проект',
-    title: 'Нравится Wallet Platform? Угостите разработчика кофе ☕',
+    title: 'Нравится Wallet Platform? Поддержите разработчика ☕',
     text: 'Если проект сэкономил вам время или помог разобраться в крипте, его развитие можно поддержать небольшим пожертвованием.',
     copy: 'Копировать',
     copied: 'Скопировано',

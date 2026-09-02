@@ -51,6 +51,10 @@ function getDocumentLanguage(): Language {
   return document.documentElement.lang === 'ru' ? 'ru' : 'en';
 }
 
+function getServerLanguage(): Language {
+  return 'en';
+}
+
 function subscribeToDocumentLanguage(onStoreChange: () => void): () => void {
   const observer = new MutationObserver(onStoreChange);
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
@@ -61,7 +65,7 @@ export function DonationCard() {
   const language = useSyncExternalStore(
     subscribeToDocumentLanguage,
     getDocumentLanguage,
-    () => 'en',
+    getServerLanguage,
   );
   const [copiedAsset, setCopiedAsset] = useState<string | null>(null);
   const copy = donationMessages[language];

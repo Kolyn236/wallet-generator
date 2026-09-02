@@ -18,7 +18,7 @@ final readonly class LegacyP2pkhAddress
             throw new \InvalidArgumentException('Invalid legacy P2PKH address format.');
         }
         $decoded = self::decodeBase58($address);
-        if (25 !== strlen($decoded) || $version !== ord($decoded[0])) {
+        if (25 !== \strlen($decoded) || $version !== \ord($decoded[0])) {
             throw new \InvalidArgumentException('Unexpected legacy P2PKH network version.');
         }
         $payload = substr($decoded, 0, 21);
@@ -27,6 +27,7 @@ final readonly class LegacyP2pkhAddress
         if (!hash_equals($expected, $checksum)) {
             throw new \InvalidArgumentException('Invalid legacy P2PKH address checksum.');
         }
+
         return new self($address);
     }
 
@@ -37,21 +38,29 @@ final readonly class LegacyP2pkhAddress
         $bytes = [0];
         foreach (str_split($numericPart) as $character) {
             $digit = strpos(self::BASE58_ALPHABET, $character);
-            if (false === $digit) throw new \InvalidArgumentException('Invalid Base58 character.');
+            if (false === $digit) {
+                throw new \InvalidArgumentException('Invalid Base58 character.');
+            }
             $carry = $digit;
-            $count = count($bytes);
+            $count = \count($bytes);
             for ($index = 0; $index < $count; ++$index) {
                 $carry += $bytes[$index] * 58;
                 $bytes[$index] = $carry & 0xFF;
                 $carry >>= 8;
             }
-            while ($carry > 0) { $bytes[] = $carry & 0xFF; $carry >>= 8; }
+            while ($carry > 0) {
+                $bytes[] = $carry & 0xFF;
+                $carry >>= 8;
+            }
         }
         $decoded = '';
         if ('' !== $numericPart) {
-            for ($index = count($bytes) - 1; $index >= 0; --$index) $decoded .= chr($bytes[$index]);
+            for ($index = \count($bytes) - 1; $index >= 0; --$index) {
+                $decoded .= \chr($bytes[$index]);
+            }
             $decoded = ltrim($decoded, "\0");
         }
+
         return str_repeat("\0", $leadingZeroes).$decoded;
     }
 }

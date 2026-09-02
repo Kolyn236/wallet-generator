@@ -7,9 +7,12 @@ on:
     paths:
       - 'docker/**'
       - 'compose.yaml'
+      - 'compose.prod.yaml'
       - 'scripts/build-deploy-env.sh'
+      - 'scripts/deploy-production.sh'
       - '.env.example'
       - 'deploy/.env.rates.example'
+      - 'deploy/runtime.env.example'
       - 'backend/.env'
       - 'backend/.env.example'
       - 'backend/config/**'
@@ -22,6 +25,7 @@ on:
       - 'frontend/tsconfig.json'
       - 'frontend/vite.config.ts'
       - '.github/workflows/integration-smoke.yml'
+      - '.github/workflows/production-deploy.yml'
   workflow_dispatch:
 
 permissions:
@@ -34,7 +38,7 @@ concurrency:
 jobs:
   docker-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -94,4 +98,53 @@ jobs:
           echo
           echo '--- Containers ---'
           docker compose logs
+          exit 1
+
+      - name: Validate production deployment scripts
+        run: |
+          sh -n scripts/deploy-production.sh
+          sh -n docker/php/start-prod.sh
+
+      - name: Smoke test production images and topology
+        env:
+          PHP_IMAGE: wallet-generator-php:ci
+          NGINX_IMAGE: wallet-generator-nginx:ci
+        run: |
+          set -eu
+
+          docker build -f docker/php/Dockerfile.prod -t "$PHP_IMAGE" .
+          docker build -f docker/nginx/Dockerfile -t "$NGINX_IMAGE" .
+
+          cat > /tmp/wallet-production-ci.env <<'EOF'
+          APP_SECRET=integration-smoke-only
+          DEFAULT_URI=http://127.0.0.1:18080
+          APP_BIND=127.0.0.1:18080
+          DOGE_RECOMMENDED_FEE_RATE=0.01234567
+          BTC_RECOMMENDED_FEE_RATE=0.00023456
+          ETHEREUM_RPC_URL=
+          EOF
+
+          cleanup() {
+            docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml down --remove-orphans || true
+            rm -f /tmp/wallet-production-ci.env
+          }
+          trap cleanup EXIT
+
+          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml config --quiet
+          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml up -d --remove-orphans
+
+          for attempt in $(seq 1 30); do
+            container_id=$(docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml ps -q nginx)
+            status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id" 2>/dev/null || true)
+
+            if [ "$status" = healthy ] \
+              && curl --fail --silent --show-error -H 'Accept: application/json' http://127.0.0.1:18080/api/health >/dev/null; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml ps
+          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml logs --tail=200
           exit 1

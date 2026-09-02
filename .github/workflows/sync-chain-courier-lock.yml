@@ -1,0 +1,33 @@
+name: Sync ChainCourier Composer lock
+
+on:
+  push:
+    branches:
+      - chore/rebrand-chain-courier
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+      - name: Refresh Composer lock metadata
+        working-directory: backend
+        run: composer update --lock --no-interaction --no-progress --no-scripts
+      - name: Commit lock metadata
+        run: |
+          set -eu
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/composer.lock
+          git diff --cached --quiet && exit 0
+          git commit -m 'chore: refresh Composer lock metadata'
+          git push

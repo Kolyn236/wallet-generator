@@ -30,6 +30,14 @@ const DONATION_ASSETS: DonationAsset[] = [
     address: '1EpKGub83RQ2Fseuy3hiGGi1ph4fNHQqJP',
   },
   {
+    id: 'ltc',
+    symbol: 'LTC',
+    name: 'Litecoin',
+    network: 'Litecoin Mainnet',
+    mark: 'Ł',
+    address: 'LPzjN7FTHqcKBca7gCsTQpKRtFgEujv2Vv',
+  },
+  {
     id: 'eth',
     symbol: 'ETH',
     name: 'Ethereum',

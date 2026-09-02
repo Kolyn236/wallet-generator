@@ -23,18 +23,27 @@ final readonly class LitecoinMainnetAdapter implements ChainAdapter, AddressBala
     ) {
     }
 
-    public function chain(): string { return 'litecoin'; }
-    public function network(): string { return 'mainnet'; }
+    public function chain(): string
+    {
+        return 'litecoin';
+    }
+
+    public function network(): string
+    {
+        return 'mainnet';
+    }
 
     public function getConfirmedBalance(string $address): AddressBalance
     {
         $validated = LegacyP2pkhAddress::fromString($address, self::P2PKH_VERSION);
+
         return new AddressBalance($validated->value, $this->client->balance('ltc', 'litecoin', $validated->value));
     }
 
     public function getConfirmedUtxos(string $address): array
     {
         $validated = LegacyP2pkhAddress::fromString($address, self::P2PKH_VERSION);
+
         return $this->client->utxos('ltc', 'litecoin', $validated->value);
     }
 

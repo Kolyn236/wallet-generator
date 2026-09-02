@@ -25,7 +25,7 @@ final class NativeEthereumJsonRpcTransport implements EthereumJsonRpcTransport
                 'method' => 'POST',
                 'timeout' => 10,
                 'ignore_errors' => true,
-                'header' => "Accept: application/json\r\nContent-Type: application/json\r\nUser-Agent: wallet-platform/0.1\r\n",
+                'header' => "Accept: application/json\r\nContent-Type: application/json\r\nUser-Agent: chain-courier/0.1\r\n",
                 'content' => $payload,
             ],
         ]);

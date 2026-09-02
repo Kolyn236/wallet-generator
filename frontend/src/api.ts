@@ -68,6 +68,6 @@ async function postRawTransaction<T>(url: string, rawTransaction: string, operat
 async function apiError(response: Response, operation: string): Promise<WalletApiError> {
   let details: ApiErrorResponse = {};
   try { details = (await response.json()) as ApiErrorResponse; } catch { /* HTTP status still classifies the failure. */ }
-  console.error(`[wallet-platform] ${operation} failed`, { status: response.status, error: details.error ?? null, reason: details.reason ?? null });
+  console.error(`[chain-courier] ${operation} failed`, { status: response.status, error: details.error ?? null, reason: details.reason ?? null });
   return new WalletApiError(`${operation} failed with HTTP ${response.status}.`, response.status, details.error, details.reason);
 }

@@ -33,10 +33,11 @@ import {
 type HealthState = 'checking' | 'online' | 'offline';
 type CopyState = 'none' | 'seed' | 'signing-material';
 
-const LANGUAGE_KEY = 'wallet-platform-language';
+const LANGUAGE_KEY = 'chain-courier-language';
+const LEGACY_LANGUAGE_KEY = 'wallet-platform-language';
 
 function initialLanguage(): Language {
-  const stored = localStorage.getItem(LANGUAGE_KEY);
+  const stored = localStorage.getItem(LANGUAGE_KEY) ?? localStorage.getItem(LEGACY_LANGUAGE_KEY);
   if (stored === 'ru' || stored === 'en') return stored;
   return navigator.language.toLowerCase().startsWith('ru') ? 'ru' : 'en';
 }
@@ -82,6 +83,7 @@ export function App() {
   useEffect(() => {
     document.documentElement.lang = language;
     localStorage.setItem(LANGUAGE_KEY, language);
+    localStorage.removeItem(LEGACY_LANGUAGE_KEY);
   }, [language]);
 
   useEffect(() => {
@@ -311,7 +313,7 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#top" aria-label={copy.brand}><span className="brand-mark">W</span><span>{copy.brand}</span></a>
+        <a className="brand" href="#top" aria-label={copy.brand}><span className="brand-mark">C</span><span>{copy.brand}</span></a>
         <nav className="nav" aria-label="Primary"><a href="#wallets">{copy.wallets}</a><a href="#transfer">{copy.transfer}</a><a href="#security">{copy.security}</a></nav>
         <div className="topbar-actions">
           <div className={`health health-${health}`} title={`${copy.backend}: ${healthLabel}`}><span className="health-dot" /><span>{healthLabel}</span></div>

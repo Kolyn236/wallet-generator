@@ -14,7 +14,7 @@ final class HealthController
     {
         return new JsonResponse([
             'status' => 'ok',
-            'service' => 'wallet-platform-backend',
+            'service' => 'chain-courier-backend',
         ]);
     }
 }

@@ -1,0 +1,29 @@
+FROM composer:2.8 AS vendor
+
+WORKDIR /app/backend
+COPY backend/composer.json backend/composer.lock backend/symfony.lock ./
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --prefer-dist \
+    --no-progress \
+    --no-scripts \
+    --optimize-autoloader
+
+FROM php:8.4-fpm-alpine
+
+RUN docker-php-ext-install opcache
+
+WORKDIR /app/backend
+COPY backend/ ./
+COPY --from=vendor /app/backend/vendor ./vendor
+COPY docker/php/start-prod.sh /usr/local/bin/start-prod
+
+RUN chmod +x /usr/local/bin/start-prod \
+    && mkdir -p var/cache var/log \
+    && chown -R www-data:www-data var
+
+ENV APP_ENV=prod \
+    APP_DEBUG=0
+
+CMD ["start-prod"]

@@ -1,0 +1,131 @@
+name: Apply ChainCourier rebrand
+
+on:
+  push:
+    branches:
+      - chore/rebrand-chain-courier
+
+permissions:
+  contents: write
+
+jobs:
+  apply-rebrand:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply product rename
+        shell: bash
+        run: |
+          set -eu
+          python - <<'PY'
+          from pathlib import Path
+
+          root = Path('.')
+          skip_parts = {'.git', 'node_modules', 'vendor', 'dist', 'var'}
+          text_suffixes = {'.md', '.json', '.ts', '.tsx', '.html', '.yml', '.yaml', '.sh', '.env', '.example', '.txt'}
+          exact_names = {'.env.example', '.gitignore', 'AGENTS.md', 'README.md', 'compose.yaml'}
+
+          for path in root.rglob('*'):
+              if not path.is_file():
+                  continue
+              if any(part in skip_parts for part in path.parts):
+                  continue
+              if path.name == 'rebrand-chain-courier-apply.yml':
+                  continue
+              if path.suffix not in text_suffixes and path.name not in exact_names:
+                  continue
+              try:
+                  text = path.read_text(encoding='utf-8')
+              except UnicodeDecodeError:
+                  continue
+
+              updated = text
+              updated = updated.replace('Wallet Platform', 'ChainCourier')
+              updated = updated.replace('wallet-platform', 'chain-courier')
+              updated = updated.replace('wallet-generator', 'chain-courier')
+              updated = updated.replace('/tmp/wallet-rates.env', '/tmp/chain-courier-rates.env')
+
+              if path == Path('frontend/index.html'):
+                  updated = updated.replace(
+                      'content="Multi-chain wallet platform"',
+                      'content="ChainCourier — non-custodial multi-chain crypto transfer tool"',
+                  )
+
+              if path == Path('frontend/src/App.tsx'):
+                  old_language = """const LANGUAGE_KEY = 'chain-courier-language';\n\nfunction initialLanguage(): Language {\n  const stored = localStorage.getItem(LANGUAGE_KEY);\n  if (stored === 'ru' || stored === 'en') return stored;\n"""
+                  new_language = """const LANGUAGE_KEY = 'chain-courier-language';\nconst LEGACY_LANGUAGE_KEY = 'wallet-platform-language';\n\nfunction initialLanguage(): Language {\n  const stored = localStorage.getItem(LANGUAGE_KEY) ?? localStorage.getItem(LEGACY_LANGUAGE_KEY);\n  if (stored === 'ru' || stored === 'en') return stored;\n"""
+                  if old_language not in updated:
+                      raise SystemExit('App.tsx language-key source snippet was not found')
+                  updated = updated.replace(old_language, new_language, 1)
+
+                  old_effect = """  useEffect(() => {\n    document.documentElement.lang = language;\n    localStorage.setItem(LANGUAGE_KEY, language);\n  }, [language]);\n"""
+                  new_effect = """  useEffect(() => {\n    document.documentElement.lang = language;\n    localStorage.setItem(LANGUAGE_KEY, language);\n    localStorage.removeItem(LEGACY_LANGUAGE_KEY);\n  }, [language]);\n"""
+                  if old_effect not in updated:
+                      raise SystemExit('App.tsx language persistence snippet was not found')
+                  updated = updated.replace(old_effect, new_effect, 1)
+                  updated = updated.replace('<span className="brand-mark">W</span>', '<span className="brand-mark">C</span>', 1)
+
+              if path == Path('backend/composer.json'):
+                  updated = updated.replace(
+                      'Symfony modular-monolith backend for the wallet platform',
+                      'Symfony modular-monolith backend for ChainCourier',
+                  )
+
+              if path == Path('frontend/package.json'):
+                  updated = updated.replace('"name": "chain-courier-frontend"', '"name": "chain-courier-frontend"')
+
+              if updated != text:
+                  path.write_text(updated, encoding='utf-8')
+
+          # Product-focused copy cleanup after identifier replacements.
+          replacements = {
+              Path('README.md'): [
+                  ('A multi-chain non-custodial wallet platform built with a **Symfony 7.4 modular monolith + React/TypeScript frontend**.',
+                   'ChainCourier is a multi-chain non-custodial crypto transfer tool built with a **Symfony 7.4 modular monolith + React/TypeScript frontend**.'),
+              ],
+              Path('frontend/README.md'): [
+                  ('The primary web UI and browser-local signing runtime for the wallet platform.',
+                   'The primary web UI and browser-local signing runtime for ChainCourier.'),
+              ],
+              Path('backend/README.md'): [
+                  ('The backend is the supported Symfony 7.4 LTS / PHP 8.4 blockchain API gateway for the wallet platform.',
+                   'The backend is the supported Symfony 7.4 LTS / PHP 8.4 blockchain API gateway for ChainCourier.'),
+              ],
+          }
+          for path, pairs in replacements.items():
+              text = path.read_text(encoding='utf-8')
+              for old, new in pairs:
+                  text = text.replace(old, new)
+              path.write_text(text, encoding='utf-8')
+
+          # The helper workflow is intentionally not part of the final PR.
+          Path('.github/workflows/rebrand-chain-courier-apply.yml').unlink()
+          PY
+
+      - name: Validate rebrand leftovers
+        shell: bash
+        run: |
+          set -eu
+          ! grep -RIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=vendor \
+            -E 'Wallet Platform|wallet-platform|wallet-generator|/tmp/wallet-rates\.env' .
+          grep -q "brand: 'ChainCourier'" frontend/src/i18n.ts
+          grep -q 'brand-mark">C<' frontend/src/App.tsx
+          grep -q 'chain-courier-language' frontend/src/App.tsx
+          grep -q 'LEGACY_LANGUAGE_KEY' frontend/src/App.tsx
+          grep -q '"name": "chain-courier-frontend"' frontend/package.json
+          grep -q '"name": "kolyn236/chain-courier-backend"' backend/composer.json
+          grep -q '<title>ChainCourier</title>' frontend/index.html
+
+      - name: Commit rebrand
+        shell: bash
+        run: |
+          set -eu
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'chore: rebrand product as ChainCourier'
+          git push

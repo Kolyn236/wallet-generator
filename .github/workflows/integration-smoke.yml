@@ -26,13 +26,36 @@ on:
       - 'frontend/vite.config.ts'
       - '.github/workflows/integration-smoke.yml'
       - '.github/workflows/production-deploy.yml'
+  pull_request:
+    paths:
+      - 'docker/**'
+      - 'compose.yaml'
+      - 'compose.prod.yaml'
+      - 'scripts/build-deploy-env.sh'
+      - 'scripts/deploy-production.sh'
+      - '.env.example'
+      - 'deploy/.env.rates.example'
+      - 'deploy/runtime.env.example'
+      - 'backend/.env'
+      - 'backend/.env.example'
+      - 'backend/config/**'
+      - 'backend/composer.json'
+      - 'backend/composer.lock'
+      - 'frontend/src/**'
+      - 'frontend/index.html'
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'frontend/tsconfig.json'
+      - 'frontend/vite.config.ts'
+      - '.github/workflows/integration-smoke.yml'
+      - '.github/workflows/production-deploy.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: integration-${{ github.workflow }}-${{ github.ref }}
+  group: integration-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:

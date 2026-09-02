@@ -26,7 +26,7 @@ jobs:
 
           root = Path('.')
           skip_parts = {'.git', 'node_modules', 'vendor', 'dist', 'var'}
-          text_suffixes = {'.md', '.json', '.ts', '.tsx', '.html', '.yml', '.yaml', '.sh', '.env', '.example', '.txt'}
+          text_suffixes = {'.md', '.json', '.ts', '.tsx', '.html', '.sh', '.env', '.example', '.txt', '.php', '.xml'}
           exact_names = {'.env.example', '.gitignore', 'AGENTS.md', 'README.md', 'compose.yaml'}
 
           for path in root.rglob('*'):
@@ -34,7 +34,7 @@ jobs:
                   continue
               if any(part in skip_parts for part in path.parts):
                   continue
-              if path.name == 'rebrand-chain-courier-apply.yml':
+              if len(path.parts) >= 2 and path.parts[0] == '.github' and path.parts[1] == 'workflows':
                   continue
               if path.suffix not in text_suffixes and path.name not in exact_names:
                   continue
@@ -47,7 +47,6 @@ jobs:
               updated = updated.replace('Wallet Platform', 'ChainCourier')
               updated = updated.replace('wallet-platform', 'chain-courier')
               updated = updated.replace('wallet-generator', 'chain-courier')
-              updated = updated.replace('/tmp/wallet-rates.env', '/tmp/chain-courier-rates.env')
 
               if path == Path('frontend/index.html'):
                   updated = updated.replace(
@@ -75,13 +74,9 @@ jobs:
                       'Symfony modular-monolith backend for ChainCourier',
                   )
 
-              if path == Path('frontend/package.json'):
-                  updated = updated.replace('"name": "chain-courier-frontend"', '"name": "chain-courier-frontend"')
-
               if updated != text:
                   path.write_text(updated, encoding='utf-8')
 
-          # Product-focused copy cleanup after identifier replacements.
           replacements = {
               Path('README.md'): [
                   ('A multi-chain non-custodial wallet platform built with a **Symfony 7.4 modular monolith + React/TypeScript frontend**.',
@@ -101,24 +96,27 @@ jobs:
               for old, new in pairs:
                   text = text.replace(old, new)
               path.write_text(text, encoding='utf-8')
-
-          # The helper workflow is intentionally not part of the final PR.
-          Path('.github/workflows/rebrand-chain-courier-apply.yml').unlink()
           PY
 
       - name: Validate rebrand leftovers
         shell: bash
         run: |
           set -eu
-          ! grep -RIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=vendor \
-            -E 'Wallet Platform|wallet-platform|wallet-generator|/tmp/wallet-rates\.env' .
+          leftovers="$(grep -RIn --exclude-dir=.git --exclude-dir=.github --exclude-dir=node_modules --exclude-dir=vendor \
+            -E 'Wallet Platform|wallet-platform|wallet-generator' . | grep -v "LEGACY_LANGUAGE_KEY = 'wallet-platform-language'" || true)"
+          if [ -n "$leftovers" ]; then
+            printf '%s\n' "$leftovers"
+            exit 1
+          fi
           grep -q "brand: 'ChainCourier'" frontend/src/i18n.ts
           grep -q 'brand-mark">C<' frontend/src/App.tsx
-          grep -q 'chain-courier-language' frontend/src/App.tsx
-          grep -q 'LEGACY_LANGUAGE_KEY' frontend/src/App.tsx
+          grep -q "const LANGUAGE_KEY = 'chain-courier-language'" frontend/src/App.tsx
+          grep -q "LEGACY_LANGUAGE_KEY = 'wallet-platform-language'" frontend/src/App.tsx
           grep -q '"name": "chain-courier-frontend"' frontend/package.json
           grep -q '"name": "kolyn236/chain-courier-backend"' backend/composer.json
           grep -q '<title>ChainCourier</title>' frontend/index.html
+          grep -q "'service' => 'chain-courier-backend'" backend/src/Presentation/Http/HealthController.php
+          grep -q 'User-Agent: chain-courier/0.1' backend/src/Blockchain/Infrastructure/BlockCypherUtxoMainnetClient.php
 
       - name: Commit rebrand
         shell: bash
@@ -126,6 +124,6 @@ jobs:
           set -eu
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add -A -- ':!.github/workflows'
           git commit -m 'chore: rebrand product as ChainCourier'
           git push

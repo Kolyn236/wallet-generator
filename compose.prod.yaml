@@ -1,0 +1,28 @@
+name: wallet-generator
+
+services:
+  php:
+    image: ${PHP_IMAGE:?PHP_IMAGE is required}
+    restart: unless-stopped
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: '0'
+      APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
+      DEFAULT_URI: ${DEFAULT_URI:?DEFAULT_URI is required}
+      DOGE_RECOMMENDED_FEE_RATE: ${DOGE_RECOMMENDED_FEE_RATE:-0.01}
+      BTC_RECOMMENDED_FEE_RATE: ${BTC_RECOMMENDED_FEE_RATE:-0.00010000}
+      ETHEREUM_RPC_URL: ${ETHEREUM_RPC_URL:-}
+
+  nginx:
+    image: ${NGINX_IMAGE:?NGINX_IMAGE is required}
+    restart: unless-stopped
+    ports:
+      - '${APP_BIND:-127.0.0.1:8080}:80'
+    depends_on:
+      - php
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q -O - http://127.0.0.1/api/health >/dev/null 2>&1 || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s

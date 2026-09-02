@@ -1,14 +1,14 @@
 .donation-shell {
   width: min(1220px, 92vw);
-  margin: -42px auto 80px;
+  margin: -42px auto 72px;
 }
 
 .donation-card {
   position: relative;
   overflow: hidden;
-  padding: 30px;
+  padding: 24px;
   border: 1px solid rgba(23, 23, 19, .08);
-  border-radius: 26px;
+  border-radius: 22px;
   background:
     radial-gradient(circle at 100% 0%, rgba(244, 202, 85, .24), transparent 24rem),
     #171713;
@@ -31,8 +31,8 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 15px;
   align-items: start;
   max-width: 830px;
 }
@@ -40,34 +40,34 @@
 .donation-heart {
   display: grid;
   place-items: center;
-  width: 54px;
-  height: 54px;
-  border-radius: 17px;
+  width: 48px;
+  height: 48px;
+  border-radius: 15px;
   background: #f4ca55;
   color: #171713;
-  font-size: 24px;
+  font-size: 21px;
   box-shadow: 0 12px 28px rgba(244, 202, 85, .16);
 }
 
 .donation-card .muted-label {
   display: block;
-  margin-bottom: 7px;
+  margin-bottom: 5px;
   color: #d7b84d;
 }
 
 .donation-heading h2 {
   margin: 0;
   max-width: 760px;
-  font-size: clamp(26px, 3vw, 36px);
-  line-height: 1.08;
-  letter-spacing: -.04em;
+  font-size: clamp(22px, 2.4vw, 30px);
+  line-height: 1.1;
+  letter-spacing: -.035em;
 }
 
 .donation-heading p {
-  margin: 11px 0 0;
+  margin: 8px 0 0;
   max-width: 720px;
   color: #bcb8ae;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .donation-grid {
@@ -75,34 +75,34 @@
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 25px;
+  gap: 10px;
+  margin-top: 18px;
 }
 
 .donation-asset {
   min-width: 0;
-  padding: 17px;
+  padding: 14px;
   border: 1px solid rgba(255, 255, 255, .08);
-  border-radius: 18px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, .055);
 }
 
 .donation-asset-heading {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 10px;
 }
 
 .donation-asset-mark {
   display: grid;
   place-items: center;
   flex: none;
-  width: 39px;
-  height: 39px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
   background: rgba(244, 202, 85, .12);
   color: #f4ca55;
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 850;
 }
 
@@ -117,7 +117,7 @@
 }
 
 .donation-asset-heading small {
-  margin-top: 2px;
+  margin-top: 1px;
   color: #8f8b82;
 }
 
@@ -125,7 +125,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 15px;
+  margin-top: 11px;
   color: #8f8b82;
   font-size: 10px;
   text-transform: uppercase;
@@ -142,15 +142,15 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 7px;
 }
 
 .donation-address-row code {
   min-width: 0;
   overflow: hidden;
-  padding: 11px 12px;
+  padding: 9px 11px;
   border: 1px solid rgba(255, 255, 255, .07);
-  border-radius: 11px;
+  border-radius: 10px;
   background: rgba(0, 0, 0, .18);
   color: #dedbd2;
   font-size: 12px;
@@ -164,10 +164,10 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-width: 108px;
+  min-width: 104px;
   border: 0;
-  border-radius: 11px;
-  padding: 0 12px;
+  border-radius: 10px;
+  padding: 0 11px;
   background: #f4ca55;
   color: #171713;
   font-size: 11px;
@@ -181,7 +181,7 @@
 .donation-warning {
   position: relative;
   z-index: 1;
-  margin: 14px 0 0;
+  margin: 11px 0 0;
   color: #858178;
   font-size: 11px;
 }
@@ -199,19 +199,19 @@
   }
 
   .donation-card {
-    padding: 20px;
+    padding: 18px;
   }
 
   .donation-heading {
-    grid-template-columns: 44px minmax(0, 1fr);
-    gap: 13px;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 12px;
   }
 
   .donation-heart {
-    width: 44px;
-    height: 44px;
-    border-radius: 14px;
-    font-size: 20px;
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    font-size: 19px;
   }
 
   .donation-address-row {
@@ -224,6 +224,6 @@
   }
 
   .donation-address-row button {
-    min-height: 42px;
+    min-height: 40px;
   }
 }

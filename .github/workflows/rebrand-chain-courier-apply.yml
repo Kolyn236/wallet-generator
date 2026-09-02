@@ -27,7 +27,7 @@ jobs:
           root = Path('.')
           skip_parts = {'.git', 'node_modules', 'vendor', 'dist', 'var'}
           text_suffixes = {'.md', '.json', '.ts', '.tsx', '.html', '.sh', '.env', '.example', '.txt', '.php', '.xml'}
-          exact_names = {'.env.example', '.gitignore', 'AGENTS.md', 'README.md', 'compose.yaml'}
+          exact_names = {'.env.example', '.gitignore', 'AGENTS.md', 'README.md', 'compose.yaml', 'phpunit.xml.dist'}
 
           for path in root.rglob('*'):
               if not path.is_file():
@@ -117,6 +117,7 @@ jobs:
           grep -q '<title>ChainCourier</title>' frontend/index.html
           grep -q "'service' => 'chain-courier-backend'" backend/src/Presentation/Http/HealthController.php
           grep -q 'User-Agent: chain-courier/0.1' backend/src/Blockchain/Infrastructure/BlockCypherUtxoMainnetClient.php
+          grep -q 'testsuite name="ChainCourier Backend"' backend/phpunit.xml.dist
 
       - name: Commit rebrand
         shell: bash

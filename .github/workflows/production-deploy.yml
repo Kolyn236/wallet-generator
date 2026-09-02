@@ -1,0 +1,227 @@
+name: Production Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: 'Existing main-branch release SHA to redeploy/rollback to. Leave empty to build and deploy current main.'
+        required: false
+        type: string
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_sha: ${{ steps.release.outputs.release_sha }}
+      build_release: ${{ steps.release.outputs.build_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve production release
+        id: release
+        shell: bash
+        env:
+          REQUESTED_RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${REQUESTED_RELEASE_SHA:-}" ]]; then
+            if ! printf '%s' "$REQUESTED_RELEASE_SHA" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+              echo 'release_sha must be a 7-40 character hexadecimal Git commit SHA.' >&2
+              exit 1
+            fi
+
+            release_sha="$(git rev-parse --verify "${REQUESTED_RELEASE_SHA}^{commit}")"
+            git fetch origin main
+
+            if ! git merge-base --is-ancestor "$release_sha" origin/main; then
+              echo 'Requested release must be an ancestor of main.' >&2
+              exit 1
+            fi
+
+            build_release=false
+          else
+            release_sha="$GITHUB_SHA"
+            build_release=true
+          fi
+
+          echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
+          echo "build_release=$build_release" >> "$GITHUB_OUTPUT"
+
+  build-release:
+    needs: prepare
+    if: needs.prepare.outputs.build_release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_sha }}
+          persist-credentials: false
+
+      - name: Resolve image names
+        id: images
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          prefix="ghcr.io/$repository"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "php=${prefix}-php:${{ needs.prepare.outputs.release_sha }}" >> "$GITHUB_OUTPUT"
+          echo "nginx=${prefix}-nginx:${{ needs.prepare.outputs.release_sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate deployment scripts
+        run: |
+          sh -n scripts/deploy-production.sh
+          sh -n docker/php/start-prod.sh
+
+      - name: Build immutable release images
+        env:
+          PHP_IMAGE: ${{ steps.images.outputs.php }}
+          NGINX_IMAGE: ${{ steps.images.outputs.nginx }}
+        run: |
+          set -eu
+          docker build \
+            --label "org.opencontainers.image.revision=${{ needs.prepare.outputs.release_sha }}" \
+            -f docker/php/Dockerfile.prod \
+            -t "$PHP_IMAGE" \
+            .
+          docker build \
+            --label "org.opencontainers.image.revision=${{ needs.prepare.outputs.release_sha }}" \
+            -f docker/nginx/Dockerfile \
+            -t "$NGINX_IMAGE" \
+            .
+
+      - name: Smoke test production images
+        env:
+          PHP_IMAGE: ${{ steps.images.outputs.php }}
+          NGINX_IMAGE: ${{ steps.images.outputs.nginx }}
+        run: |
+          set -eu
+
+          cat > /tmp/wallet-production-ci.env <<'EOF'
+          APP_SECRET=ci-production-smoke-only
+          DEFAULT_URI=http://127.0.0.1:18080
+          APP_BIND=127.0.0.1:18080
+          DOGE_RECOMMENDED_FEE_RATE=0.01234567
+          BTC_RECOMMENDED_FEE_RATE=0.00023456
+          ETHEREUM_RPC_URL=
+          EOF
+
+          cleanup() {
+            docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml down --remove-orphans || true
+            rm -f /tmp/wallet-production-ci.env
+          }
+          trap cleanup EXIT
+
+          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml config --quiet
+          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml up -d --remove-orphans
+
+          for attempt in $(seq 1 30); do
+            container_id=$(docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml ps -q nginx)
+            status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id" 2>/dev/null || true)
+
+            if [ "$status" = healthy ] \
+              && curl --fail --silent --show-error -H 'Accept: application/json' http://127.0.0.1:18080/api/health >/dev/null; then
+              exit 0
+            fi
+
+            sleep 2
+          done
+
+          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml ps
+          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml logs --tail=200
+          exit 1
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Publish immutable release images
+        env:
+          PHP_IMAGE: ${{ steps.images.outputs.php }}
+          NGINX_IMAGE: ${{ steps.images.outputs.nginx }}
+        run: |
+          docker push "$PHP_IMAGE"
+          docker push "$NGINX_IMAGE"
+
+      - name: Log out from GitHub Container Registry
+        if: always()
+        run: docker logout ghcr.io || true
+
+  deploy-production:
+    needs:
+      - prepare
+      - build-release
+    if: >-
+      always() &&
+      needs.prepare.result == 'success' &&
+      (needs.build-release.result == 'success' || needs.build-release.result == 'skipped') &&
+      (github.event_name == 'workflow_dispatch' || vars.PRODUCTION_AUTO_DEPLOY == 'true')
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - production
+      - wallet-generator
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_sha }}
+          persist-credentials: false
+          clean: true
+
+      - name: Resolve image prefix
+        id: images
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "prefix=ghcr.io/$repository" >> "$GITHUB_OUTPUT"
+
+      - name: Verify production runner prerequisites
+        run: |
+          set -eu
+          docker version >/dev/null
+          docker compose version >/dev/null
+          test -f /etc/wallet-generator/runtime.env
+          test -r /etc/wallet-generator/runtime.env
+          test -d /var/lib/wallet-generator
+          test -w /var/lib/wallet-generator
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Deploy and verify release
+        env:
+          RUNTIME_ENV_FILE: /etc/wallet-generator/runtime.env
+          DEPLOY_STATE_DIR: /var/lib/wallet-generator
+        run: sh scripts/deploy-production.sh '${{ needs.prepare.outputs.release_sha }}' '${{ steps.images.outputs.prefix }}'
+
+      - name: Log out from GitHub Container Registry
+        if: always()
+        run: docker logout ghcr.io || true

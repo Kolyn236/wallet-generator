@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import type { Language } from './i18n';
 import { donationMessages } from './donationI18n';
 import './donation.css';
@@ -51,16 +51,20 @@ function getDocumentLanguage(): Language {
   return document.documentElement.lang === 'ru' ? 'ru' : 'en';
 }
 
+function subscribeToDocumentLanguage(onStoreChange: () => void): () => void {
+  const observer = new MutationObserver(onStoreChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
+  return () => observer.disconnect();
+}
+
 export function DonationCard() {
-  const [language, setLanguage] = useState<Language>(getDocumentLanguage);
+  const language = useSyncExternalStore(
+    subscribeToDocumentLanguage,
+    getDocumentLanguage,
+    () => 'en',
+  );
   const [copiedAsset, setCopiedAsset] = useState<string | null>(null);
   const copy = donationMessages[language];
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => setLanguage(getDocumentLanguage()));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] });
-    return () => observer.disconnect();
-  }, []);
 
   async function copyAddress(asset: DonationAsset) {
     if (!navigator.clipboard) return;

@@ -109,7 +109,7 @@ final readonly class BlockCypherUtxoMainnetClient
                 'method' => 'POST',
                 'timeout' => 15,
                 'ignore_errors' => true,
-                'header' => "Accept: application/json\r\nContent-Type: application/json\r\nUser-Agent: wallet-platform/0.1\r\n",
+                'header' => "Accept: application/json\r\nContent-Type: application/json\r\nUser-Agent: chain-courier/0.1\r\n",
                 'content' => json_encode(['tx' => $rawHex], \JSON_THROW_ON_ERROR),
             ],
         ]));
@@ -188,7 +188,7 @@ final readonly class BlockCypherUtxoMainnetClient
                 'method' => 'GET',
                 'timeout' => 10,
                 'ignore_errors' => true,
-                'header' => "Accept: application/json\r\nUser-Agent: wallet-platform/0.1\r\n",
+                'header' => "Accept: application/json\r\nUser-Agent: chain-courier/0.1\r\n",
             ],
         ]));
         $status = self::statusCode($http_response_header);

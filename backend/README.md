@@ -1,6 +1,6 @@
 # Symfony backend
 
-The backend is the supported Symfony 7.4 LTS / PHP 8.4 blockchain API gateway for the wallet platform.
+The backend is the supported Symfony 7.4 LTS / PHP 8.4 blockchain API gateway for ChainCourier.
 
 It is intentionally non-custodial: wallet creation and transaction signing stay in the browser. Symfony receives public chain data requests and already-signed raw transactions only.
 

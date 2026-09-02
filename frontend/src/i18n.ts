@@ -2,7 +2,7 @@ export type Language = 'en' | 'ru';
 
 export const messages = {
   en: {
-    brand: 'Wallet Platform', backend: 'Server', online: 'Online', offline: 'Unavailable', checking: 'Checking',
+    brand: 'ChainCourier', backend: 'Server', online: 'Online', offline: 'Unavailable', checking: 'Checking',
     wallets: 'Wallets', transfer: 'Transfer', security: 'Security', eyebrow: 'Multi-wallet / non-custodial',
     title: 'Switch the asset. Choose the network. Send securely.',
     subtitle: 'Dogecoin and Bitcoin are live non-custodial wallet flows. Create a wallet locally or connect an existing public address; keys stay in the browser.',
@@ -57,7 +57,7 @@ export const messages = {
     noStorage: 'The server does not store wallet secrets. They are not persisted in localStorage, cookies, the server database, or other server-side storage.',
   },
   ru: {
-    brand: 'Wallet Platform', backend: 'Сервер', online: 'Работает', offline: 'Недоступен', checking: 'Проверяем',
+    brand: 'ChainCourier', backend: 'Сервер', online: 'Работает', offline: 'Недоступен', checking: 'Проверяем',
     wallets: 'Кошельки', transfer: 'Перевод', security: 'Безопасность', eyebrow: 'Мультикошелёк / non-custodial',
     title: 'Выбираем валюту. Выбираем сеть. Отправляем безопасно.',
     subtitle: 'Dogecoin и Bitcoin уже работают как полноценные non-custodial кошельки: создаём локально или подключаем существующий публичный адрес, а ключи остаются в браузере.',

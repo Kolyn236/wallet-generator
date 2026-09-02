@@ -29,7 +29,7 @@ final readonly class BlockCypherBitcoinUtxoProvider implements BitcoinUtxoProvid
                 'method' => 'GET',
                 'timeout' => 10,
                 'ignore_errors' => true,
-                'header' => "Accept: application/json\r\nUser-Agent: wallet-platform/0.1\r\n",
+                'header' => "Accept: application/json\r\nUser-Agent: chain-courier/0.1\r\n",
             ],
         ]);
 

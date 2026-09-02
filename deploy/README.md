@@ -12,12 +12,12 @@ ETHEREUM_RPC_URL=https://your-ethereum-provider.example/your-secret-key
 
 `ETHEREUM_RPC_URL` is required only when the Ethereum backend endpoints are used. Provider credentials/API keys must stay in deployment secrets or operator-controlled environment files and must never be committed to Git.
 
-A tracked template is available at `deploy/.env.rates.example` for the fee-rate values. A real operator file may be kept outside the checkout, for example `/etc/wallet-platform/runtime.env`, and can also contain `ETHEREUM_RPC_URL` when Ethereum is enabled.
+A tracked template is available at `deploy/.env.rates.example` for the fee-rate values. A real operator file may be kept outside the checkout, for example `/etc/chain-courier/runtime.env`, and can also contain `ETHEREUM_RPC_URL` when Ethereum is enabled.
 
 Build the runtime env before starting/recreating the stack:
 
 ```bash
-sh scripts/build-deploy-env.sh /etc/wallet-platform/runtime.env .env
+sh scripts/build-deploy-env.sh /etc/chain-courier/runtime.env .env
 docker compose up -d --build
 ```
 
@@ -26,7 +26,7 @@ The builder removes base assignments for keys present in the operator file and t
 Changing only runtime configuration does not require rebuilding the React bundle. Rebuild/regenerate `.env` and recreate the PHP runtime:
 
 ```bash
-sh scripts/build-deploy-env.sh /etc/wallet-platform/runtime.env .env
+sh scripts/build-deploy-env.sh /etc/chain-courier/runtime.env .env
 docker compose up -d --force-recreate php
 ```
 

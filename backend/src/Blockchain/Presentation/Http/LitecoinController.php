@@ -33,6 +33,7 @@ final readonly class LitecoinController
         } catch (BalanceLookupFailed $e) {
             return new JsonResponse(['error' => 'provider_unavailable', 'reason' => $e->reason], 502);
         }
+
         return new JsonResponse(['chain' => 'litecoin', 'network' => 'mainnet', 'address' => $balance->address, 'balance' => $balance->decimal(), 'balanceSmallestUnit' => $balance->smallestUnit, 'unit' => 'LTC']);
     }
 
@@ -47,6 +48,7 @@ final readonly class LitecoinController
         } catch (UtxoLookupFailed $e) {
             return new JsonResponse(['error' => 'provider_unavailable', 'reason' => $e->reason], 502);
         }
+
         return new JsonResponse(['chain' => 'litecoin', 'network' => 'mainnet', 'address' => $address, 'utxos' => $utxos]);
     }
 
@@ -55,6 +57,7 @@ final readonly class LitecoinController
     {
         $capability = $this->registry->requireCapability('litecoin', 'mainnet', UtxoFeeRateCapability::class);
         $rate = $capability->feeRate();
+
         return new JsonResponse(['chain' => 'litecoin', 'network' => 'mainnet', 'kind' => $rate->kind, 'recommendedRate' => $rate->recommendedRate, 'unit' => $rate->unit]);
     }
 
@@ -64,7 +67,9 @@ final readonly class LitecoinController
         try {
             $payload = $request->toArray();
             $raw = $payload['rawTransaction'] ?? null;
-            if (!is_string($raw)) throw new \InvalidArgumentException();
+            if (!\is_string($raw)) {
+                throw new \InvalidArgumentException();
+            }
             $capability = $this->registry->requireCapability('litecoin', 'mainnet', RawTransactionBroadcastCapability::class);
             $txid = $capability->broadcastRawTransaction($raw);
         } catch (\InvalidArgumentException) {
@@ -72,6 +77,7 @@ final readonly class LitecoinController
         } catch (BroadcastFailed $e) {
             return new JsonResponse(['error' => 'provider_unavailable', 'reason' => $e->reason], 502);
         }
+
         return new JsonResponse(['chain' => 'litecoin', 'network' => 'mainnet', 'txid' => $txid]);
     }
 }

@@ -1,4 +1,4 @@
-name: wallet-generator
+name: chain-courier
 
 services:
   php:

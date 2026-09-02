@@ -1,6 +1,6 @@
 {
-    "name": "kolyn236/wallet-platform-backend",
-    "description": "Symfony modular-monolith backend for the wallet platform",
+    "name": "kolyn236/chain-courier-backend",
+    "description": "Symfony modular-monolith backend for ChainCourier",
     "type": "project",
     "license": "proprietary",
     "require": {

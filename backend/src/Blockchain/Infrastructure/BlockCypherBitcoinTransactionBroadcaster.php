@@ -27,7 +27,7 @@ final readonly class BlockCypherBitcoinTransactionBroadcaster implements Bitcoin
                 'method' => 'POST',
                 'timeout' => 15,
                 'ignore_errors' => true,
-                'header' => "Accept: application/json\r\nContent-Type: application/json\r\nUser-Agent: wallet-platform/0.1\r\n",
+                'header' => "Accept: application/json\r\nContent-Type: application/json\r\nUser-Agent: chain-courier/0.1\r\n",
                 'content' => $body,
             ],
         ]);

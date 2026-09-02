@@ -115,7 +115,7 @@ jobs:
         run: |
           set -eu
 
-          cat > /tmp/wallet-production-ci.env <<'EOF'
+          cat > /tmp/chain-courier-production-ci.env <<'EOF'
           APP_SECRET=ci-production-smoke-only
           DEFAULT_URI=http://127.0.0.1:18080
           APP_BIND=127.0.0.1:18080
@@ -125,16 +125,16 @@ jobs:
           EOF
 
           cleanup() {
-            docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml down --remove-orphans || true
-            rm -f /tmp/wallet-production-ci.env
+            docker compose --env-file /tmp/chain-courier-production-ci.env -f compose.prod.yaml down --remove-orphans || true
+            rm -f /tmp/chain-courier-production-ci.env
           }
           trap cleanup EXIT
 
-          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml config --quiet
-          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml up -d --remove-orphans
+          docker compose --env-file /tmp/chain-courier-production-ci.env -f compose.prod.yaml config --quiet
+          docker compose --env-file /tmp/chain-courier-production-ci.env -f compose.prod.yaml up -d --remove-orphans
 
           for attempt in $(seq 1 30); do
-            container_id=$(docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml ps -q nginx)
+            container_id=$(docker compose --env-file /tmp/chain-courier-production-ci.env -f compose.prod.yaml ps -q nginx)
             status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id" 2>/dev/null || true)
 
             if [ "$status" = healthy ] \
@@ -145,8 +145,8 @@ jobs:
             sleep 2
           done
 
-          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml ps
-          docker compose --env-file /tmp/wallet-production-ci.env -f compose.prod.yaml logs --tail=200
+          docker compose --env-file /tmp/chain-courier-production-ci.env -f compose.prod.yaml ps
+          docker compose --env-file /tmp/chain-courier-production-ci.env -f compose.prod.yaml logs --tail=200
           exit 1
 
       - name: Log in to GitHub Container Registry
@@ -180,7 +180,7 @@ jobs:
       - linux
       - x64
       - production
-      - wallet-generator
+      - chain-courier
     timeout-minutes: 10
     environment: production
     permissions:
@@ -206,10 +206,10 @@ jobs:
           set -eu
           docker version >/dev/null
           docker compose version >/dev/null
-          test -f /etc/wallet-generator/runtime.env
-          test -r /etc/wallet-generator/runtime.env
-          test -d /var/lib/wallet-generator
-          test -w /var/lib/wallet-generator
+          test -f /etc/chain-courier/runtime.env
+          test -r /etc/chain-courier/runtime.env
+          test -d /var/lib/chain-courier
+          test -w /var/lib/chain-courier
 
       - name: Log in to GitHub Container Registry
         env:
@@ -218,8 +218,8 @@ jobs:
 
       - name: Deploy and verify release
         env:
-          RUNTIME_ENV_FILE: /etc/wallet-generator/runtime.env
-          DEPLOY_STATE_DIR: /var/lib/wallet-generator
+          RUNTIME_ENV_FILE: /etc/chain-courier/runtime.env
+          DEPLOY_STATE_DIR: /var/lib/chain-courier
         run: sh scripts/deploy-production.sh '${{ needs.prepare.outputs.release_sha }}' '${{ steps.images.outputs.prefix }}'
 
       - name: Log out from GitHub Container Registry

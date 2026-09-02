@@ -12,7 +12,7 @@
         <env name="DOGE_RECOMMENDED_FEE_RATE" value="0.01" force="true"/>
     </php>
     <testsuites>
-        <testsuite name="Wallet Platform Backend">
+        <testsuite name="ChainCourier Backend">
             <directory>tests</directory>
         </testsuite>
     </testsuites>

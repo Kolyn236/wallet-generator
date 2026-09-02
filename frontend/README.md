@@ -1,6 +1,6 @@
 # React frontend
 
-The primary web UI and browser-local signing runtime for the wallet platform.
+The primary web UI and browser-local signing runtime for ChainCourier.
 
 Current live frontend routes:
 

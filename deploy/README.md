@@ -10,7 +10,7 @@ The supported production path is:
 4. Only after the smoke test passes are the SHA-tagged images pushed to GitHub Container Registry (GHCR).
 5. A dedicated self-hosted GitHub Actions runner on the production server pulls those images.
 6. `scripts/deploy-production.sh` validates the production Compose configuration, recreates the stack and waits for the end-to-end Nginx -> PHP -> Symfony health check.
-7. The last healthy SHA is recorded in `/var/lib/wallet-generator/current-release`.
+7. The last healthy SHA is recorded in `/var/lib/chain-courier/current-release`.
 8. If the new release does not become healthy, the deployment script automatically attempts to restore the previous SHA.
 
 The normal `compose.yaml` remains a development/integration runtime. It bind-mounts the repository, runs with `APP_ENV=dev` / `APP_DEBUG=1` and installs Composer dependencies during container startup. Do not use it as the production deployment topology.
@@ -22,7 +22,7 @@ The production job runs locally on the server through a dedicated GitHub Actions
 This is still privileged infrastructure. A runner user that can control Docker can effectively obtain root-equivalent access to the host. Therefore:
 
 - use a dedicated runner for this repository/production host;
-- give it the custom labels `production` and `wallet-generator`;
+- give it the custom labels `production` and `chain-courier`;
 - never target this runner from `pull_request` workflows or arbitrary branches;
 - keep normal CI on GitHub-hosted `ubuntu-latest` runners;
 - deploy only commits reachable from `main`;
@@ -45,14 +45,14 @@ Production host assumptions for the current workflow:
 Create production configuration/state directories and make them accessible to the runner service user (replace `github-runner` with the real runner account):
 
 ```bash
-sudo install -d -m 0750 -o github-runner -g github-runner /etc/wallet-generator
-sudo install -d -m 0750 -o github-runner -g github-runner /var/lib/wallet-generator
+sudo install -d -m 0750 -o github-runner -g github-runner /etc/chain-courier
+sudo install -d -m 0750 -o github-runner -g github-runner /var/lib/chain-courier
 ```
 
-Create `/etc/wallet-generator/runtime.env` from `deploy/runtime.env.example` and restrict it to the runner account:
+Create `/etc/chain-courier/runtime.env` from `deploy/runtime.env.example` and restrict it to the runner account:
 
 ```bash
-sudo install -m 0600 -o github-runner -g github-runner deploy/runtime.env.example /etc/wallet-generator/runtime.env
+sudo install -m 0600 -o github-runner -g github-runner deploy/runtime.env.example /etc/chain-courier/runtime.env
 ```
 
 Then replace all example values, especially `APP_SECRET`, `DEFAULT_URI` and provider credentials.
@@ -68,7 +68,7 @@ In GitHub open:
 Use GitHub's generated installation commands on the production host. Register the runner with the additional labels:
 
 - `production`
-- `wallet-generator`
+- `chain-courier`
 
 Run it as a system service under the dedicated runner account. Do not reuse this runner for pull-request CI.
 
@@ -127,7 +127,7 @@ The workflow verifies that the requested commit is an ancestor of `main`, skips 
 
 This only works for commits whose production images were previously published. If those GHCR tags were deleted, the rollback pull fails before replacing the current healthy release.
 
-There is also automatic rollback during a failed rollout: when a new release starts but fails the health check, `scripts/deploy-production.sh` attempts to restore `/var/lib/wallet-generator/current-release`.
+There is also automatic rollback during a failed rollout: when a new release starts but fails the health check, `scripts/deploy-production.sh` attempts to restore `/var/lib/chain-courier/current-release`.
 
 ## What can break during deployment
 
@@ -139,7 +139,7 @@ Protection: the release images are smoke-tested before they are pushed or deploy
 
 ### Missing or invalid runtime configuration
 
-Examples: missing `/etc/wallet-generator/runtime.env`, missing `APP_SECRET`, invalid `DEFAULT_URI`, missing Ethereum RPC credentials when Ethereum features are expected.
+Examples: missing `/etc/chain-courier/runtime.env`, missing `APP_SECRET`, invalid `DEFAULT_URI`, missing Ethereum RPC credentials when Ethereum features are expected.
 
 Protection: the production runner checks that the env file exists/readable and `docker compose config --quiet` runs before recreation. Required Compose variables fail closed.
 
@@ -175,7 +175,7 @@ The current runtime does not require a database migration step. If persistence/D
 
 ### Runtime configuration changed outside Git
 
-Application image rollback does not version operator-managed secrets/configuration. If `/etc/wallet-generator/runtime.env` is edited incompatibly, rolling back the image alone may not restore service. Treat production configuration changes as separate reviewed operations and keep a secure operator-side backup/versioning procedure.
+Application image rollback does not version operator-managed secrets/configuration. If `/etc/chain-courier/runtime.env` is edited incompatibly, rolling back the image alone may not restore service. Treat production configuration changes as separate reviewed operations and keep a secure operator-side backup/versioning procedure.
 
 ## CI rules for deployment changes
 
@@ -217,7 +217,7 @@ ETHEREUM_RPC_URL=https://your-ethereum-provider.example/your-secret-key
 Build the local/runtime env with:
 
 ```bash
-sh scripts/build-deploy-env.sh /etc/wallet-platform/runtime.env .env
+sh scripts/build-deploy-env.sh /etc/chain-courier/runtime.env .env
 ```
 
 The builder removes base assignments for keys present in the operator file and appends operator values once. The generated `.env` is created with restrictive permissions (`umask 077`).

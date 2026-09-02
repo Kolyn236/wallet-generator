@@ -6,7 +6,7 @@ These rules apply to workflow changes under `.github/`.
 
 - Pull-request and ordinary verification jobs run on GitHub-hosted runners such as `ubuntu-latest`.
 - Never run `pull_request` code on the production self-hosted runner.
-- The production runner is dedicated to the production deployment job and is selected by all of these labels: `self-hosted`, `linux`, `x64`, `production`, `wallet-generator`.
+- The production runner is dedicated to the production deployment job and is selected by all of these labels: `self-hosted`, `linux`, `x64`, `production`, `chain-courier`.
 - Do not broaden production runner triggers to arbitrary branches, forks, issue events or user-controlled code paths.
 - Production deployment is restricted to commits reachable from `main`.
 
@@ -27,7 +27,7 @@ A user with Docker access on the production runner is effectively highly privile
 ## Secrets
 
 - Never commit production runtime values or provider credentials.
-- Production application configuration lives outside the checkout at `/etc/wallet-generator/runtime.env` unless the deployment architecture is explicitly redesigned.
+- Production application configuration lives outside the checkout at `/etc/chain-courier/runtime.env` unless the deployment architecture is explicitly redesigned.
 - GHCR authentication uses the scoped GitHub Actions token; do not add long-lived registry passwords when `GITHUB_TOKEN` is sufficient.
 - Never add seed phrases, WIFs, private keys or signing material to Actions secrets, workflow logs, artifacts or production configuration.
 

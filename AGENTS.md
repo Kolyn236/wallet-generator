@@ -2,7 +2,7 @@
 
 ## Project overview
 
-`wallet-generator` is a multi-chain non-custodial wallet platform.
+`chain-courier` is a multi-chain non-custodial wallet platform.
 
 The supported application architecture is:
 

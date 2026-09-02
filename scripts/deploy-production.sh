@@ -4,9 +4,9 @@ set -eu
 RELEASE_SHA="${1:-}"
 IMAGE_PREFIX="${2:-}"
 COMPOSE_FILE="${COMPOSE_FILE:-compose.prod.yaml}"
-RUNTIME_ENV_FILE="${RUNTIME_ENV_FILE:-/etc/wallet-generator/runtime.env}"
-STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/wallet-generator}"
-PROJECT_NAME="${COMPOSE_PROJECT_NAME:-wallet-generator}"
+RUNTIME_ENV_FILE="${RUNTIME_ENV_FILE:-/etc/chain-courier/runtime.env}"
+STATE_DIR="${DEPLOY_STATE_DIR:-/var/lib/chain-courier}"
+PROJECT_NAME="${COMPOSE_PROJECT_NAME:-chain-courier}"
 
 if [ -z "$RELEASE_SHA" ] || [ -z "$IMAGE_PREFIX" ]; then
     echo "Usage: $0 <release-sha> <ghcr-image-prefix>" >&2

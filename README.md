@@ -1,6 +1,6 @@
-# Wallet Platform
+# ChainCourier
 
-A multi-chain non-custodial wallet platform built with a **Symfony 7.4 modular monolith + React/TypeScript frontend**.
+ChainCourier is a multi-chain non-custodial crypto transfer tool built with a **Symfony 7.4 modular monolith + React/TypeScript frontend**.
 
 Wallet creation and transaction signing happen in browser memory. Symfony is the blockchain API gateway: it handles public chain data, transaction preparation where chain state is required, and broadcast of already-signed transactions.
 
@@ -55,8 +55,8 @@ Requirements:
 - Docker with Compose support.
 
 ```bash
-git clone https://github.com/Kolyn236/wallet-generator.git
-cd wallet-generator
+git clone https://github.com/Kolyn236/chain-courier.git
+cd chain-courier
 cp .env.example .env
 docker compose up --build
 ```
@@ -90,7 +90,7 @@ DOGE/BTC fee-rate values remain operator-controlled defaults. Ethereum fee prepa
 For deployment-time overrides:
 
 ```bash
-sh scripts/build-deploy-env.sh /etc/wallet-platform/runtime.env .env
+sh scripts/build-deploy-env.sh /etc/chain-courier/runtime.env .env
 docker compose up -d --force-recreate php
 ```
 

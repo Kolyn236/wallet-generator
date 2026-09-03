@@ -103,11 +103,10 @@ jobs:
           grep -qx 'DOGE_RECOMMENDED_FEE_RATE=0.01234567' .env
           grep -qx 'BTC_RECOMMENDED_FEE_RATE=0.00023456' .env
 
-      - name: Smoke test production runtime
+      - name: Build and start production runtime
         run: |
           set -eu
           docker compose -f compose.prod.yaml up -d --build
-          trap 'docker compose -f compose.prod.yaml down -v; rm -f .env' EXIT
 
           php_image=$(docker compose -f compose.prod.yaml images -q php)
           image_runtime=$(docker image inspect "$php_image" --format '{{json .Config.Entrypoint}} {{json .Config.Cmd}}')
@@ -119,33 +118,53 @@ jobs:
           fi
 
           for attempt in $(seq 1 30); do
-            if docker compose -f compose.prod.yaml exec -T php sh -c 'test "$APP_ENV" = prod && test "$APP_DEBUG" = 0' \
-              && docker compose -f compose.prod.yaml exec -T php sh -c 'test ! -d vendor/phpunit/phpunit && test ! -d vendor/phpstan/phpstan' \
-              && docker compose -f compose.prod.yaml exec -T php php -r 'exit(ini_get("opcache.enable") === "1" ? 0 : 1);' \
-              && docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_dogecoin_fee_policy --env=prod --no-debug >/dev/null 2>&1 \
-              && docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_bitcoin_fee_policy --env=prod --no-debug >/dev/null 2>&1 \
-              && docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_ethereum_balance --env=prod --no-debug >/dev/null 2>&1 \
-              && docker compose -f compose.prod.yaml exec -T nginx nginx -t >/dev/null 2>&1 \
-              && curl --fail --silent --show-error -H 'Accept: application/json' http://localhost:8080/api/health >/dev/null \
-              && curl --fail --silent --show-error http://localhost:8080/ | grep -q 'ChainCourier' \
-              && curl --fail --silent --show-error -H 'Accept: application/json' -o /tmp/doge-fee-policy.json http://localhost:8080/api/chains/dogecoin/mainnet/fee-policy \
-              && curl --fail --silent --show-error -H 'Accept: application/json' -o /tmp/btc-fee-policy.json http://localhost:8080/api/chains/bitcoin/mainnet/fee-policy \
-              && node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('/tmp/doge-fee-policy.json','utf8')); if (data.recommendedRate !== '0.01234567' || data.unit !== 'DOGE/kB') throw new Error('Unexpected DOGE fee policy: '+JSON.stringify(data));" \
-              && node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('/tmp/btc-fee-policy.json','utf8')); if (data.recommendedRate !== '0.00023456' || data.unit !== 'BTC/kB') throw new Error('Unexpected BTC fee policy: '+JSON.stringify(data));"; then
-              break
-            fi
-
-            if [ "$attempt" -eq 30 ]; then
-              echo 'Production runtime failed to become healthy' >&2
-              docker compose -f compose.prod.yaml logs
-              exit 1
+            if curl --fail --silent --show-error -H 'Accept: application/json' http://localhost:8080/api/health >/dev/null; then
+              exit 0
             fi
             sleep 1
           done
 
+          echo 'Production health endpoint did not become ready' >&2
+          docker compose -f compose.prod.yaml ps
+          docker compose -f compose.prod.yaml logs
+          exit 1
+
+      - name: Validate production PHP runtime
+        run: |
+          set -eu
+          docker compose -f compose.prod.yaml exec -T php sh -c 'test "$APP_ENV" = prod && test "$APP_DEBUG" = 0'
+          docker compose -f compose.prod.yaml exec -T php sh -c 'test ! -d vendor/phpunit/phpunit && test ! -d vendor/phpstan/phpstan'
+          docker compose -f compose.prod.yaml exec -T php php -r 'exit(ini_get("opcache.enable") === "1" ? 0 : 1);'
+          docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_dogecoin_fee_policy >/dev/null
+          docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_bitcoin_fee_policy >/dev/null
+          docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_ethereum_balance >/dev/null
+
+      - name: Validate Nginx and application smoke
+        run: |
+          set -eu
+          docker compose -f compose.prod.yaml exec -T nginx nginx -t
+          curl --fail --silent --show-error http://localhost:8080/ | grep -q 'ChainCourier'
+          curl --fail --silent --show-error -H 'Accept: application/json' -o /tmp/doge-fee-policy.json http://localhost:8080/api/chains/dogecoin/mainnet/fee-policy
+          curl --fail --silent --show-error -H 'Accept: application/json' -o /tmp/btc-fee-policy.json http://localhost:8080/api/chains/bitcoin/mainnet/fee-policy
+          node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('/tmp/doge-fee-policy.json','utf8')); if (data.recommendedRate !== '0.01234567' || data.unit !== 'DOGE/kB') throw new Error('Unexpected DOGE fee policy: '+JSON.stringify(data));"
+          node -e "const fs=require('node:fs'); const data=JSON.parse(fs.readFileSync('/tmp/btc-fee-policy.json','utf8')); if (data.recommendedRate !== '0.00023456' || data.unit !== 'BTC/kB') throw new Error('Unexpected BTC fee policy: '+JSON.stringify(data));"
+
+      - name: Validate request body limit
+        run: |
+          set -eu
           body_status=$(dd if=/dev/zero bs=1024 count=300 2>/dev/null | curl --silent --show-error -o /tmp/body-limit-response -w '%{http_code}' -X POST -H 'Content-Type: application/octet-stream' --data-binary @- http://localhost:8080/api/health)
           test "$body_status" = '413'
 
+      - name: Validate API rate limit regression
+        run: |
+          set -eu
           seq 1 100 | xargs -P 50 -I{} curl --silent --output /dev/null --write-out '%{http_code}\n' http://localhost:8080/api/health > /tmp/rate-codes
+          sort /tmp/rate-codes | uniq -c
           grep -qx '200' /tmp/rate-codes
           grep -qx '429' /tmp/rate-codes
+
+      - name: Tear down production runtime
+        if: always()
+        run: |
+          docker compose -f compose.prod.yaml down -v || true
+          rm -f .env

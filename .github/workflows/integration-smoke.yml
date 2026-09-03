@@ -129,15 +129,22 @@ jobs:
           docker compose -f compose.prod.yaml logs
           exit 1
 
-      - name: Validate production PHP runtime
+      - name: Validate production env
+        run: docker compose -f compose.prod.yaml exec -T php sh -c 'test "$APP_ENV" = prod && test "$APP_DEBUG" = 0'
+
+      - name: Validate production dependencies
+        run: docker compose -f compose.prod.yaml exec -T php sh -c 'test ! -d vendor/phpunit/phpunit && test ! -d vendor/phpstan/phpstan'
+
+      - name: Validate OPcache
         run: |
-          set -eu
-          docker compose -f compose.prod.yaml exec -T php sh -c 'test "$APP_ENV" = prod && test "$APP_DEBUG" = 0'
-          docker compose -f compose.prod.yaml exec -T php sh -c 'test ! -d vendor/phpunit/phpunit && test ! -d vendor/phpstan/phpstan'
-          docker compose -f compose.prod.yaml exec -T php php -r 'exit(ini_get("opcache.enable") === "1" ? 0 : 1);'
-          docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_dogecoin_fee_policy >/dev/null
-          docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_bitcoin_fee_policy >/dev/null
-          docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_ethereum_balance >/dev/null
+          docker compose -f compose.prod.yaml exec -T php php --ri 'Zend OPcache' | grep -q 'Opcode Caching => Up and Running'
+          docker compose -f compose.prod.yaml exec -T php php -i | grep -q '^opcache.validate_timestamps => Off => Off$'
+
+      - name: Validate Symfony production routes
+        run: |
+          docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_dogecoin_fee_policy
+          docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_bitcoin_fee_policy
+          docker compose -f compose.prod.yaml exec -T php php bin/console debug:router api_ethereum_balance
 
       - name: Validate Nginx and application smoke
         run: |

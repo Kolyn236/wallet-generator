@@ -34,7 +34,7 @@ The application limiter uses a dedicated pool backed by the current filesystem `
 
 ## Nginx limiter
 
-Nginx is the cheap first line and uses `$binary_remote_addr`, not arbitrary forwarded headers. Its generic API limit is intentionally broader than the endpoint-aware Symfony policies. Edge rejections also return HTTP `429` and a small JSON error.
+Nginx remains the cheap first line from the production-runtime hardening layer and uses `$binary_remote_addr`, not arbitrary forwarded headers. Its broad API and expensive-transaction flood limits run before Symfony; the Symfony limiter supplies the stable endpoint-aware JSON `429` contract when a request reaches the application.
 
 If another reverse proxy or CDN is introduced, configure its exact addresses at the edge. Do not make `X-Forwarded-For` authoritative merely because the header exists.
 

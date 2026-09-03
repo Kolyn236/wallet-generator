@@ -36,8 +36,7 @@ final class ApiRateLimitSubscriberTest extends TestCase
         self::assertNull(self::dispatch($subscriber)->getResponse());
         self::assertNull(self::dispatch($subscriber)->getResponse());
 
-        $response = self::dispatch($subscriber)->getResponse();
-        self::assertNotNull($response);
+        $response = self::requireResponse(self::dispatch($subscriber)->getResponse());
         self::assertSame(429, $response->getStatusCode());
         self::assertSame('20', $response->headers->get('Retry-After'));
         $content = $response->getContent();
@@ -86,6 +85,15 @@ final class ApiRateLimitSubscriberTest extends TestCase
             new ApiAbuseLogger(),
             ['api_dogecoin_balance' => 'balance'],
         );
+    }
+
+    private static function requireResponse(?Response $response): Response
+    {
+        if (null === $response) {
+            throw new \RuntimeException('Expected a rate-limited response.');
+        }
+
+        return $response;
     }
 
     private static function dispatch(ApiRateLimitSubscriber $subscriber): RequestEvent

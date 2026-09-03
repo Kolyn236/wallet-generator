@@ -18,6 +18,14 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      APP_ENV: test
+      APP_DEBUG: '1'
+      APP_SECRET: ci-test-secret-not-for-production
+      DEFAULT_URI: http://localhost
+      DOGE_RECOMMENDED_FEE_RATE: '0.01'
+      BTC_RECOMMENDED_FEE_RATE: '0.00010000'
+      ETHEREUM_RPC_URL: ''
     steps:
       - uses: actions/checkout@v4
 

@@ -20,8 +20,10 @@ final readonly class ProviderReadCache
 
     /**
      * @template T
+     *
      * @param array<string, int|string> $context
-     * @param callable(): T $loader
+     * @param callable(): T             $loader
+     *
      * @return T
      */
     public function remember(

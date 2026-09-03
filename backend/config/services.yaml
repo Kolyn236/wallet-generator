@@ -1,4 +1,40 @@
 parameters:
+    env(TRUSTED_PROXIES): ''
+
+    app.api_rate_limit.policies:
+        cheap: { limit: 120, window: 60 }
+        balance: { limit: 60, window: 60 }
+        utxo: { limit: 30, window: 60 }
+        ethereum_prepare: { limit: 10, window: 60 }
+        broadcast: { limit: 5, window: 60 }
+
+    app.api_rate_limit.routes:
+        api_health: cheap
+        api_dogecoin_fee_policy: cheap
+        api_bitcoin_fee_policy: cheap
+        api_litecoin_fee_policy: cheap
+        api_dogecoin_balance: balance
+        api_bitcoin_balance: balance
+        api_litecoin_balance: balance
+        api_ethereum_balance: balance
+        api_ethereum_usdt_erc20_balance: balance
+        api_dogecoin_utxos: utxo
+        api_bitcoin_utxos: utxo
+        api_litecoin_utxos: utxo
+        api_ethereum_prepare: ethereum_prepare
+        api_dogecoin_broadcast: broadcast
+        api_bitcoin_broadcast: broadcast
+        api_litecoin_broadcast: broadcast
+        api_ethereum_broadcast: broadcast
+
+    app.provider_read_cache.ttls:
+        balance: 10
+        utxo: 10
+        native_balance: 8
+        erc20_balance: 8
+
+    app.provider_cooldown_seconds: 10
+    app.broadcast_dedupe_ttl_seconds: 120
 
 services:
     _defaults:
@@ -48,3 +84,57 @@ services:
 
     App\Blockchain\Application\BitcoinTransactionBroadcaster:
         alias: App\Blockchain\Infrastructure\BlockCypherBitcoinTransactionBroadcaster
+
+    App\Presentation\Http\ApiClock:
+        alias: App\Presentation\Http\SystemApiClock
+
+    App\Presentation\Http\ApiRateLimiter:
+        arguments:
+            $pool: '@cache.api_abuse'
+            $policies: '%app.api_rate_limit.policies%'
+
+    App\Presentation\Http\ApiRateLimitSubscriber:
+        arguments:
+            $routePolicies: '%app.api_rate_limit.routes%'
+
+    App\Blockchain\Infrastructure\ProviderReadCache:
+        arguments:
+            $cache: '@cache.blockchain_provider_reads'
+            $ttls: '%app.provider_read_cache.ttls%'
+
+    App\Blockchain\Infrastructure\ProviderCooldown:
+        arguments:
+            $pool: '@cache.blockchain_provider_state'
+            $cooldownSeconds: '%app.provider_cooldown_seconds%'
+
+    App\Blockchain\Infrastructure\CacheSuccessfulBroadcastStore:
+        arguments:
+            $pool: '@cache.blockchain_provider_state'
+            $ttlSeconds: '%app.broadcast_dedupe_ttl_seconds%'
+
+    App\Blockchain\Application\SuccessfulBroadcastStore:
+        alias: App\Blockchain\Infrastructure\CacheSuccessfulBroadcastStore
+
+    App\Blockchain\Infrastructure\BitcoinMainnetAdapter:
+        arguments:
+            $readCache: '@App\Blockchain\Infrastructure\ProviderReadCache'
+            $providerCooldown: '@App\Blockchain\Infrastructure\ProviderCooldown'
+            $broadcastStore: '@App\Blockchain\Application\SuccessfulBroadcastStore'
+
+    App\Blockchain\Infrastructure\DogecoinMainnetAdapter:
+        arguments:
+            $readCache: '@App\Blockchain\Infrastructure\ProviderReadCache'
+            $providerCooldown: '@App\Blockchain\Infrastructure\ProviderCooldown'
+            $broadcastStore: '@App\Blockchain\Application\SuccessfulBroadcastStore'
+
+    App\Blockchain\Infrastructure\LitecoinMainnetAdapter:
+        arguments:
+            $readCache: '@App\Blockchain\Infrastructure\ProviderReadCache'
+            $providerCooldown: '@App\Blockchain\Infrastructure\ProviderCooldown'
+            $broadcastStore: '@App\Blockchain\Application\SuccessfulBroadcastStore'
+
+    App\Blockchain\Infrastructure\EthereumMainnetAdapter:
+        arguments:
+            $readCache: '@App\Blockchain\Infrastructure\ProviderReadCache'
+            $providerCooldown: '@App\Blockchain\Infrastructure\ProviderCooldown'
+            $broadcastStore: '@App\Blockchain\Application\SuccessfulBroadcastStore'

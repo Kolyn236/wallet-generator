@@ -9,6 +9,14 @@ final class ProviderRequestLogger
     /**
      * @param array<string, bool|float|int|string|null> $context
      */
+    public function info(array $context = []): void
+    {
+        $this->write('info', $context);
+    }
+
+    /**
+     * @param array<string, bool|float|int|string|null> $context
+     */
     public function warning(array $context = []): void
     {
         $this->write('warning', $context);

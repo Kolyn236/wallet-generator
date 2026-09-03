@@ -107,7 +107,9 @@ final readonly class EthereumMainnetAdapter implements ChainAdapter, EvmNativeBa
 
     /**
      * @template T
+     *
      * @param callable(): T $call
+     *
      * @return T
      */
     private function guarded(string $operation, callable $call): mixed

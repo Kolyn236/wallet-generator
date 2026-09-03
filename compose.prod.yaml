@@ -10,6 +10,7 @@ services:
     environment:
       APP_ENV: prod
       APP_DEBUG: '0'
+      APP_RUNTIME_OPTIONS: '{"disable_dotenv":true}'
       APP_SECRET: ${APP_SECRET:?APP_SECRET is required for the production runtime}
       DEFAULT_URI: ${DEFAULT_URI:-http://localhost:8080}
       DOGE_RECOMMENDED_FEE_RATE: ${DOGE_RECOMMENDED_FEE_RATE:-0.01}

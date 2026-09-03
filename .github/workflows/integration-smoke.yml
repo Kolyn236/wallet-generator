@@ -61,6 +61,7 @@ jobs:
           docker compose -f compose.prod.yaml config --format json > /tmp/prod-compose.json
           jq -e '.services.php.environment.APP_ENV == "prod"' /tmp/prod-compose.json
           jq -e '.services.php.environment.APP_DEBUG == "0"' /tmp/prod-compose.json
+          jq -e '.services.php.environment.APP_RUNTIME_OPTIONS == "{\"disable_dotenv\":true}"' /tmp/prod-compose.json
           jq -e '.services.php.build.target == "production"' /tmp/prod-compose.json
           jq -e '((.services.php.volumes // []) | length) == 0' /tmp/prod-compose.json
           if grep -q 'start-dev.sh' /tmp/prod-compose.json; then

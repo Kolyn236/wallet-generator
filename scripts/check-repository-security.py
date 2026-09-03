@@ -54,6 +54,10 @@ def check_production_runtime() -> None:
         "compose.prod.yaml must set APP_DEBUG to 0",
     )
     require(
+        'APP_RUNTIME_OPTIONS: \'{"disable_dotenv":true}\'' in compose,
+        "compose.prod.yaml must disable Symfony dotenv loading in production",
+    )
+    require(
         re.search(r"(?m)^\s*APP_SECRET:\s*\$\{APP_SECRET:\?[^}]+\}\s*$", compose) is not None,
         "compose.prod.yaml must require APP_SECRET instead of supplying a default",
     )

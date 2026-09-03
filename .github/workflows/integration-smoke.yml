@@ -24,25 +24,6 @@ on:
       - 'frontend/vite.config.ts'
       - '.github/workflows/integration-smoke.yml'
   pull_request:
-    paths:
-      - 'docker/**'
-      - 'compose.yaml'
-      - 'compose.prod.yaml'
-      - '.dockerignore'
-      - 'scripts/build-deploy-env.sh'
-      - '.env.example'
-      - 'deploy/**'
-      - 'backend/.env.example'
-      - 'backend/config/**'
-      - 'backend/composer.json'
-      - 'backend/composer.lock'
-      - 'frontend/src/**'
-      - 'frontend/index.html'
-      - 'frontend/package.json'
-      - 'frontend/package-lock.json'
-      - 'frontend/tsconfig.json'
-      - 'frontend/vite.config.ts'
-      - '.github/workflows/integration-smoke.yml'
   workflow_dispatch:
 
 permissions:
@@ -57,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Validate development Compose topology
         run: docker compose config --quiet
@@ -131,6 +112,15 @@ jobs:
 
       - name: Validate production env
         run: docker compose -f compose.prod.yaml exec -T php sh -c 'test "$APP_ENV" = prod && test "$APP_DEBUG" = 0'
+
+      - name: Validate production rejects placeholder secrets
+        run: |
+          set -eu
+          if docker compose -f compose.prod.yaml run --rm --no-deps -e APP_SECRET=change-me-for-local-development php true >/tmp/prod-placeholder-secret.log 2>&1; then
+            echo 'Production runtime unexpectedly accepted a development APP_SECRET placeholder' >&2
+            exit 1
+          fi
+          grep -q 'APP_SECRET must not use a development/test placeholder' /tmp/prod-placeholder-secret.log
 
       - name: Validate production dependencies
         run: docker compose -f compose.prod.yaml exec -T php sh -c 'test ! -d vendor/phpunit/phpunit && test ! -d vendor/phpstan/phpstan'

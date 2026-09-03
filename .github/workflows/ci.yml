@@ -27,9 +27,12 @@ jobs:
       BTC_RECOMMENDED_FEE_RATE: '0.00010000'
       ETHEREUM_RPC_URL: ''
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: shivammathur/setup-php@v2
+      - name: Enforce repository security guardrails
+        run: python3 scripts/check-repository-security.py
+
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: '8.4'
           coverage: none
@@ -47,6 +50,10 @@ jobs:
         working-directory: backend
         run: composer install --no-interaction --prefer-dist --no-progress
 
+      - name: Audit backend production dependencies
+        working-directory: backend
+        run: composer audit --locked --no-dev --abandoned=report
+
       - name: Run PHPUnit
         working-directory: backend
         run: composer test
@@ -59,7 +66,7 @@ jobs:
         working-directory: backend
         run: composer cs:check
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
           cache: npm
@@ -68,6 +75,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci --no-audit --no-fund
+
+      - name: Audit frontend production dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Run frontend adapter registry invariants
         working-directory: frontend
@@ -80,6 +91,10 @@ jobs:
       - name: Run Bitcoin deterministic vector
         working-directory: frontend
         run: npm run test:bitcoin-vector
+
+      - name: Run Litecoin deterministic vector
+        working-directory: frontend
+        run: npm run test:litecoin-vector
 
       - name: Run Ethereum deterministic vector
         working-directory: frontend

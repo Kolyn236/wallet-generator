@@ -137,8 +137,10 @@ jobs:
 
       - name: Validate OPcache
         run: |
-          docker compose -f compose.prod.yaml exec -T php php --ri 'Zend OPcache' | grep -q 'Opcode Caching => Up and Running'
-          docker compose -f compose.prod.yaml exec -T php php -i | grep -q '^opcache.validate_timestamps => Off => Off$'
+          docker compose -f compose.prod.yaml exec -T php php -m | grep -qx 'Zend OPcache'
+          docker compose -f compose.prod.yaml exec -T php php-fpm -i | grep -q '^opcache.enable => On => On$'
+          docker compose -f compose.prod.yaml exec -T php php-fpm -i | grep -q '^opcache.enable_cli => Off => Off$'
+          docker compose -f compose.prod.yaml exec -T php php-fpm -i | grep -q '^opcache.validate_timestamps => Off => Off$'
 
       - name: Validate Symfony production routes
         run: |

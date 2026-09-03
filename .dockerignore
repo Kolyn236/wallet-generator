@@ -1,0 +1,12 @@
+.git
+.github
+.env
+**/.env
+**/.env.local
+**/.env.*.local
+backend/vendor
+backend/var
+frontend/node_modules
+frontend/dist
+*.wif
+*.tx

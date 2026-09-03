@@ -4,9 +4,9 @@
 
 # Deploy-time operator overrides
 deploy/.env.rates
+deploy/.env.production
 
 # Symfony backend
-!backend/.env
 backend/.env.local
 backend/.env.*.local
 backend/vendor/

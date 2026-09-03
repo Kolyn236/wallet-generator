@@ -87,14 +87,9 @@ ETHEREUM_RPC_URL=
 
 DOGE/BTC fee-rate values remain operator-controlled defaults. Ethereum fee preparation uses live provider state through `eth_estimateGas` and `eth_feeHistory`.
 
-For deployment-time overrides:
+Local Docker development uses `compose.yaml`. Production uses the separate `compose.prod.yaml` topology and requires a real `APP_SECRET`; the production PHP image contains source/dependencies and has no development bind mount or `start-dev.sh` runtime.
 
-```bash
-sh scripts/build-deploy-env.sh /etc/chain-courier/runtime.env .env
-docker compose up -d --force-recreate php
-```
-
-See `deploy/README.md`.
+See `deploy/README.md` for production secrets, build/start/update steps, Nginx limits and TLS assumptions.
 
 ## Stack
 
@@ -104,7 +99,6 @@ See `deploy/README.md`.
 - Vite;
 - Nginx + PHP-FPM;
 - Docker Compose;
-- PHPUnit, PHPStan, PHP-CS-Fixer;
 - GitHub Actions.
 
 PostgreSQL, Redis and RabbitMQ are not required by the current runtime. Add persistence, cache, queues or indexing only for concrete product/load requirements.
@@ -340,15 +334,18 @@ See `docs/architecture/ADAPTER_REGISTRY.md`.
 
 ## Development
 
-Backend:
+Backend, outside Docker:
 
 ```bash
 cd backend
+cp .env.example .env
 composer install
 composer test
 composer analyse
 composer cs:check
 ```
+
+`backend/.env` is ignored and is for local development only. Tests also supply their own test environment through PHPUnit configuration.
 
 Frontend:
 
@@ -366,17 +363,28 @@ npm run dev
 
 Deterministic frontend coverage includes DOGE/BTC transaction vectors, Ethereum wallet/Type-2 serialization vectors and USDT ERC-20 amount/calldata/signing vectors. Tests do not require funded accounts or a live Ethereum RPC provider.
 
-Production-like local build:
+Docker development runtime:
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
+
+Production runtime:
+
+```bash
+sh scripts/build-deploy-env.sh /etc/chain-courier/runtime.env .env
+docker compose -f compose.prod.yaml config --quiet
+docker compose -f compose.prod.yaml up -d --build
+```
+
+See `deploy/README.md`; production requires a real `APP_SECRET` and intentionally does not inherit the development Compose topology.
 
 ## CI
 
 `Quality Gate` runs source checks, backend tests/static analysis/style, frontend adapter invariants, deterministic DOGE/BTC/ETH/USDT vectors and the TypeScript/Vite build.
 
-`Integration Smoke` owns Docker/Compose runtime checks and is restricted to deploy/runtime-sensitive changes on `main` or manual execution.
+`Integration Smoke` validates both Compose configurations and exercises the explicit production runtime, including production env/debug state, PHP-FPM startup, Nginx syntax, health/frontend/API smoke checks, request-body rejection and rate limiting.
 
 ## Architecture docs
 

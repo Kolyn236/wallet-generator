@@ -10,7 +10,7 @@ Current registrations:
 - `bitcoin:mainnet` -> `BitcoinMainnetAdapter`;
 - `ethereum:mainnet` -> `EthereumMainnetAdapter`.
 
-DOGE/BTC keep the existing UTXO capabilities. Ethereum Mainnet implements EVM-specific capabilities for native balance, ERC-20 balance reads, pending nonce, gas estimation and EIP-1559 fee quotes, plus raw signed transaction broadcast. Ethereum deliberately does **not** implement UTXO lookup or UTXO fee-rate capabilities.
+DOGE/BTC keep the existing UTXO capabilities. Bitcoin public-address lookups accept mainnet legacy P2PKH and P2SH Base58Check addresses; browser-local signing remains P2PKH-only. Ethereum Mainnet implements EVM-specific capabilities for native balance, ERC-20 balance reads, pending nonce, gas estimation and EIP-1559 fee quotes, plus raw signed transaction broadcast. Ethereum deliberately does **not** implement UTXO lookup or UTXO fee-rate capabilities.
 
 ## Ethereum Mainnet
 

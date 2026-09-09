@@ -19,10 +19,16 @@ use PHPUnit\Framework\TestCase;
 final class BitcoinTransferUseCasesTest extends TestCase
 {
     private const string VALID_ADDRESS = '1BoatSLRHtKNngkdXEeobR76b53LETtpyT';
+    private const string VALID_P2SH_ADDRESS = '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy';
 
     public function testAcceptsBitcoinMainnetP2pkhAddress(): void
     {
         self::assertSame(self::VALID_ADDRESS, BitcoinAddress::fromString(self::VALID_ADDRESS)->value);
+    }
+
+    public function testAcceptsBitcoinMainnetP2shAddress(): void
+    {
+        self::assertSame(self::VALID_P2SH_ADDRESS, BitcoinAddress::fromString(self::VALID_P2SH_ADDRESS)->value);
     }
 
     public function testReturnsConfirmedUtxosThroughRegisteredCapability(): void

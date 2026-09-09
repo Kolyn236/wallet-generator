@@ -1,6 +1,10 @@
 framework:
     secret: '%env(APP_SECRET)%'
     http_method_override: false
+    # Empty by default: forwarded client information is ignored unless an operator
+    # explicitly configures exact trusted proxy IPs/CIDRs.
+    trusted_proxies: '%env(TRUSTED_PROXIES)%'
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-port']
 
 when@test:
     framework:

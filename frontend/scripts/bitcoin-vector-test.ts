@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { deriveBitcoinWalletFromMnemonic, isBitcoinMainnetAddress } from '../src/wallet/bitcoin.ts';
+import {
+  deriveBitcoinWalletFromMnemonic,
+  isBitcoinMainnetAddress,
+  isBitcoinMainnetWatchOnlyAddress,
+} from '../src/wallet/bitcoin.ts';
 import { buildSignedBitcoinTransfer } from '../src/wallet/bitcoinTransaction.ts';
 
 const mnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -10,6 +14,9 @@ assert.equal(wallet.address, '1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA');
 assert.equal(wallet.wif, 'L4p2b9VAf8k5aUahF1JCJUzZkgNEAqLfq8DDdQiyAprQAKSbu8hf');
 assert.equal(isBitcoinMainnetAddress(wallet.address), true);
 assert.equal(isBitcoinMainnetAddress('1BoatSLRHtKNngkdXEeobR76b53LETtpyU'), false);
+assert.equal(isBitcoinMainnetWatchOnlyAddress(wallet.address), true);
+assert.equal(isBitcoinMainnetAddress('3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy'), false);
+assert.equal(isBitcoinMainnetWatchOnlyAddress('3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy'), true);
 
 const signed = buildSignedBitcoinTransfer({
   wif: wallet.wif,

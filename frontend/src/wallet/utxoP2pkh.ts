@@ -66,11 +66,15 @@ export function deriveUtxoP2pkhWalletFromMnemonic(
   }
 }
 
-export function isUtxoP2pkhAddress(profile: UtxoP2pkhProfile, address: string): boolean {
+export function isUtxoBase58Address(address: string, acceptedVersions: readonly number[]): boolean {
   try {
     const decoded = base58check.decode(address);
-    return decoded.length === 21 && decoded[0] === profile.p2pkhVersion;
+    return decoded.length === 21 && acceptedVersions.includes(decoded[0]);
   } catch {
     return false;
   }
+}
+
+export function isUtxoP2pkhAddress(profile: UtxoP2pkhProfile, address: string): boolean {
+  return isUtxoBase58Address(address, [profile.p2pkhVersion]);
 }

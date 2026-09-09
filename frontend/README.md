@@ -5,11 +5,13 @@ The primary web UI and browser-local signing runtime for ChainCourier.
 Current live frontend routes:
 
 - DOGE / Dogecoin mainnet;
-- BTC / Bitcoin mainnet legacy P2PKH;
+- BTC / Bitcoin mainnet legacy P2PKH local signing, with P2PKH/P2SH watch-only connections;
 - ETH / Ethereum mainnet EIP-1559;
 - USDT / Ethereum mainnet ERC-20.
 
 Wallet sessions are network-scoped and kept in browser memory. DOGE/BTC use WIF-backed UTXO signing; Ethereum uses the BIP39/BIP44 derivation path `m/44'/60'/0'/0/0` and browser-local private-key signing for EIP-1559 Type-2 transactions.
+
+Bitcoin wallet creation, mnemonic restore and local transaction signing remain legacy P2PKH only. The watch-only flow may additionally connect a mainnet legacy P2SH (`3...`) address for public balance inspection; this does not add a P2SH signing path or expose any wallet secrets.
 
 ETH and USDT ERC-20 deliberately share the same `ethereum-mainnet` wallet session/address/private key while keeping independent asset-route balances and transfer runtimes. Switching between ETH and USDT does not create a second Ethereum wallet.
 

@@ -3,7 +3,7 @@ import { getBitcoinBalance } from '../../api';
 import {
   createBitcoinWallet,
   deriveBitcoinWalletFromMnemonic,
-  isBitcoinMainnetAddress,
+  isBitcoinMainnetWatchOnlyAddress,
   type CreatedBitcoinWallet,
 } from '../../wallet/bitcoin';
 import type { AssetRouteAdapter } from '../AssetRouteAdapter';
@@ -54,7 +54,7 @@ function toBitcoinCreatedWallet(wallet: BrowserSigningWallet | null): CreatedBit
 export const bitcoinMainnetWalletAdapter: WalletNetworkAdapter = {
   networkId: 'bitcoin-mainnet',
   identity: {
-    addressType: 'legacy P2PKH',
+    addressType: 'legacy P2PKH; P2SH watch-only',
     derivationPath: "m/44'/0'/0'/0/0",
   },
   capabilities: {
@@ -65,7 +65,7 @@ export const bitcoinMainnetWalletAdapter: WalletNetworkAdapter = {
   },
   createWallet: createBrowserWallet,
   importMnemonic: importBrowserMnemonic,
-  validatePublicAddress: isBitcoinMainnetAddress,
+  validatePublicAddress: isBitcoinMainnetWatchOnlyAddress,
 };
 
 export const bitcoinMainnetAssetRouteAdapter: AssetRouteAdapter = {

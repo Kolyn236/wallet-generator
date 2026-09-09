@@ -1,10 +1,13 @@
 import {
   createUtxoP2pkhWallet,
   deriveUtxoP2pkhWalletFromMnemonic,
+  isUtxoBase58Address,
   isUtxoP2pkhAddress,
   type CreatedUtxoP2pkhWallet,
   type UtxoP2pkhProfile,
 } from './utxoP2pkh';
+
+const BITCOIN_MAINNET_P2SH_VERSION = 0x05;
 
 export const BITCOIN_MAINNET_P2PKH_PROFILE: UtxoP2pkhProfile = {
   symbol: 'BTC',
@@ -26,4 +29,11 @@ export function deriveBitcoinWalletFromMnemonic(mnemonic: string): CreatedBitcoi
 
 export function isBitcoinMainnetAddress(address: string): boolean {
   return isUtxoP2pkhAddress(BITCOIN_MAINNET_P2PKH_PROFILE, address);
+}
+
+export function isBitcoinMainnetWatchOnlyAddress(address: string): boolean {
+  return isUtxoBase58Address(address, [
+    BITCOIN_MAINNET_P2PKH_PROFILE.p2pkhVersion,
+    BITCOIN_MAINNET_P2SH_VERSION,
+  ]);
 }

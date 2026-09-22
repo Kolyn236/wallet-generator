@@ -58,6 +58,7 @@ export function App() {
   const [showBackupSecrets, setShowBackupSecrets] = useState(false);
   const [copyState, setCopyState] = useState<CopyState>('none');
   const signingWalletRefs = useRef<Partial<Record<NetworkId, BrowserSigningWallet>>>({});
+  const balanceRequestRef = useRef(0);
 
   const copy = messages[language];
   const liveCopy = platformCopy[language];
@@ -139,18 +140,21 @@ export function App() {
   }
 
   function selectAsset(nextAssetId: AssetId) {
+    balanceRequestRef.current += 1;
     setAssetId(nextAssetId);
     setRouteId(getDefaultAssetRoute(nextAssetId).id);
     resetWalletUi();
   }
 
   function selectRoute(nextRouteId: AssetRouteId) {
+    balanceRequestRef.current += 1;
     setRouteId(nextRouteId);
     setAddressError(null);
     setMnemonicError(null);
   }
 
   async function refreshBalance(nextRouteId: AssetRouteId, address: string): Promise<boolean> {
+    const requestId = ++balanceRequestRef.current;
     const adapter = adapterRegistry.resolveAssetRoute(nextRouteId);
     if (!adapter || !adapter.capabilities.balance) {
       setRouteBalances((current) => withAssetRouteBalance(current, nextRouteId, {
@@ -171,6 +175,7 @@ export function App() {
 
     try {
       const result = await adapter.loadBalance(address);
+      if (requestId !== balanceRequestRef.current) return false;
       setRouteBalances((current) => withAssetRouteBalance(current, nextRouteId, {
         address: result.address,
         balance: result.balance,
@@ -178,6 +183,7 @@ export function App() {
       }));
       return true;
     } catch {
+      if (requestId !== balanceRequestRef.current) return false;
       setRouteBalances((current) => withAssetRouteBalance(current, nextRouteId, {
         address,
         balance: null,

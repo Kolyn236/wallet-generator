@@ -16,7 +16,10 @@ final readonly class TronBroadcastController
     #[Route('/api/chains/tron/mainnet/usdt-trc20/broadcast', methods: ['POST'])]
     public function __invoke(Request $request): JsonResponse
     {
-        try { $payload=json_decode($request->getContent(),true,32,JSON_THROW_ON_ERROR); if (!is_array($payload)) throw new \InvalidArgumentException(); return new JsonResponse($this->service->broadcast($payload)); }
+        try {
+            if ('application/json' !== strtolower((string) $request->headers->get('Content-Type')) || strlen($request->getContent()) > 131072) throw new \InvalidArgumentException();
+            $payload=json_decode($request->getContent(),true,32,JSON_THROW_ON_ERROR); if (!is_array($payload)) throw new \InvalidArgumentException(); return new JsonResponse($this->service->broadcast($payload));
+        }
         catch (\JsonException|\InvalidArgumentException) { return self::error('INVALID_REQUEST','Invalid signed transaction request.',false,400); }
         catch (TronProviderException $e) { return self::error($e->codeName,$e->getMessage(),$e->retryable,502); }
     }

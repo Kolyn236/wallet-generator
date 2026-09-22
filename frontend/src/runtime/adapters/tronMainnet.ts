@@ -1,7 +1,7 @@
 import { createElement, lazy } from 'react';
 import type { AssetRouteAdapter } from '../AssetRouteAdapter';
 import type { BrowserSigningWallet, WalletNetworkAdapter } from '../WalletNetworkAdapter';
-import { createTronWallet, deriveTronWallet, decodeTronAddress, TRON_DERIVATION_PATH } from '../../wallet/tron';
+import { createTronWallet, deriveTronWallet, decodeTronAddress, registerTronSigningKey, TRON_DERIVATION_PATH } from '../../wallet/tron';
 
 const TronTransferPanel = lazy(async () => {
   const module = await import('../../TronTransferPanel');
@@ -11,7 +11,8 @@ const TronTransferPanel = lazy(async () => {
 const BALANCE_PATH = '/api/chains/tron/mainnet/usdt-trc20/balance';
 
 function toBrowserWallet(wallet: ReturnType<typeof deriveTronWallet>, origin: 'generated' | 'mnemonic'): BrowserSigningWallet {
-  const base = { address: wallet.addressBase58, derivationPath: wallet.derivationPath, signingMaterial: { kind: 'private-key' as const, value: Array.from(wallet.privateKey, (byte) => byte.toString(16).padStart(2, '0')).join('') } };
+  registerTronSigningKey(wallet.addressBase58, wallet.privateKey);
+  const base = { address: wallet.addressBase58, derivationPath: wallet.derivationPath, signingMaterial: { kind: 'private-key' as const, value: '' } };
   return origin === 'generated' ? { ...base, origin, generatedMnemonic: '' } : { ...base, origin };
 }
 

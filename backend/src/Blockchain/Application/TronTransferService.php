@@ -48,28 +48,27 @@ final readonly class TronTransferService
         $expiration = $now + 600000;
         $account = $this->provider->account($from->hex);
         $feeLimit = 1000000000;
-        $provider = $this->provider->prepareTransfer($from->hex, self::CONTRACT_HEX, $data, $expiration, $now, $feeLimit);
-        $tx = is_array($provider['transaction'] ?? null) ? $provider['transaction'] : $provider;
-        $raw = $tx['raw_data_hex'] ?? ($tx['rawDataHex'] ?? null);
-        if (!is_string($raw) || !preg_match('/^[0-9a-fA-F]+$/', $raw) || strlen($raw) > 131072) {
-            throw new TronProviderException('Provider returned invalid transaction.', false, 'PROVIDER_INVALID_RESPONSE');
-        }
-        $raw = strtolower($raw);
-        $energy = $provider['energy_used'] ?? $provider['energyEstimate'] ?? null;
+        $block = $this->provider->latestBlock();
+        $blockId = strtolower((string) ($block['blockID'] ?? ''));
+        $number = $block['block_header']['raw_data']['number'] ?? null;
+        if (!is_string($blockId) || !preg_match('/^[0-9a-f]{64}$/', $blockId) || !is_int($number) && !is_string($number)) throw new TronProviderException('Provider returned invalid reference block.', false, 'PROVIDER_INVALID_RESPONSE');
+        $numberHex = str_pad(dechex((int) $number), 16, '0', STR_PAD_LEFT);
+        $rawBytes = self::encodeRawData($from->hex, self::CONTRACT_HEX, $data, substr($numberHex, 12, 4), substr($blockId, 16, 16), $expiration, $now, $feeLimit);
+        $raw = bin2hex($rawBytes);
+        if (strlen($rawBytes) > 65536) throw new TronProviderException('Transaction exceeds provider bounds.', false, 'INVALID_INTENT');
+        $energy = $this->provider->estimateEnergy($from->hex, self::CONTRACT_HEX, $data);
         $recipientAccount = $this->provider->account($to->hex);
         $active = $recipientAccount !== [];
-        $rawBytes = hex2bin($raw);
-        if ($rawBytes === false) throw new TronProviderException('Provider returned invalid transaction.', false, 'PROVIDER_INVALID_RESPONSE');
         return [
             'networkId' => self::NETWORK_ID, 'assetRouteId' => self::ROUTE_ID,
             'intent' => ['from'=>$from->base58, 'to'=>$to->base58, 'amountBaseUnits'=>$amount, 'contractAddress'=>self::CONTRACT, 'decimals'=>self::DECIMALS],
             'rawDataHex' => $raw, 'rawDataBytesHash' => hash('sha256', $rawBytes),
-            'refBlockBytesHex' => self::stringField($tx, 'ref_block_bytes', ''),
-            'refBlockHashHex' => self::stringField($tx, 'ref_block_hash', ''),
-            'timestampMs' => (string)($tx['raw_data']['timestamp'] ?? $now),
-            'expirationMs' => (string)($tx['raw_data']['expiration'] ?? $expiration),
-            'feeLimitSun' => (string)($tx['raw_data']['fee_limit'] ?? $feeLimit),
-            'bandwidthBytes' => (string)($provider['bandwidth'] ?? 0),
+            'refBlockBytesHex' => substr($numberHex, 12, 4),
+            'refBlockHashHex' => substr($blockId, 16, 16),
+            'timestampMs' => (string) $now,
+            'expirationMs' => (string) $expiration,
+            'feeLimitSun' => (string) $feeLimit,
+            'bandwidthBytes' => (string) max(1, intdiv(strlen($raw), 2)),
             'energyEstimate' => $energy === null ? null : self::decimal((string)$energy),
             'senderTrxSun' => self::decimal((string)($account['balance'] ?? 0)),
             'recipientActive' => $active, 'accountActivationRequired' => !$active,
@@ -84,11 +83,15 @@ final readonly class TronTransferService
     {
         self::fields($input, ['assetRouteId', 'txId', 'rawTransactionHex']);
         if ($input['assetRouteId'] !== self::ROUTE_ID || !preg_match('/^[0-9a-fA-F]+$/', $input['rawTransactionHex']) || !preg_match('/^[0-9a-f]{64}$/', $input['txId'])) throw new \InvalidArgumentException('invalid broadcast');
-        $result = $this->provider->broadcast(strtolower($input['rawTransactionHex']));
+        $raw = strtolower($input['rawTransactionHex']);
+        $signed = self::decodeSignedTransaction($raw);
+        $localTxId = hash('sha256', hex2bin($signed['raw_data_hex']));
+        if ($localTxId !== strtolower($input['txId'])) throw new \InvalidArgumentException('transaction identity mismatch');
+        $result = $this->provider->broadcast($signed['transaction']);
         $providerId = $result['txid'] ?? $result['txID'] ?? null;
         if ($providerId !== null && strtolower((string)$providerId) !== strtolower($input['txId'])) throw new TronProviderException('Provider transaction identity mismatch.', false, 'PROVIDER_INVALID_RESPONSE');
         $accepted = ($result['result'] ?? false) === true || ($result['code'] ?? '') === 'SUCCESS';
-        return ['networkId'=>self::NETWORK_ID, 'assetRouteId'=>self::ROUTE_ID, 'txId'=>strtolower($input['txId']), 'state'=>$accepted ? 'accepted-for-broadcast' : 'rejected', ...($result['code'] ?? null) !== null ? ['providerCode'=>(string)$result['code']] : []];
+        return ['networkId'=>self::NETWORK_ID, 'assetRouteId'=>self::ROUTE_ID, 'txId'=>strtolower($input['txId']), 'state'=>$accepted ? 'accepted-for-broadcast' : 'rejected', ...(($result['code'] ?? null) !== null ? ['providerCode'=>(string) $result['code']] : [])];
     }
 
     /** @return array<string,mixed> */
@@ -113,4 +116,31 @@ final readonly class TronTransferService
     private static function decimalToHex(string $value): string
     { $out=''; while ($value !== '0') { $carry=0; $next=''; foreach (str_split($value) as $digit) { $n=$carry*10+(int)$digit; $q=intdiv($n,16); $carry=$n%16; if ($next!==''||$q>0) $next.=(string)$q; } $out=dechex($carry).$out; $value=$next===''?'0':$next; } return $out===''?'0':$out; }
     /** @param array<string,mixed> $array */ private static function stringField(array $array, string $key, string $default): string { return is_string($array[$key] ?? null) ? strtolower($array[$key]) : $default; }
+
+    private static function varint(int $value): string { $out=''; do { $byte=$value & 127; $value=intdiv($value,128); $out.=chr($byte|($value?128:0)); } while($value); return $out; }
+    private static function field(int $tag, string $value): string { return self::varint(($tag<<3)|2).self::varint(strlen($value)).$value; }
+    private static function rawField(int $tag, int $value): string { return self::varint($tag<<3).self::varint($value); }
+    private static function encodeRawData(string $owner, string $contract, string $data, string $refBytes, string $refHash, int $expiration, int $timestamp, int $fee): string {
+        $trigger=self::field(1,hex2bin($owner)).self::field(2,hex2bin($contract)).self::field(4,hex2bin($data));
+        $contractWrapper=self::rawField(1,31).self::field(2,$trigger);
+        return self::field(1,self::field(1,$contractWrapper)).self::field(4,hex2bin($refBytes)).self::field(5,hex2bin($refHash)).self::rawField(8,$expiration).self::rawField(11,$timestamp).self::rawField(18,$fee);
+    }
+    /** @return array{raw_data_hex:string,transaction:array<string,mixed>} */
+    private static function decodeSignedTransaction(string $hex): array {
+        $bytes=hex2bin($hex); if(false===$bytes) throw new \InvalidArgumentException('invalid signed transaction');
+        $offset=0; $raw=''; $signature=[];
+        while($offset<strlen($bytes)){ $key=self::readVarint($bytes,$offset); $tag=intdiv($key,8); $wire=$key&7; if(2!==$wire) throw new \InvalidArgumentException('noncanonical signed transaction'); $len=self::readVarint($bytes,$offset); $value=substr($bytes,$offset,$len); if(strlen($value)!==$len) throw new \InvalidArgumentException('truncated signed transaction'); $offset+=$len; if(1===$tag) $raw=$value; elseif(2===$tag) $signature[]=bin2hex($value); else throw new \InvalidArgumentException('unknown signed transaction field'); }
+        if(''===$raw || count($signature)!==1) throw new \InvalidArgumentException('signed transaction must contain one signature');
+        $fields=self::parseFields($raw); $wrapper=$fields[1][0] ?? null;
+        if (!is_array($wrapper)) throw new \InvalidArgumentException('missing contract');
+        $parameter=self::parseFields($wrapper[2][0] ?? ''); $value=self::parseFields($parameter[2][0] ?? '');
+        if (!isset($value[1][0],$value[2][0],$value[4][0]) || !is_string($value[1][0]) || !is_string($value[2][0]) || !is_string($value[4][0])) throw new \InvalidArgumentException('invalid trigger contract');
+        $rawData=['contract'=>[['type'=>'TriggerSmartContract','parameter'=>['type'=>'protocol.TriggerSmartContract','value'=>['owner_address'=>bin2hex($value[1][0]),'contract_address'=>bin2hex($value[2][0]),'data'=>bin2hex($value[4][0])]]]]];
+        foreach ([4=>'ref_block_bytes',5=>'ref_block_hash'] as $tag=>$name) if (isset($fields[$tag][0])) $rawData[$name]=bin2hex((string) $fields[$tag][0]);
+        foreach ([8=>'expiration',11=>'timestamp',18=>'fee_limit'] as $tag=>$name) if (isset($fields[$tag][0])) $rawData[$name]=(int) $fields[$tag][0];
+        return ['raw_data_hex'=>bin2hex($raw),'transaction'=>['raw_data'=>$rawData,'raw_data_hex'=>bin2hex($raw),'signature'=>$signature]];
+    }
+    /** @return array<int,list<string|int>> */
+    private static function parseFields(string $bytes): array { $offset=0;$fields=[]; while($offset<strlen($bytes)){ $key=self::readVarint($bytes,$offset);$tag=intdiv($key,8);$wire=$key&7;if(2===$wire){$len=self::readVarint($bytes,$offset);$value=substr($bytes,$offset,$len);if(strlen($value)!==$len)throw new \InvalidArgumentException('truncated protobuf');$offset+=$len;$fields[$tag][]=$value;}elseif(0===$wire){$fields[$tag][]=self::readVarint($bytes,$offset);}else throw new \InvalidArgumentException('unsupported protobuf wire type');}return $fields; }
+    private static function readVarint(string $bytes,int &$offset): int { $out=0;$shift=0; while($offset<strlen($bytes)&&$shift<63){$b=ord($bytes[$offset++]);$out|=($b&127)<<$shift;if(0==($b&128))return $out;$shift+=7;} throw new \InvalidArgumentException('invalid protobuf varint'); }
 }

@@ -17,6 +17,14 @@ export function createTronWallet(): TronWallet & { mnemonic: string } {
   return { ...deriveTronWallet(mnemonic), mnemonic };
 }
 
+const ephemeralKeys = new Map<string, Uint8Array>();
+export function registerTronSigningKey(address: string, privateKey: Uint8Array): void { ephemeralKeys.set(address, privateKey.slice()); }
+export function signTronWallet(rawDataBytes: Uint8Array, address: string): ReturnType<typeof signTronRawData> {
+  const key = ephemeralKeys.get(address);
+  if (!key) throw new Error('signing_session_unavailable');
+  return signTronRawData(rawDataBytes, key);
+}
+
 function assertBytes(v: Uint8Array, n: number, name: string) { if (v.length !== n) throw new Error(`invalid_${name}`); }
 function hex(v: string): Uint8Array { if (!/^[0-9a-fA-F]*$/.test(v) || v.length % 2) throw new Error('invalid_hex'); return hexToBytes(v); }
 

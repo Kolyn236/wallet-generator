@@ -32,7 +32,9 @@ final readonly class TronTransferService
         ];
     }
 
-    /** @param array<string,mixed> $input @return array<string,mixed> */
+    /** @param array<string,mixed> $input
+     * @return array<string,mixed>
+     */
     public function prepare(array $input): array
     {
         self::fields($input, ['assetRouteId', 'from', 'to', 'amountBaseUnits']);
@@ -45,7 +47,6 @@ final readonly class TronTransferService
         $now = (int) floor(microtime(true) * 1000);
         $expiration = $now + 600000;
         $account = $this->provider->account($from->hex);
-        $resources = $this->provider->accountResources($from->hex);
         $feeLimit = 1000000000;
         $provider = $this->provider->prepareTransfer($from->hex, self::CONTRACT_HEX, $data, $expiration, $now, $feeLimit);
         $tx = is_array($provider['transaction'] ?? null) ? $provider['transaction'] : $provider;
@@ -55,11 +56,14 @@ final readonly class TronTransferService
         }
         $raw = strtolower($raw);
         $energy = $provider['energy_used'] ?? $provider['energyEstimate'] ?? null;
-        $active = is_array($this->provider->account($to->hex)) && $this->provider->account($to->hex) !== [];
+        $recipientAccount = $this->provider->account($to->hex);
+        $active = $recipientAccount !== [];
+        $rawBytes = hex2bin($raw);
+        if ($rawBytes === false) throw new TronProviderException('Provider returned invalid transaction.', false, 'PROVIDER_INVALID_RESPONSE');
         return [
             'networkId' => self::NETWORK_ID, 'assetRouteId' => self::ROUTE_ID,
             'intent' => ['from'=>$from->base58, 'to'=>$to->base58, 'amountBaseUnits'=>$amount, 'contractAddress'=>self::CONTRACT, 'decimals'=>self::DECIMALS],
-            'rawDataHex' => $raw, 'rawDataBytesHash' => hash('sha256', hex2bin($raw)),
+            'rawDataHex' => $raw, 'rawDataBytesHash' => hash('sha256', $rawBytes),
             'refBlockBytesHex' => self::stringField($tx, 'ref_block_bytes', ''),
             'refBlockHashHex' => self::stringField($tx, 'ref_block_hash', ''),
             'timestampMs' => (string)($tx['raw_data']['timestamp'] ?? $now),
@@ -73,7 +77,9 @@ final readonly class TronTransferService
         ];
     }
 
-    /** @param array<string,mixed> $input @return array<string,mixed> */
+    /** @param array<string,mixed> $input
+     * @return array<string,mixed>
+     */
     public function broadcast(array $input): array
     {
         self::fields($input, ['assetRouteId', 'txId', 'rawTransactionHex']);
@@ -97,7 +103,7 @@ final readonly class TronTransferService
         return ['networkId'=>self::NETWORK_ID, 'txId'=>strtolower($txId), 'state'=>$state, ...($info['blockNumber'] ?? $info['block_num'] ?? null) !== null ? ['blockNumber'=>(string)($info['blockNumber'] ?? $info['block_num'])] : []];
     }
 
-    /** @param array<string,mixed> $value */
+    /** @param array<string,mixed> $value @param list<string> $allowed */
     private static function fields(array $value, array $allowed): void
     { if (array_diff(array_keys($value), $allowed) !== [] || array_diff($allowed, array_keys($value)) !== []) throw new \InvalidArgumentException('invalid request'); foreach ($value as $item) if (!is_string($item)) throw new \InvalidArgumentException('invalid request'); }
     private static function decimal(string $value): string

@@ -9,12 +9,12 @@
     "preview": "vite preview --host 0.0.0.0",
     "test:adapter-registry": "node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/adapter-registry-test.ts",
     "test:adapter-invariants": "npm run test:adapter-registry",
-    "test:dogecoin-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/dogecoin-vector-test.ts",
-    "test:bitcoin-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/bitcoin-vector-test.ts",
-    "test:litecoin-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/litecoin-vector-test.ts",
-    "test:ethereum-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/ethereum-vector-test.ts",
-    "test:usdt-erc20-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/usdt-erc20-vector-test.ts",
-    "test:tron-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/tron-vector-test.ts"
+    "test:dogecoin-vector": "node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/dogecoin-vector-test.ts",
+    "test:bitcoin-vector": "node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/bitcoin-vector-test.ts",
+    "test:litecoin-vector": "node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/litecoin-vector-test.ts",
+    "test:ethereum-vector": "node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/ethereum-vector-test.ts",
+    "test:usdt-erc20-vector": "node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/usdt-erc20-vector-test.ts",
+    "test:tron-vector": "node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/tron-vector-test.ts"
   },
   "dependencies": {
     "@noble/hashes": "2.3.0",

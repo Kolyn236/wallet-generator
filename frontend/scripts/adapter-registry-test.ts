@@ -103,10 +103,10 @@ assert.equal(getAssetRouteAvailability('doge-dogecoin-mainnet-native'), 'ready-n
 assert.equal(getAssetRouteAvailability('btc-bitcoin-mainnet-native'), 'ready-next');
 assert.equal(getAssetRouteAvailability('eth-ethereum-mainnet-native'), 'ready-next');
 assert.equal(getAssetRouteAvailability('usdt-ethereum-mainnet-erc20'), 'ready-next');
-assert.equal(getAssetRouteAvailability('usdt-tron-mainnet-trc20'), 'planned');
+assert.equal(getAssetRouteAvailability('usdt-tron-mainnet-trc20'), 'ready-next');
 
-assert.equal(adapterRegistry.resolveAssetRoute('usdt-tron-mainnet-trc20'), null);
-assert.equal(adapterRegistry.resolveWalletNetwork('tron-mainnet'), null);
+assert.equal(adapterRegistry.resolveAssetRoute('usdt-tron-mainnet-trc20')?.routeId, 'usdt-tron-mainnet-trc20');
+assert.equal(adapterRegistry.resolveWalletNetwork('tron-mainnet')?.networkId, 'tron-mainnet');
 
 for (const unknownRoute of [
   'unknown-route',

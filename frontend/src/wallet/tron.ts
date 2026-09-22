@@ -4,13 +4,18 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex, hexToBytes, concatBytes } from '@noble/hashes/utils.js';
 import { createBase58check } from '@scure/base';
 import { HDKey } from '@scure/bip32';
-import { mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
+import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 
 export const TRON_DERIVATION_PATH = "m/44'/195'/0'/0/0";
 export const TRON_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 export const TRON_USDT_CONTRACT_HEX = '41a614f803b6fd780986a42c78ec9c7f77e6ded13c';
 const base58check = createBase58check(sha256);
+
+export function createTronWallet(): TronWallet & { mnemonic: string } {
+  const mnemonic = generateMnemonic(wordlist, 128);
+  return { ...deriveTronWallet(mnemonic), mnemonic };
+}
 
 function assertBytes(v: Uint8Array, n: number, name: string) { if (v.length !== n) throw new Error(`invalid_${name}`); }
 function hex(v: string): Uint8Array { if (!/^[0-9a-fA-F]*$/.test(v) || v.length % 2) throw new Error('invalid_hex'); return hexToBytes(v); }

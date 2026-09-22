@@ -1,7 +1,7 @@
 import { createElement, lazy } from 'react';
 import type { AssetRouteAdapter } from '../AssetRouteAdapter';
 import type { BrowserSigningWallet, WalletNetworkAdapter } from '../WalletNetworkAdapter';
-import { deriveTronWallet, decodeTronAddress, TRON_DERIVATION_PATH } from '../../wallet/tron';
+import { createTronWallet, deriveTronWallet, decodeTronAddress, TRON_DERIVATION_PATH } from '../../wallet/tron';
 
 const TronTransferPanel = lazy(async () => {
   const module = await import('../../TronTransferPanel');
@@ -16,7 +16,9 @@ function toBrowserWallet(wallet: ReturnType<typeof deriveTronWallet>, origin: 'g
 }
 
 function createBrowserWallet(): BrowserSigningWallet {
-  throw new Error('tron_wallet_creation_requires_mnemonic_source');
+  const wallet = createTronWallet();
+  const base = toBrowserWallet(wallet, 'mnemonic');
+  return { address: base.address, derivationPath: base.derivationPath, signingMaterial: base.signingMaterial, origin: 'generated', generatedMnemonic: wallet.mnemonic };
 }
 
 function importBrowserMnemonic(mnemonic: string): BrowserSigningWallet {
@@ -26,7 +28,7 @@ function importBrowserMnemonic(mnemonic: string): BrowserSigningWallet {
 export const tronMainnetWalletAdapter: WalletNetworkAdapter = {
   networkId: 'tron-mainnet',
   identity: { addressType: 'TRON Base58Check account', derivationPath: TRON_DERIVATION_PATH },
-  capabilities: { localWalletCreation: false, mnemonicImport: true, watchOnly: true, localSigning: true },
+  capabilities: { localWalletCreation: true, mnemonicImport: true, watchOnly: true, localSigning: true },
   createWallet: createBrowserWallet,
   importMnemonic: importBrowserMnemonic,
   validatePublicAddress(address) { try { decodeTronAddress(address); return true; } catch { return false; } },

@@ -28,6 +28,7 @@ Live frontend routes:
 - BTC / Bitcoin mainnet — legacy P2PKH;
 - ETH / Ethereum mainnet — native ETH with EIP-1559 Type-2 transactions;
 - USDT / Ethereum mainnet — ERC-20 with EIP-1559 Type-2 transactions.
+- USDT / TRON mainnet — TRC-20 with a separate TRON wallet identity (implementation in progress; never falls back to Ethereum).
 
 Planned route:
 
@@ -267,7 +268,7 @@ eth-ethereum-mainnet-native       -> ETH balance + native transfer
 usdt-ethereum-mainnet-erc20       -> USDT balance + ERC-20 transfer
 ```
 
-Changing the Ethereum wallet invalidates both route balances together. USDT TRC-20 remains a separate unimplemented Tron route and never falls back to the ERC-20 runtime.
+Changing the Ethereum wallet invalidates both route balances together. USDT TRC-20 is a separate TRON route and never falls back to the ERC-20 runtime. See [docs/architecture/TRON_TRC20.md](docs/architecture/TRON_TRC20.md) for its browser-only signing, TRX resource/fee, contract and confirmation semantics.
 
 ## EVM amount and fee correctness
 

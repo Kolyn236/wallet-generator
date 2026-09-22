@@ -12,7 +12,7 @@ final class TronTransactionValidator
     {
         $raw = $transaction['raw_data'] ?? null;
         $rawHex = $transaction['raw_data_hex'] ?? null;
-        if (!is_array($raw) || !is_string($rawHex) || !preg_match('/^[0-9a-f]{2,131072}$/i', $rawHex)) {
+        if (!is_array($raw) || !is_string($rawHex) || strlen($rawHex) > 131072 || !preg_match('/^[0-9a-f]{2,65535}$/i', $rawHex)) {
             throw new TronProviderException('Provider returned a non-canonical transaction.', false, 'PROVIDER_INVALID_RESPONSE');
         }
         if (count($raw['contract'] ?? []) !== 1 || ($raw['contract'][0]['type'] ?? null) !== 'TriggerSmartContract') {

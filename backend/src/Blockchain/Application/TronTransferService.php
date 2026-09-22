@@ -8,8 +8,7 @@ use App\Blockchain\Domain\TronAddress;
 
 final class TronTransferService
 {
-    /** @var array<string,array<string,string>> */
-    private array $preparedIntents = [];
+
     public const NETWORK_ID = 'tron-mainnet';
     public const ROUTE_ID = 'usdt-tron-mainnet-trc20';
     public const CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
@@ -63,13 +62,13 @@ final class TronTransferService
         if (!is_array($transaction)) throw new TronProviderException('Provider returned invalid transaction.', false, 'PROVIDER_INVALID_RESPONSE');
         $this->validator->validatePrepared($transaction, $raw, $from->hex, self::CONTRACT_HEX, $data, $now, $expiration, $feeLimit);
         $providerRaw = $transaction['raw_data_hex'] ?? null;
-        if (!is_string($providerRaw) || !preg_match('/^[0-9a-f]{2,131072}$/i', $providerRaw) || false === ($providerBytes = hex2bin($providerRaw))) throw new TronProviderException('Provider returned invalid raw data.', false, 'PROVIDER_INVALID_RESPONSE');
+        if (!is_string($providerRaw) || strlen($providerRaw) > 131072 || !preg_match('/^[0-9a-f]{2,65535}$/i', $providerRaw) || false === ($providerBytes = hex2bin($providerRaw))) throw new TronProviderException('Provider returned invalid raw data.', false, 'PROVIDER_INVALID_RESPONSE');
         $raw = strtolower($providerRaw); $rawBytes = $providerBytes;
         $energy = $this->provider->estimateEnergy($from->hex, self::CONTRACT_HEX, $data);
         $recipientAccount = $this->provider->account($to->hex);
         $active = $recipientAccount !== [];
         $txId = hash('sha256', $rawBytes);
-        $this->preparedIntents[$txId] = ['from'=>$from->hex, 'to'=>$to->hex, 'amount'=>$amount, 'contract'=>self::CONTRACT_HEX];
+
         return [
             'networkId' => self::NETWORK_ID, 'assetRouteId' => self::ROUTE_ID,
             'intent' => ['from'=>$from->base58, 'to'=>$to->base58, 'amountBaseUnits'=>$amount, 'contractAddress'=>self::CONTRACT, 'decimals'=>self::DECIMALS],

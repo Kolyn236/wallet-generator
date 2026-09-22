@@ -31,6 +31,10 @@ services:
     App\Blockchain\Infrastructure\EthereumJsonRpcTransport:
         alias: App\Blockchain\Infrastructure\NativeEthereumJsonRpcTransport
 
+    App\Blockchain\Infrastructure\TronJsonProvider:
+        arguments:
+            $url: '%env(string:TRON_MAINNET_PROVIDER_URL)%'
+
     App\Blockchain\Application\DogecoinBalanceProvider:
         alias: App\Blockchain\Infrastructure\BlockCypherDogecoinBalanceProvider
 

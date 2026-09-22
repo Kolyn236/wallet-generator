@@ -59,7 +59,7 @@ const routeAvailability: Record<AssetRouteId, AssetRouteAvailability> = {
   'ltc-litecoin-mainnet-native': 'ready-next',
   'eth-ethereum-mainnet-native': 'ready-next',
   'usdt-ethereum-mainnet-erc20': 'ready-next',
-  'usdt-tron-mainnet-trc20': 'planned',
+  'usdt-tron-mainnet-trc20': 'ready-next',
 };
 
 const utxoFeePolicies: Partial<Record<NetworkId, UtxoRatePerKbFeePolicy>> = {

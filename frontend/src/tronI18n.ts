@@ -26,6 +26,7 @@ export const tronMessages: Record<Language, {
   retryIdentical: string;
   noAutomaticReplacement: string;
   secretsLocal: string;
+  fromLabel: string; recipientLabel: string; review: string; signLocally: string; broadcast: string; rejected: string; statusPreparing: string;
 }> = {
   en: {
     network: 'TRON Mainnet', route: 'USDT · TRC-20',
@@ -36,6 +37,7 @@ export const tronMessages: Record<Language, {
     preparing: 'Preparing TRON resources and transaction…', readyToSign: 'Ready to sign', signedNotBroadcast: 'Signed locally · not broadcast', acceptedForBroadcast: 'Accepted for broadcast', observed: 'Observed', includedSolidified: 'Included (solidified)', executedSuccessfully: 'Executed successfully', executionFailed: 'Execution failed', expiredUnknown: 'Expired / unknown',
     prepareError: 'Could not prepare the TRC-20 transaction. Check the TRON provider and public intent.', broadcastError: 'The TRON provider rejected the signed transaction or is unavailable.', statusLookup: 'Check transaction status', retryIdentical: 'Retry the identical signed transaction', noAutomaticReplacement: 'A timeout never creates a replacement transaction. Retry only with the same signed bytes or look up its status.',
     secretsLocal: 'Seed phrases and private keys stay in browser memory. Symfony never receives or uses signing secrets.',
+    fromLabel: 'From', recipientLabel: 'Recipient', review: 'Review transfer', signLocally: 'Sign locally', broadcast: 'Broadcast signed transaction', rejected: 'Rejected', statusPreparing: 'Preparing',
   },
   ru: {
     network: 'TRON Mainnet', route: 'USDT · TRC-20',
@@ -46,5 +48,6 @@ export const tronMessages: Record<Language, {
     preparing: 'Готовим ресурсы TRON и транзакцию…', readyToSign: 'Готово к подписи', signedNotBroadcast: 'Подписано локально · не отправлено', acceptedForBroadcast: 'Принято для отправки в сеть', observed: 'Наблюдается в сети', includedSolidified: 'Включено (подтверждено SolidityNode)', executedSuccessfully: 'Выполнено успешно', executionFailed: 'Выполнение завершилось ошибкой', expiredUnknown: 'Истекло / неизвестно',
     prepareError: 'Не удалось подготовить TRC-20 транзакцию. Проверьте TRON-провайдер и публичное намерение перевода.', broadcastError: 'TRON-провайдер отклонил подписанную транзакцию или недоступен.', statusLookup: 'Проверить статус транзакции', retryIdentical: 'Повторить с той же подписанной транзакцией', noAutomaticReplacement: 'Тайм-аут не создаёт замену транзакции. Повторяйте только с теми же подписанными байтами или проверьте статус.',
     secretsLocal: 'Seed-фразы и приватные ключи остаются в памяти браузера. Symfony никогда не получает и не использует секреты подписи.',
+    fromLabel: 'Отправитель', recipientLabel: 'Получатель', review: 'Проверить перевод', signLocally: 'Подписать локально', broadcast: 'Отправить подписанную транзакцию', rejected: 'Отклонено', statusPreparing: 'Подготовка',
   },
 };

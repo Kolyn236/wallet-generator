@@ -15,6 +15,6 @@ final class HealthController
         return new JsonResponse([
             'status' => 'ok',
             'service' => 'chain-courier-backend',
-        ]);
+        ], headers: ['Cache-Control' => 'no-store']);
     }
 }

@@ -1,0 +1,18 @@
+services:
+  php:
+    build:
+      context: ..
+      dockerfile: docker/php/Dockerfile
+    working_dir: /workspace/backend
+    volumes:
+      - ..:/workspace
+    environment:
+      APP_ENV: test
+      APP_DEBUG: "0"
+      COMPOSER_HOME: /tmp/composer
+
+  node:
+    image: node:24-alpine
+    working_dir: /workspace/frontend
+    volumes:
+      - ..:/workspace

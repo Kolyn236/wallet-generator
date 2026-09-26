@@ -1,0 +1,44 @@
+version: 1
+executor:
+  type: docker-compose
+  file: .hermes/compose.verify.yaml
+phases:
+  - id: backend-syntax
+    service: php
+    command: [sh, -eu, -c, "find src tests -name '*.php' -print0 | xargs -0 -n1 php -l"]
+  - id: backend-validate
+    service: php
+    command: [composer, validate, --strict]
+  - id: backend-install
+    service: php
+    command: [composer, install, --no-interaction, --prefer-dist, --no-progress]
+  - id: backend-test
+    service: php
+    command: [composer, test]
+  - id: backend-analyse
+    service: php
+    command: [composer, analyse]
+  - id: backend-style
+    service: php
+    command: [composer, cs:check]
+  - id: frontend-install
+    service: node
+    command: [npm, ci, --no-audit, --no-fund]
+  - id: frontend-adapter-invariants
+    service: node
+    command: [npm, run, test:adapter-invariants]
+  - id: frontend-dogecoin-vector
+    service: node
+    command: [npm, run, test:dogecoin-vector]
+  - id: frontend-bitcoin-vector
+    service: node
+    command: [npm, run, test:bitcoin-vector]
+  - id: frontend-ethereum-vector
+    service: node
+    command: [npm, run, test:ethereum-vector]
+  - id: frontend-usdt-erc20-vector
+    service: node
+    command: [npm, run, test:usdt-erc20-vector]
+  - id: frontend-build
+    service: node
+    command: [npm, run, build]

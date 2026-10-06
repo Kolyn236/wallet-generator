@@ -3,7 +3,11 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes } from '@noble/hashes/utils.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
 import { createBase58check } from '@scure/base';
-import { isBitcoinMainnetAddress } from './bitcoin';
+import {
+  decodeBitcoinMainnetP2wpkhProgram,
+  isBitcoinMainnetAddress,
+  isBitcoinMainnetTransferRecipientAddress,
+} from './bitcoin';
 
 const BITCOIN_P2PKH_VERSION = 0x00;
 const BITCOIN_WIF_VERSION = 0x80;
@@ -80,7 +84,9 @@ export function buildSignedBitcoinTransfer(params: {
 }): SignedBitcoinTransfer {
   const { wif, sourceAddress, recipientAddress } = params;
 
-  if (!isBitcoinMainnetAddress(sourceAddress) || !isBitcoinMainnetAddress(recipientAddress)) {
+  if (!isBitcoinMainnetAddress(sourceAddress)
+    || !isBitcoinMainnetTransferRecipientAddress(recipientAddress)
+  ) {
     throw new Error('invalid_address');
   }
   if (sourceAddress === recipientAddress) {
@@ -99,7 +105,7 @@ export function buildSignedBitcoinTransfer(params: {
     }
 
     const sourceScript = p2pkhScriptPubKey(sourceAddress);
-    const recipientScript = p2pkhScriptPubKey(recipientAddress);
+    const recipientScript = bitcoinRecipientScriptPubKey(recipientAddress);
     const expectedScriptHex = bytesToHex(sourceScript);
     const normalizedUtxos = normalizeUtxos(params.utxos, expectedScriptHex);
 
@@ -202,7 +208,13 @@ function tryBuildSignedTransaction(params: {
     selected,
   } = params;
   const totalInput = selected.reduce((sum, utxo) => sum + utxo.value, 0n);
-  let fee = calculateFee(10 + selected.length * 148 + 2 * 34, feeRateSatoshisPerKb);
+  let fee = calculateFee(
+    10
+      + selected.length * 148
+      + serializedOutputSize(recipientScript)
+      + serializedOutputSize(sourceScript),
+    feeRateSatoshisPerKb,
+  );
 
   for (let attempt = 0; attempt < 12; attempt += 1) {
     if (totalInput <= amount + fee) {
@@ -302,6 +314,19 @@ function serializeOutput(output: TxOutput): Uint8Array {
   );
 }
 
+function bitcoinRecipientScriptPubKey(address: string): Uint8Array {
+  if (isBitcoinMainnetAddress(address)) {
+    return p2pkhScriptPubKey(address);
+  }
+
+  const witnessProgram = decodeBitcoinMainnetP2wpkhProgram(address);
+  if (!witnessProgram) {
+    throw new Error('invalid_address');
+  }
+
+  return concatBytes(Uint8Array.of(0x00, 0x14), witnessProgram);
+}
+
 function p2pkhScriptPubKey(address: string): Uint8Array {
   const decoded = base58check.decode(address);
   if (decoded.length !== 21 || decoded[0] !== BITCOIN_P2PKH_VERSION) {
@@ -336,6 +361,10 @@ function privateKeyFromWif(wif: string): Uint8Array {
 function publicKeyToBitcoinAddress(publicKey: Uint8Array): string {
   const publicKeyHash = ripemd160(sha256(publicKey));
   return base58check.encode(concatBytes(Uint8Array.of(BITCOIN_P2PKH_VERSION), publicKeyHash));
+}
+
+function serializedOutputSize(scriptPubKey: Uint8Array): number {
+  return 8 + encodeVarInt(scriptPubKey.length).length + scriptPubKey.length;
 }
 
 function calculateFee(sizeBytes: number, feeRateSatoshisPerKb: bigint): bigint {

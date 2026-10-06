@@ -25,7 +25,7 @@ Nginx :8080
 Live frontend routes:
 
 - DOGE / Dogecoin mainnet — legacy P2PKH;
-- BTC / Bitcoin mainnet — legacy P2PKH;
+- BTC / Bitcoin mainnet — legacy P2PKH wallets with P2PKH and native SegWit P2WPKH recipients;
 - ETH / Ethereum mainnet — native ETH with EIP-1559 Type-2 transactions;
 - USDT / Ethereum mainnet — ERC-20 with EIP-1559 Type-2 transactions.
 
@@ -174,6 +174,8 @@ Symfony -> provider
 ```
 
 Amounts use integer smallest units internally (`koinu` / `satoshi`). DOGE/BTC spend confirmed UTXOs only. The browser calculates the local TXID and verifies the provider-returned TXID.
+
+Bitcoin source and change outputs remain legacy P2PKH in the current runtime. BTC recipient outputs accept legacy P2PKH and native SegWit P2WPKH (`bc1q...`) addresses. P2WPKH source wallets/signing are not implemented yet.
 
 ## Ethereum transaction flow
 

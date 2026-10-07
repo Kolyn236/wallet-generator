@@ -7,7 +7,11 @@ import {
 } from './api';
 import { getAsset } from './assets';
 import { type Language, messages } from './i18n';
-import { isBitcoinMainnetAddress, type CreatedBitcoinWallet } from './wallet/bitcoin';
+import {
+  isBitcoinMainnetAddress,
+  isBitcoinMainnetTransferRecipientAddress,
+  type CreatedBitcoinWallet,
+} from './wallet/bitcoin';
 import {
   buildSignedBitcoinTransfer,
   type SignedBitcoinTransfer,
@@ -156,7 +160,7 @@ export function BitcoinTransferPanel({
       setError('sender-invalid');
       return;
     }
-    if (!isBitcoinMainnetAddress(destination)) {
+    if (!isBitcoinMainnetTransferRecipientAddress(destination)) {
       setError('recipient-invalid');
       return;
     }

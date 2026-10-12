@@ -55,8 +55,8 @@ Requirements:
 - Docker with Compose support.
 
 ```bash
-git clone https://github.com/Kolyn236/chain-courier.git
-cd chain-courier
+git clone https://github.com/Kolyn236/wallet-generator.git
+cd wallet-generator
 cp .env.example .env
 docker compose up --build
 ```

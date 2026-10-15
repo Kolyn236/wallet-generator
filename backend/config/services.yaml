@@ -31,6 +31,13 @@ services:
     App\Blockchain\Infrastructure\EthereumJsonRpcTransport:
         alias: App\Blockchain\Infrastructure\NativeEthereumJsonRpcTransport
 
+    App\Blockchain\Infrastructure\TronFullNodeClient:
+        arguments:
+            $fullNodeUrl: '%env(string:TRON_FULL_NODE_URL)%'
+
+    App\Blockchain\Infrastructure\TronHttpTransport:
+        alias: App\Blockchain\Infrastructure\NativeTronHttpTransport
+
     App\Blockchain\Application\DogecoinBalanceProvider:
         alias: App\Blockchain\Infrastructure\BlockCypherDogecoinBalanceProvider
 

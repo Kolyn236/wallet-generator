@@ -127,27 +127,6 @@ final readonly class EthereumJsonRpcClient
         }
     }
 
-    public function broadcast(string $rawTransaction): string
-    {
-        $this->assertMainnet();
-
-        try {
-            $result = $this->call('eth_sendRawTransaction', [$rawTransaction], 'broadcast');
-        } catch (EthereumRpcFailed $exception) {
-            if ('provider_rpc_error' === $exception->reason) {
-                throw new EthereumRpcFailed('broadcast_failed', $exception->httpStatus, $exception);
-            }
-
-            throw $exception;
-        }
-
-        if (!\is_string($result) || 1 !== preg_match('/^0x[0-9a-fA-F]{64}$/', $result)) {
-            throw new EthereumRpcFailed('provider_invalid_tx_hash');
-        }
-
-        return $result;
-    }
-
     private function assertMainnet(): void
     {
         $result = $this->call('eth_chainId', [], 'chain_id');

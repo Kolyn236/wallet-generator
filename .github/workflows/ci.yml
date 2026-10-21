@@ -73,6 +73,10 @@ jobs:
         working-directory: frontend
         run: npm run test:bitcoin-vector
 
+      - name: Run Litecoin deterministic vector
+        working-directory: frontend
+        run: npm run test:litecoin-vector
+
       - name: Run Ethereum deterministic vector
         working-directory: frontend
         run: npm run test:ethereum-vector
@@ -80,6 +84,10 @@ jobs:
       - name: Run USDT ERC-20 deterministic vector
         working-directory: frontend
         run: npm run test:usdt-erc20-vector
+
+      - name: Run TRON, publication and UI security regressions
+        working-directory: frontend
+        run: npm run test:tron-vector && npm run test:tron-flow && npm run test:broadcast && npm run test:usdt-route-chooser && npm run test:transfer-review && npm run test:public-runtime
 
       - name: Build frontend
         working-directory: frontend

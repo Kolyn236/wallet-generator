@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Blockchain\Infrastructure;
 
 use App\Blockchain\Application\BalanceLookupFailed;
-use App\Blockchain\Application\BroadcastFailed;
 use App\Blockchain\Application\UtxoLookupFailed;
 use App\Blockchain\Domain\LegacyUtxo;
 
@@ -83,91 +82,6 @@ final readonly class BlockCypherUtxoMainnetClient
         }
 
         return $result;
-    }
-
-    public function broadcast(string $slug, string $chain, string $rawHex): string
-    {
-        $rawHex = strtolower(trim($rawHex));
-        if ('' === $rawHex
-            || 0 !== \strlen($rawHex) % 2
-            || 1 !== preg_match('/^[0-9a-f]+$/', $rawHex)
-            || \strlen($rawHex) > 200_000
-        ) {
-            throw new \InvalidArgumentException('Invalid raw UTXO transaction.');
-        }
-
-        $raw = hex2bin($rawHex);
-        if (false === $raw) {
-            throw new \InvalidArgumentException('Invalid raw UTXO transaction.');
-        }
-
-        $expectedTxid = bin2hex(strrev(hash('sha256', hash('sha256', $raw, true), true)));
-        $url = \sprintf('https://api.blockcypher.com/v1/%s/main/txs/push', $slug);
-        $http_response_header = [];
-        $payload = @file_get_contents($url, false, stream_context_create([
-            'http' => [
-                'method' => 'POST',
-                'timeout' => 15,
-                'ignore_errors' => true,
-                'header' => "Accept: application/json\r\nContent-Type: application/json\r\nUser-Agent: chain-courier/0.1\r\n",
-                'content' => json_encode(['tx' => $rawHex], \JSON_THROW_ON_ERROR),
-            ],
-        ]));
-        $status = self::statusCode($http_response_header);
-
-        if (false === $payload) {
-            $this->logger->error([
-                'provider' => 'blockcypher',
-                'chain' => $chain,
-                'operation' => 'broadcast',
-                'reason' => 'provider_transport_failed',
-                'txid' => $expectedTxid,
-                'http_status' => $status,
-            ]);
-
-            throw new BroadcastFailed('provider_transport_failed', $status);
-        }
-
-        try {
-            $decoded = json_decode($payload, true, 512, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException $exception) {
-            throw new BroadcastFailed('provider_invalid_json', $status, $exception);
-        }
-
-        if (null !== $status && $status >= 400) {
-            $reason = 429 === $status ? 'provider_rate_limited' : 'provider_rejected_transaction';
-            $this->logger->warning([
-                'provider' => 'blockcypher',
-                'chain' => $chain,
-                'operation' => 'broadcast',
-                'reason' => $reason,
-                'txid' => $expectedTxid,
-                'http_status' => $status,
-            ]);
-
-            throw new BroadcastFailed($reason, $status);
-        }
-
-        $providerTxid = \is_array($decoded) ? BlockCypherBroadcastResponse::txid($decoded) : null;
-        if (null === $providerTxid) {
-            throw new BroadcastFailed('provider_invalid_txid', $status);
-        }
-
-        if ($providerTxid !== $expectedTxid) {
-            $this->logger->error([
-                'provider' => 'blockcypher',
-                'chain' => $chain,
-                'operation' => 'broadcast',
-                'reason' => 'provider_txid_mismatch',
-                'txid' => $expectedTxid,
-                'provider_txid' => $providerTxid,
-                'http_status' => $status,
-            ]);
-
-            throw new BroadcastFailed('provider_txid_mismatch', $status);
-        }
-
-        return $providerTxid;
     }
 
     /**

@@ -6,14 +6,13 @@ namespace App\Blockchain\Infrastructure;
 
 use App\Blockchain\Application\AddressBalanceCapability;
 use App\Blockchain\Application\ChainAdapter;
-use App\Blockchain\Application\RawTransactionBroadcastCapability;
 use App\Blockchain\Application\UtxoFeeRate;
 use App\Blockchain\Application\UtxoFeeRateCapability;
 use App\Blockchain\Application\UtxoLookupCapability;
 use App\Blockchain\Domain\AddressBalance;
 use App\Blockchain\Domain\LegacyP2pkhAddress;
 
-final readonly class LitecoinMainnetAdapter implements ChainAdapter, AddressBalanceCapability, UtxoLookupCapability, UtxoFeeRateCapability, RawTransactionBroadcastCapability
+final readonly class LitecoinMainnetAdapter implements ChainAdapter, AddressBalanceCapability, UtxoLookupCapability, UtxoFeeRateCapability
 {
     private const int P2PKH_VERSION = 0x30;
 
@@ -50,10 +49,5 @@ final readonly class LitecoinMainnetAdapter implements ChainAdapter, AddressBala
     public function feeRate(): UtxoFeeRate
     {
         return new UtxoFeeRate('utxo-rate-per-kb', $this->recommendedRateLtcPerKb, 'LTC/kB');
-    }
-
-    public function broadcastRawTransaction(string $rawTransaction): string
-    {
-        return $this->client->broadcast('ltc', 'litecoin', $rawTransaction);
     }
 }

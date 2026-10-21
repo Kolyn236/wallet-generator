@@ -58,7 +58,9 @@ Use chain-family-aware capabilities and exact chain/network adapter identity. Cu
 ```text
 dogecoin:mainnet
 bitcoin:mainnet
+litecoin:mainnet
 ethereum:mainnet
+tron:mainnet
 ```
 
 Unknown keys and unsupported capabilities fail closed.
@@ -71,9 +73,9 @@ Symfony may receive:
 
 - public addresses;
 - public balance/UTXO/transaction-preparation requests;
-- already-signed raw transactions.
+- unsigned public transaction intent and status queries.
 
-Symfony must not receive or persist plaintext WIF/private keys/seed phrases.
+Symfony must not receive or persist plaintext WIF/private keys/seed phrases. It also does not accept signed transactions for publication or expose a broadcast API. Browser-side direct/custom providers or explicit signed-payload export keep publication under user control; no mandatory relay is introduced. See `../SECURITY_MODEL.md` for trust assumptions.
 
 If server-side custody is ever proposed, it requires a separate architecture/security decision and a dedicated KMS/Vault/HSM-style signing boundary. It must not be introduced as an incremental shortcut.
 
@@ -93,7 +95,7 @@ Current platform invariants include:
 2. BTC browser wallet creation/signing is implemented;
 3. deterministic frontend signer vectors protect both live UTXO integrations;
 4. Symfony exposes the supported blockchain gateway APIs;
-5. Ethereum Mainnet backend state/preparation/broadcast capabilities are registered at `ethereum:mainnet`;
+5. Ethereum Mainnet backend state/preparation capabilities are registered at `ethereum:mainnet`, without broadcast;
 6. frontend/backend adapter registries have fail-closed architecture tests;
 7. Docker and CI validate the supported platform directly.
 

@@ -97,7 +97,7 @@ The conservative maximum-fee balance check must pass before signing.
 
 Signing does not publish the transaction.
 
-The user explicitly broadcasts the already-signed raw Type-2 transaction through Symfony. The provider-returned transaction hash must equal the locally calculated transaction hash or the browser reports the broadcast as failed.
+The user explicitly broadcasts the already-signed raw Type-2 transaction through a browser-side adapter to a selected direct Ethereum JSON-RPC endpoint, after verifying chain ID 1, or exports the signed payload for external publication. Symfony is not involved in publication. The provider-returned transaction hash must equal the locally calculated transaction hash. A transport error leaves the identical signed payload available for explicit retry; it never triggers a rebuild or re-sign. Provider acceptance is not proof of confirmation.
 
 ## Regression coverage
 

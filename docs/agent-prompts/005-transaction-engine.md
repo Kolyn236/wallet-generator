@@ -1,5 +1,7 @@
 # Prompt 005 — Build the transaction engine
 
+Historical design material only, not the supported runtime roadmap. The database/queue/server-broadcast workflow below is superseded by `AGENTS.md` and `docs/SECURITY_MODEL.md`. Do not implement server-side transaction publication, persistence or messaging from this archived prompt.
+
 Task: implement the first production-oriented transaction workflow for UTXO chains, starting with Dogecoin.
 
 Required concepts:

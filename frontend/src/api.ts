@@ -14,16 +14,10 @@ export type LitecoinFeePolicyResponse = { chain: 'litecoin'; network: 'mainnet';
 export type DogecoinUtxoResponse = { chain: 'dogecoin'; network: 'mainnet'; address: string; utxos: DogecoinUtxo[] };
 export type BitcoinUtxoResponse = { chain: 'bitcoin'; network: 'mainnet'; address: string; utxos: BitcoinUtxo[] };
 export type LitecoinUtxoResponse = { chain: 'litecoin'; network: 'mainnet'; address: string; utxos: LitecoinUtxo[] };
-
-export type DogecoinBroadcastResponse = { chain: 'dogecoin'; network: 'mainnet'; txid: string };
-export type BitcoinBroadcastResponse = { chain: 'bitcoin'; network: 'mainnet'; txid: string };
-export type LitecoinBroadcastResponse = { chain: 'litecoin'; network: 'mainnet'; txid: string };
-
 export type EthereumPrepareResponse = {
   chain: 'ethereum'; network: 'mainnet'; chainId: 1; from: string; to: string; valueWei: string; data: string; senderBalanceWei: string; nonce: string; gasLimit: string;
   feePolicy: { kind: 'eip1559'; baseFeePerGasWei: string; maxPriorityFeePerGasWei: string; maxFeePerGasWei: string };
 };
-export type EthereumBroadcastResponse = { chain: 'ethereum'; network: 'mainnet'; txHash: string };
 type ApiErrorResponse = { error?: string; reason?: string };
 
 export class WalletApiError extends Error {
@@ -49,10 +43,6 @@ export async function getBitcoinUtxos(address: string, signal?: AbortSignal): Pr
 export async function getLitecoinUtxos(address: string, signal?: AbortSignal): Promise<LitecoinUtxoResponse> { return getJson(`/api/chains/litecoin/mainnet/addresses/${encodeURIComponent(address)}/utxos`, 'LTC UTXO lookup', signal); }
 
 export async function prepareEthereumTransaction(intent: { from: string; to: string; valueWei: string; data: string }, signal?: AbortSignal): Promise<EthereumPrepareResponse> { return postJson('/api/chains/ethereum/mainnet/transactions/prepare', intent, 'ETH transaction preparation', signal); }
-export async function broadcastDogecoinTransaction(rawTransaction: string, signal?: AbortSignal): Promise<DogecoinBroadcastResponse> { return postRawTransaction('/api/chains/dogecoin/mainnet/transactions/broadcast', rawTransaction, 'DOGE transaction broadcast', signal); }
-export async function broadcastBitcoinTransaction(rawTransaction: string, signal?: AbortSignal): Promise<BitcoinBroadcastResponse> { return postRawTransaction('/api/chains/bitcoin/mainnet/transactions/broadcast', rawTransaction, 'BTC transaction broadcast', signal); }
-export async function broadcastLitecoinTransaction(rawTransaction: string, signal?: AbortSignal): Promise<LitecoinBroadcastResponse> { return postRawTransaction('/api/chains/litecoin/mainnet/transactions/broadcast', rawTransaction, 'LTC transaction broadcast', signal); }
-export async function broadcastEthereumTransaction(rawTransaction: string, signal?: AbortSignal): Promise<EthereumBroadcastResponse> { return postRawTransaction('/api/chains/ethereum/mainnet/transactions/broadcast', rawTransaction, 'ETH transaction broadcast', signal); }
 
 async function getJson<T>(url: string, operation: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal });
@@ -64,7 +54,6 @@ async function postJson<T>(url: string, payload: unknown, operation: string, sig
   if (!response.ok) throw await apiError(response, operation);
   return (await response.json()) as T;
 }
-async function postRawTransaction<T>(url: string, rawTransaction: string, operation: string, signal?: AbortSignal): Promise<T> { return postJson(url, { rawTransaction }, operation, signal); }
 async function apiError(response: Response, operation: string): Promise<WalletApiError> {
   let details: ApiErrorResponse = {};
   try { details = (await response.json()) as ApiErrorResponse; } catch { /* HTTP status still classifies the failure. */ }

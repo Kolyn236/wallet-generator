@@ -8,24 +8,20 @@ use App\Blockchain\Application\AddressBalanceCapability;
 use App\Blockchain\Application\ChainAdapter;
 use App\Blockchain\Application\DogecoinBalanceProvider;
 use App\Blockchain\Application\DogecoinFeePolicy;
-use App\Blockchain\Application\DogecoinTransactionBroadcaster;
 use App\Blockchain\Application\DogecoinUtxoProvider;
-use App\Blockchain\Application\RawTransactionBroadcastCapability;
 use App\Blockchain\Application\UtxoFeeRate;
 use App\Blockchain\Application\UtxoFeeRateCapability;
 use App\Blockchain\Application\UtxoLookupCapability;
 use App\Blockchain\Domain\AddressBalance;
 use App\Blockchain\Domain\DogecoinAddress;
-use App\Blockchain\Domain\DogecoinRawTransaction;
 use App\Blockchain\Domain\DogecoinUtxo;
 
-final readonly class DogecoinMainnetAdapter implements ChainAdapter, AddressBalanceCapability, UtxoLookupCapability, UtxoFeeRateCapability, RawTransactionBroadcastCapability
+final readonly class DogecoinMainnetAdapter implements ChainAdapter, AddressBalanceCapability, UtxoLookupCapability, UtxoFeeRateCapability
 {
     public function __construct(
         private DogecoinBalanceProvider $balanceProvider,
         private DogecoinUtxoProvider $utxoProvider,
         private DogecoinFeePolicy $feePolicy,
-        private DogecoinTransactionBroadcaster $transactionBroadcaster,
     ) {
     }
 
@@ -59,10 +55,5 @@ final readonly class DogecoinMainnetAdapter implements ChainAdapter, AddressBala
             $this->feePolicy->recommendedRateDogePerKb,
             DogecoinFeePolicy::UNIT,
         );
-    }
-
-    public function broadcastRawTransaction(string $rawTransaction): string
-    {
-        return $this->transactionBroadcaster->broadcast(DogecoinRawTransaction::fromHex($rawTransaction));
     }
 }

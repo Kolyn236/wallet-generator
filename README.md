@@ -2,7 +2,7 @@
 
 ChainCourier is a multi-chain non-custodial crypto transfer tool built with a **Symfony 7.4 modular monolith + React/TypeScript frontend**.
 
-Wallet creation and transaction signing happen in browser memory. Symfony is the blockchain API gateway: it handles public chain data, transaction preparation where chain state is required, and broadcast of already-signed transactions.
+Wallet creation and transaction signing happen in browser memory. Symfony handles public chain data, unsigned transaction preparation and supported status lookups. It does not receive signed transactions for publication and has no broadcast API. Users publish directly through a selected browser-accessible provider/node or explicitly export signed bytes for external publication.
 
 ## Current status
 
@@ -10,7 +10,7 @@ Wallet creation and transaction signing happen in browser memory. Symfony is the
 Browser
    |
    |  network-scoped wallet sessions
-   |  local DOGE / BTC / Ethereum signers
+   |  local DOGE / BTC / LTC / Ethereum / TRON signers
    v
 Nginx :8080
    |---- / ----------> React + TypeScript
@@ -26,12 +26,10 @@ Live frontend routes:
 
 - DOGE / Dogecoin mainnet — legacy P2PKH;
 - BTC / Bitcoin mainnet — legacy P2PKH wallets with P2PKH and native SegWit P2WPKH recipients;
+- LTC / Litecoin mainnet — legacy P2PKH;
 - ETH / Ethereum mainnet — native ETH with EIP-1559 Type-2 transactions;
-- USDT / Ethereum mainnet — ERC-20 with EIP-1559 Type-2 transactions.
-
-Planned route:
-
-- USDT TRC-20 on Tron mainnet.
+- USDT / Ethereum mainnet — ERC-20 with EIP-1559 Type-2 transactions;
+- USDT / TRON mainnet — TRC-20, a separate TRON wallet identity with fees/resources paid in TRX.
 
 ETH and USDT ERC-20 share one `ethereum-mainnet` wallet identity. They do not share balances or transfer adapters: native ETH and USDT remain separate asset routes.
 
@@ -42,11 +40,13 @@ Locally created wallets use BIP39 mnemonics and BIP44 derivation:
 ```text
 DOGE  m/44'/3'/0'/0/0
 BTC   m/44'/0'/0'/0/0
+LTC   m/44'/2'/0'/0/0
 ETH   m/44'/60'/0'/0/0
-USDT  same ethereum-mainnet wallet identity as ETH
+TRON  m/44'/195'/0'/0/0
+USDT  Ethereum identity for ERC-20; separate TRON identity for TRC-20
 ```
 
-DOGE/BTC expose WIF signing material for their legacy P2PKH runtime. Ethereum routes use a browser-local secp256k1 private key. All signing material remains in the active browser session only.
+DOGE/BTC/LTC expose WIF signing material for their legacy P2PKH runtime. Ethereum and TRON routes use browser-local secp256k1 private keys. All signing material remains in the active browser session only.
 
 ## Quick start
 
@@ -81,9 +81,12 @@ docker compose down
 DOGE_RECOMMENDED_FEE_RATE=0.01
 BTC_RECOMMENDED_FEE_RATE=0.00010000
 ETHEREUM_RPC_URL=
+TRON_RPC_URL=
 ```
 
 `ETHEREUM_RPC_URL` is required for ETH and USDT ERC-20 Ethereum operations. Configure an Ethereum Mainnet JSON-RPC URL through deployment secrets/runtime environment. The backend checks `eth_chainId == 1` before Ethereum operations and fails closed on another EVM network.
+
+`TRON_RPC_URL` is required for TRON public balance/preparation/status operations. Use a mainnet TRON HTTP API provider supporting both `/wallet` and `/walletsolidity`; the backend checks the pinned mainnet genesis identity. These backend RPC settings are never browser broadcast credentials.
 
 DOGE/BTC fee-rate values remain operator-controlled defaults. Ethereum fee preparation uses live provider state through `eth_estimateGas` and `eth_feeHistory`.
 
@@ -97,6 +100,8 @@ docker compose up -d --force-recreate php
 See `deploy/README.md`.
 
 ## Stack
+
+Source code is available under the MIT license; see `LICENSE`. Third-party dependencies retain their own licenses. Repository visibility/release publication is an operator decision and is not changed by this implementation.
 
 - PHP 8.4;
 - Symfony 7.4 LTS;
@@ -127,15 +132,16 @@ seed / WIF / private key
  signed raw transaction
           |
           v
-Symfony blockchain gateway
+user-selected direct provider / RPC / node
           |
           v
-    node / provider
+    blockchain
 ```
 
 Core rules:
 
 - Symfony never receives seed phrases, WIFs or private keys;
+- Symfony does not receive signed transactions for publication, sign, custody funds, swap, bridge or broadcast;
 - plaintext signing material is not persisted in localStorage, sessionStorage, IndexedDB, cookies or backend storage;
 - created wallet secrets live only in browser memory and disappear when the session is lost;
 - signing and broadcast are separate explicit actions;
@@ -170,7 +176,7 @@ Review amount / fee / change / local TXID
 Explicit broadcast
         |
         v
-Symfony -> provider
+Browser -> user-selected provider, or signed-payload export
 ```
 
 Amounts use integer smallest units internally (`koinu` / `satoshi`). DOGE/BTC spend confirmed UTXOs only. The browser calculates the local TXID and verifies the provider-returned TXID.
@@ -211,7 +217,7 @@ human-readable review
 explicit broadcast
         |
         v
-Symfony -> eth_sendRawTransaction
+Browser -> selected direct RPC -> eth_sendRawTransaction
         |
         v
 compare provider hash with local hash
@@ -269,7 +275,7 @@ eth-ethereum-mainnet-native       -> ETH balance + native transfer
 usdt-ethereum-mainnet-erc20       -> USDT balance + ERC-20 transfer
 ```
 
-Changing the Ethereum wallet invalidates both route balances together. USDT TRC-20 remains a separate unimplemented Tron route and never falls back to the ERC-20 runtime.
+Changing the Ethereum wallet invalidates both Ethereum route balances together. USDT TRC-20 uses a separate TRON session and never falls back to the ERC-20 runtime. The USDT chooser selects the network in which tokens already reside; it is not a swap or bridge.
 
 ## EVM amount and fee correctness
 
@@ -304,7 +310,7 @@ Dogecoin:
 GET  /api/chains/dogecoin/mainnet/fee-policy
 GET  /api/chains/dogecoin/mainnet/addresses/{address}/balance
 GET  /api/chains/dogecoin/mainnet/addresses/{address}/utxos
-POST /api/chains/dogecoin/mainnet/transactions/broadcast
+
 ```
 
 Bitcoin:
@@ -313,7 +319,7 @@ Bitcoin:
 GET  /api/chains/bitcoin/mainnet/fee-policy
 GET  /api/chains/bitcoin/mainnet/addresses/{address}/balance
 GET  /api/chains/bitcoin/mainnet/addresses/{address}/utxos
-POST /api/chains/bitcoin/mainnet/transactions/broadcast
+
 ```
 
 Ethereum:
@@ -322,10 +328,30 @@ Ethereum:
 GET  /api/chains/ethereum/mainnet/addresses/{address}/balance
 GET  /api/chains/ethereum/mainnet/tokens/usdt/addresses/{address}/balance
 POST /api/chains/ethereum/mainnet/transactions/prepare
-POST /api/chains/ethereum/mainnet/transactions/broadcast
+
 ```
 
-Ethereum prepare accepts only `from`, `to`, `valueWei` and `data`. Broadcast accepts only `rawTransaction`. Symfony never signs Ethereum transactions.
+Ethereum prepare accepts only `from`, `to`, `valueWei` and `data`. Symfony never signs or broadcasts transactions. Litecoin has the same read-only balance/UTXO/fee-policy endpoint structure as DOGE/BTC, under `litecoin/mainnet`.
+
+TRON:
+
+```text
+GET  /api/chains/tron/mainnet/tokens/usdt/addresses/{address}/balance
+POST /api/chains/tron/mainnet/transactions/prepare
+GET  /api/chains/tron/mainnet/transactions/{txId}
+```
+
+TRON prepare accepts public route/sender/recipient/integer-token-amount intent only. The browser checks intent, TAPOS, timestamp/expiry and resources, serializes and signs locally. Submission is not execution success. See `docs/architecture/TRON_TRC20.md`.
+
+## User-controlled publication and migration
+
+The former Symfony `/transactions/broadcast` endpoints are removed for all chains. Integrations must publish signed payloads directly to their own node/provider; there is no automatic backend forwarding or compatibility relay.
+
+After local signing/review, choose a browser-accessible endpoint and explicitly submit, or export the signed payload for external broadcast. The UI retains the identical signed bytes after a transport error for deliberate retry, without changing nonce, inputs, fees or TRON expiry. CORS, authentication and provider rate limits can prevent a direct browser request; use export rather than forwarding through the default backend. No secret provider key is built into the frontend. No relay is required or included.
+
+Backend RPC settings configure public reads/preparation only; they are not automatically exposed as browser broadcast destinations. Inspect the selected provider's privacy and authentication policy. Provider acceptance is not proof of confirmation or successful contract execution.
+
+See `docs/SECURITY_MODEL.md` for trust boundaries, compromised-hosted-JavaScript risks, browser-memory limitations and self-hosting/release guidance. `compose.yaml` is a development stack, not a production-hardening recipe.
 
 ## Frontend runtime model
 
@@ -360,8 +386,15 @@ npm ci
 npm run test:adapter-invariants
 npm run test:dogecoin-vector
 npm run test:bitcoin-vector
+npm run test:litecoin-vector
 npm run test:ethereum-vector
 npm run test:usdt-erc20-vector
+npm run test:tron-vector
+npm run test:tron-flow
+npm run test:broadcast
+npm run test:usdt-route-chooser
+npm run test:transfer-review
+npm run test:public-runtime
 npm run build
 npm run dev
 ```
@@ -388,6 +421,8 @@ docker compose up --build
 - `docs/architecture/ETHEREUM_BACKEND.md`
 - `docs/architecture/ETHEREUM_FRONTEND.md`
 - `docs/architecture/USDT_ERC20.md`
+- `docs/architecture/TRON_TRC20.md`
+- `docs/SECURITY_MODEL.md`
 
 ## Roadmap
 

@@ -9,7 +9,7 @@ The supported application architecture is:
 - Symfony 7.4 backend / blockchain API gateway;
 - React + TypeScript + Vite frontend;
 - browser-local wallet creation and transaction signing;
-- live DOGE, BTC, native ETH and USDT ERC-20 frontend routes;
+- DOGE, BTC, LTC, native ETH, USDT ERC-20 and USDT TRC-20 frontend routes;
 - Ethereum Mainnet backend RPC/capability adapter;
 - Nginx + PHP-FPM;
 - Docker Compose;
@@ -28,7 +28,7 @@ Before architecture work, read:
 ## Core architecture rules
 
 1. **Keep the platform non-custodial.** Wallet creation, key derivation and transaction signing stay in the browser.
-2. **Symfony is a blockchain API gateway, not a signer.** It may receive public addresses, public transaction data and already-signed raw transactions, never wallet secrets.
+2. **Symfony is a public-state/preparation gateway, not a signer or broadcaster.** It may receive public addresses and unsigned public transaction intent, never wallet secrets or signed transactions for publication. Browser-controlled direct/custom endpoints or explicit signed-transaction export own publication; do not restore default Symfony broadcast routes.
 3. **Keep module boundaries explicit.** Backend modules are `Wallet`, `Asset`, `Transaction`, `Blockchain`, `Signer`, and `Indexer`; only create layers/directories that have a concrete role.
 4. **Domain code is framework-agnostic.** It must not depend directly on Symfony, Doctrine, Redis, RabbitMQ, HTTP clients or provider SDKs.
 5. **Presentation does not import Infrastructure.** Application owns ports/capabilities; Infrastructure implements them.
@@ -53,9 +53,9 @@ Fixed public test vectors may use well-known deterministic mnemonics/WIFs/privat
 
 ## Cryptocurrency correctness rules
 
-- DOGE/BTC amounts use integer smallest units: `koinu` and `satoshi`.
+- DOGE/BTC/LTC amounts use integer smallest units: `koinu`, `satoshi` and `litoshi`.
 - Ethereum wei/nonce/gas/fee values cross backend Application/HTTP boundaries as canonical decimal strings; browser EVM arithmetic uses `bigint`.
-- USDT ERC-20 uses 6 decimal places and integer token smallest units. Never use floating-point arithmetic for token amounts.
+- USDT ERC-20 and TRC-20 use 6 decimal places and integer token smallest units. Never use floating-point arithmetic for token amounts.
 - Network fee is derived from chain-specific semantics; never force UTXO fee rules onto EVM transactions or vice versa.
 - Never silently alter destination, amount, input outpoint, change address, token contract, calldata, nonce, gas values, network or asset route.
 - DOGE/BTC spend confirmed UTXOs only and validate selected scripts against the source address.
@@ -73,7 +73,9 @@ Current derivation paths:
 
 - DOGE mainnet legacy P2PKH: `m/44'/3'/0'/0/0`;
 - BTC mainnet legacy P2PKH: `m/44'/0'/0'/0/0`;
+- LTC mainnet legacy P2PKH: `m/44'/2'/0'/0/0`;
 - Ethereum mainnet: `m/44'/60'/0'/0/0`.
+- TRON mainnet: `m/44'/195'/0'/0/0`.
 
 USDT ERC-20 reuses the Ethereum wallet identity; it does not have its own derivation path.
 
@@ -89,7 +91,7 @@ Frontend:
 - native ETH resolves only to its Ethereum asset-route runtime;
 - USDT ERC-20 resolves only to its token route runtime;
 - ETH and USDT ERC-20 share the same `ethereum-mainnet` `WalletNetworkAdapter` and wallet session;
-- USDT TRC-20 remains unregistered until a Tron runtime exists;
+- USDT TRC-20 resolves only to its own TRON runtime and separate `tron-mainnet` wallet session;
 - planned routes remain unregistered;
 - unknown route/network lookup fails closed;
 - wallet sessions are network-scoped;
@@ -101,8 +103,9 @@ Backend:
 - `ChainAdapter` carries chain/network identity only;
 - behavior is exposed through capability interfaces rather than one universal blockchain interface;
 - registry keys are exact `chain:network` pairs and unique;
-- current registered keys are `dogecoin:mainnet`, `bitcoin:mainnet` and `ethereum:mainnet`;
-- Ethereum exposes native balance, ERC-20 balance, nonce, gas, EIP-1559 fee and raw broadcast capabilities;
+- registered keys include `dogecoin:mainnet`, `bitcoin:mainnet`, `litecoin:mainnet`, `ethereum:mainnet` and `tron:mainnet`;
+- Ethereum exposes native balance, ERC-20 balance, nonce, gas and EIP-1559 fee capabilities, never raw broadcast;
+- TRON exposes public balance, preparation/resource information and execution/confirmation lookup, never broadcast;
 - unknown chain/network lookup throws explicitly;
 - unsupported capabilities throw explicitly;
 - Application code must not import concrete Blockchain Infrastructure adapters.
@@ -159,8 +162,15 @@ npm ci
 npm run test:adapter-invariants
 npm run test:dogecoin-vector
 npm run test:bitcoin-vector
+npm run test:litecoin-vector
 npm run test:ethereum-vector
 npm run test:usdt-erc20-vector
+npm run test:tron-vector
+npm run test:tron-flow
+npm run test:broadcast
+npm run test:usdt-route-chooser
+npm run test:transfer-review
+npm run test:public-runtime
 npm run build
 ```
 
@@ -201,7 +211,7 @@ External explorers/providers are infrastructure conveniences, not wallet authori
 
 ## Current roadmap
 
-Current live routes are DOGE mainnet, BTC mainnet legacy P2PKH, native ETH and USDT ERC-20 on Ethereum mainnet.
+Supported routes are DOGE mainnet, BTC mainnet legacy P2PKH, LTC mainnet, native ETH, USDT ERC-20 on Ethereum mainnet and USDT TRC-20 on TRON mainnet. See `docs/SECURITY_MODEL.md` for the publication boundary and hosted-frontend threat model.
 
 Near-term work:
 

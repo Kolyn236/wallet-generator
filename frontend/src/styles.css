@@ -64,7 +64,7 @@ h1 { margin: 0; max-width: 920px; font-size: clamp(42px, 6vw, 76px); line-height
 .session-badge { padding: 7px 9px; border-radius: 999px; background: rgba(244,202,85,.12); color: #f4ca55; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
 .wallet-balance-row { display: grid; grid-template-columns: 180px minmax(0,1fr); gap: 24px; margin-top: 38px; align-items: start; }
 .wallet-balance-row strong { display: block; margin-top: 8px; font-size: 28px; }
-.wallet-empty-copy p { margin: 0 0 7px; color: #dedbd2; line-height: 1.45; }
+.wallet-empty-copy p { margin: 0 0 7px; color: #dedbd2; line-height: 1.45; overflow-wrap: anywhere; }
 .wallet-empty-copy small { color: #9f9b91; line-height: 1.5; }
 .wallet-actions { margin-top: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding-top: 25px; }
 .wallet-actions button { border: 0; border-radius: 11px; padding: 10px 12px; font-size: 12px; font-weight: 800; }
@@ -101,7 +101,7 @@ h1 { margin: 0; max-width: 920px; font-size: clamp(42px, 6vw, 76px); line-height
 .transfer-preview dl { margin: 16px 0 10px; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px 18px; }
 .transfer-preview dl div { min-width: 0; }
 .transfer-preview dt { color: #858076; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; font-weight: 800; }
-.transfer-preview dd { margin: 4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.transfer-preview dd { margin: 4px 0 0; overflow-wrap: anywhere; white-space: normal; font-size: 13px; }
 .transfer-preview small { color: #807b71; }
 
 .security-card { margin-top: 18px; display: flex; align-items: center; gap: 18px; padding: 27px 30px; border-radius: 24px; background: #fff; }

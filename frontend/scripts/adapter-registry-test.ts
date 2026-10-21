@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { litecoinMainnetAssetRouteAdapter, litecoinMainnetWalletAdapter } from '../src/runtime/adapters/litecoinMainnet.ts';
+import { usdtTronMainnetAssetRouteAdapter, tronMainnetWalletAdapter } from '../src/runtime/adapters/tronMainnet.ts';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import {
@@ -103,10 +105,9 @@ assert.equal(getAssetRouteAvailability('doge-dogecoin-mainnet-native'), 'ready-n
 assert.equal(getAssetRouteAvailability('btc-bitcoin-mainnet-native'), 'ready-next');
 assert.equal(getAssetRouteAvailability('eth-ethereum-mainnet-native'), 'ready-next');
 assert.equal(getAssetRouteAvailability('usdt-ethereum-mainnet-erc20'), 'ready-next');
-assert.equal(getAssetRouteAvailability('usdt-tron-mainnet-trc20'), 'planned');
-
-assert.equal(adapterRegistry.resolveAssetRoute('usdt-tron-mainnet-trc20'), null);
-assert.equal(adapterRegistry.resolveWalletNetwork('tron-mainnet'), null);
+assert.equal(getAssetRouteAvailability('usdt-tron-mainnet-trc20'), 'ready-next');
+assert.equal(adapterRegistry.resolveAssetRoute('usdt-tron-mainnet-trc20')?.networkId, 'tron-mainnet');
+assert.equal(adapterRegistry.resolveWalletNetwork('tron-mainnet')?.networkId, 'tron-mainnet');
 
 for (const unknownRoute of [
   'unknown-route',
@@ -134,17 +135,8 @@ for (const unknownNetwork of [
   );
 }
 
-const builtInWalletAdapters = [
-  dogecoinMainnetWalletAdapter,
-  bitcoinMainnetWalletAdapter,
-  ethereumMainnetWalletAdapter,
-];
-const builtInAssetRouteAdapters = [
-  dogecoinMainnetAssetRouteAdapter,
-  bitcoinMainnetAssetRouteAdapter,
-  ethereumMainnetAssetRouteAdapter,
-  usdtEthereumMainnetAssetRouteAdapter,
-];
+const builtInWalletAdapters = [dogecoinMainnetWalletAdapter, bitcoinMainnetWalletAdapter, litecoinMainnetWalletAdapter, ethereumMainnetWalletAdapter, tronMainnetWalletAdapter];
+const builtInAssetRouteAdapters = [dogecoinMainnetAssetRouteAdapter, bitcoinMainnetAssetRouteAdapter, litecoinMainnetAssetRouteAdapter, ethereumMainnetAssetRouteAdapter, usdtEthereumMainnetAssetRouteAdapter, usdtTronMainnetAssetRouteAdapter];
 assert.equal(
   new Set(builtInWalletAdapters.map((adapter) => adapter.networkId)).size,
   builtInWalletAdapters.length,
@@ -172,17 +164,8 @@ assert.throws(
 );
 
 const independentRegistry = createAdapterRegistry({
-  walletNetworkAdapters: [
-    dogecoinMainnetWalletAdapter,
-    bitcoinMainnetWalletAdapter,
-    ethereumMainnetWalletAdapter,
-  ],
-  assetRouteAdapters: [
-    dogecoinMainnetAssetRouteAdapter,
-    bitcoinMainnetAssetRouteAdapter,
-    ethereumMainnetAssetRouteAdapter,
-    usdtEthereumMainnetAssetRouteAdapter,
-  ],
+  walletNetworkAdapters: builtInWalletAdapters,
+  assetRouteAdapters: builtInAssetRouteAdapters,
 });
 assert.strictEqual(
   independentRegistry.resolveAssetRoute('doge-dogecoin-mainnet-native'),
@@ -200,10 +183,25 @@ assert.strictEqual(
   independentRegistry.resolveAssetRoute('usdt-ethereum-mainnet-erc20'),
   usdtEthereumMainnetAssetRouteAdapter,
 );
-assert.equal(independentRegistry.resolveAssetRoute('usdt-tron-mainnet-trc20'), null);
+assert.strictEqual(independentRegistry.resolveAssetRoute('usdt-tron-mainnet-trc20'), usdtTronMainnetAssetRouteAdapter);
+assert.strictEqual(independentRegistry.resolveAssetRoute('ltc-litecoin-mainnet-native'), litecoinMainnetAssetRouteAdapter);
+for (const adapter of builtInWalletAdapters) assert.strictEqual(adapterRegistry.resolveWalletNetwork(adapter.networkId), adapter);
+for (const adapter of builtInAssetRouteAdapters) assert.strictEqual(adapterRegistry.resolveAssetRoute(adapter.routeId), adapter);
+assert.notStrictEqual(usdtTronMainnetAssetRouteAdapter, usdtEthereumMainnetAssetRouteAdapter);
+assert.notStrictEqual(tronMainnetWalletAdapter, ethereumMainnetWalletAdapter);
+assert.equal(tronMainnetWalletAdapter.validatePublicAddress('0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266'), false);
+assert.equal(ethereumMainnetWalletAdapter.validatePublicAddress('TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH'), false);
 assert.equal(independentRegistry.resolveAssetRoute('unknown-route'), null);
 
 const standardMnemonic = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const recoveredTron = tronMainnetWalletAdapter.importMnemonic(standardMnemonic);
+assert.equal(recoveredTron.address, 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH');
+assert.equal(recoveredTron.derivationPath, "m/44'/195'/0'/0/0");
+assert.equal(recoveredTron.signingMaterial.kind, 'private-key');
+assert.equal('generatedMnemonic' in recoveredTron, false);
+const generatedTron = tronMainnetWalletAdapter.createWallet();
+assert.equal(generatedTron.origin, 'generated');
+if (generatedTron.origin === 'generated') assert.equal(tronMainnetWalletAdapter.importMnemonic(generatedTron.generatedMnemonic).address, generatedTron.address);
 const recoveredDogecoin = dogecoinMainnetWalletAdapter.importMnemonic(standardMnemonic);
 assert.equal(recoveredDogecoin.origin, 'mnemonic');
 assert.equal(recoveredDogecoin.address, 'DBus3bamQjgJULBJtYXpEzDWQRwF5iwxgC');
@@ -230,6 +228,7 @@ for (const walletAdapter of builtInWalletAdapters) {
 }
 
 let sessions = createWalletSessions();
+sessions = withWalletSession(sessions, 'tron-mainnet', {address: recoveredTron.address, mode: 'local-signing'});
 sessions = withWalletSession(sessions, 'dogecoin-mainnet', {
   address: 'D-dogecoin-session',
   mode: 'watch-only',
@@ -251,8 +250,11 @@ assert.equal(
 );
 assert.equal('balance' in getWalletSession(sessions, 'dogecoin-mainnet'), false);
 assert.equal('balance' in getWalletSession(sessions, 'ethereum-mainnet'), false);
+assert.equal(getWalletSession(sessions, 'tron-mainnet').address, recoveredTron.address);
+assert.equal('balance' in getWalletSession(sessions, 'tron-mainnet'), false);
 
 let balances = createAssetRouteBalances();
+balances = withAssetRouteBalance(balances, 'usdt-tron-mainnet-trc20', {address: recoveredTron.address, balance: '42', status: 'loaded'});
 balances = withAssetRouteBalance(balances, 'doge-dogecoin-mainnet-native', {
   address: 'D-dogecoin-session',
   balance: '12.00000000',
@@ -276,6 +278,9 @@ assert.equal(getAssetRouteBalance(balances, 'usdt-ethereum-mainnet-erc20').balan
 balances = invalidateAssetRouteBalancesForNetwork(balances, 'ethereum-mainnet');
 assert.equal(getAssetRouteBalance(balances, 'eth-ethereum-mainnet-native').balance, null);
 assert.equal(getAssetRouteBalance(balances, 'usdt-ethereum-mainnet-erc20').balance, null);
+assert.equal(getAssetRouteBalance(balances, 'usdt-tron-mainnet-trc20').balance, '42');
+balances = invalidateAssetRouteBalancesForNetwork(balances, 'tron-mainnet');
+assert.equal(getAssetRouteBalance(balances, 'usdt-tron-mainnet-trc20').balance, null);
 assert.equal(getAssetRouteBalance(balances, 'doge-dogecoin-mainnet-native').balance, '12.00000000');
 
 const incompatibleWallet = {
@@ -334,6 +339,10 @@ for (const adapter of [ethereumMainnetAssetRouteAdapter, usdtEthereumMainnetAsse
     }),
     /incompatible_signing_material/,
   );
+}
+
+for (const incompatible of [incompatibleEthereumWallet, recoveredEthereum]) {
+  assert.throws(() => usdtTronMainnetAssetRouteAdapter.renderTransferPanel({...transferProps, assetId: 'usdt', createdWallet: incompatible}), /incompatible_signing_material/);
 }
 
 function sourceFiles(directory: string): string[] {

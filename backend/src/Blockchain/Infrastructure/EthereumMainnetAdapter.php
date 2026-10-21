@@ -12,10 +12,9 @@ use App\Blockchain\Application\EvmGasEstimateCapability;
 use App\Blockchain\Application\EvmNativeBalanceCapability;
 use App\Blockchain\Application\EvmPendingNonceCapability;
 use App\Blockchain\Application\EvmTransactionIntent;
-use App\Blockchain\Application\RawTransactionBroadcastCapability;
 use App\Blockchain\Domain\EthereumAddress;
 
-final readonly class EthereumMainnetAdapter implements ChainAdapter, EvmNativeBalanceCapability, Erc20BalanceCapability, EvmPendingNonceCapability, EvmGasEstimateCapability, Eip1559FeeQuoteCapability, RawTransactionBroadcastCapability
+final readonly class EthereumMainnetAdapter implements ChainAdapter, EvmNativeBalanceCapability, Erc20BalanceCapability, EvmPendingNonceCapability, EvmGasEstimateCapability, Eip1559FeeQuoteCapability
 {
     public function __construct(private EthereumJsonRpcClient $rpc)
     {
@@ -57,14 +56,5 @@ final readonly class EthereumMainnetAdapter implements ChainAdapter, EvmNativeBa
     public function eip1559FeeQuote(): Eip1559FeeQuote
     {
         return $this->rpc->feeQuote();
-    }
-
-    public function broadcastRawTransaction(string $rawTransaction): string
-    {
-        if (1 !== preg_match('/^0x(?:[0-9a-fA-F]{2})+$/', $rawTransaction)) {
-            throw new \InvalidArgumentException('Invalid signed Ethereum raw transaction.');
-        }
-
-        return $this->rpc->broadcast($rawTransaction);
     }
 }

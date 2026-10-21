@@ -66,7 +66,9 @@ jobs:
               && docker compose exec -T php php bin/console debug:router api_ethereum_balance >/dev/null 2>&1 \
               && docker compose exec -T php php bin/console debug:router api_ethereum_usdt_erc20_balance >/dev/null 2>&1 \
               && docker compose exec -T php php bin/console debug:router api_ethereum_prepare >/dev/null 2>&1 \
-              && docker compose exec -T php php bin/console debug:router api_ethereum_broadcast >/dev/null 2>&1 \
+              && docker compose exec -T php php bin/console debug:router api_tron_prepare >/dev/null 2>&1 \
+              && docker compose exec -T php php bin/console debug:router api_tron_status >/dev/null 2>&1 \
+              && test "$(curl --silent --output /dev/null --write-out '%{http_code}' -X POST -H 'Content-Type: application/json' --data '{}' http://localhost:8080/api/chains/ethereum/mainnet/transactions/broadcast)" = 404 \
               && curl --fail --silent --show-error -H 'Accept: application/json' http://localhost:8080/api/health >/dev/null \
               && curl --fail --silent --show-error -H 'Accept: application/json' -D /tmp/doge-fee-policy.headers -o /tmp/doge-fee-policy.json http://localhost:8080/api/chains/dogecoin/mainnet/fee-policy \
               && curl --fail --silent --show-error -H 'Accept: application/json' -D /tmp/btc-fee-policy.headers -o /tmp/btc-fee-policy.json http://localhost:8080/api/chains/bitcoin/mainnet/fee-policy \
@@ -83,7 +85,8 @@ jobs:
           docker compose exec -T php php bin/console debug:router api_ethereum_balance || true
           docker compose exec -T php php bin/console debug:router api_ethereum_usdt_erc20_balance || true
           docker compose exec -T php php bin/console debug:router api_ethereum_prepare || true
-          docker compose exec -T php php bin/console debug:router api_ethereum_broadcast || true
+          docker compose exec -T php php bin/console debug:router api_tron_prepare || true
+          docker compose exec -T php php bin/console debug:router api_tron_status || true
           echo '--- DOGE fee policy ---'
           cat /tmp/doge-fee-policy.headers 2>/dev/null || true
           head -c 2000 /tmp/doge-fee-policy.json 2>/dev/null || true

@@ -7,15 +7,15 @@ export const platformCopy: Record<Language, {
   reloadWarning: string;
 }> = {
   en: {
-    subtitle: 'Dogecoin, Bitcoin, Ethereum and USDT ERC-20 are live non-custodial wallet flows. Ethereum-native assets share one browser-local wallet identity; signing keys stay in the browser.',
-    walletTilesHint: 'DOGE, BTC, ETH and USDT ERC-20 support live balances and browser-signed transfers.',
-    securityText: 'DOGE, BTC, ETH and USDT ERC-20 transaction signing happens locally in the browser. Seed phrases, WIF and private keys are never sent to the server.',
+    subtitle: 'DOGE, BTC, LTC, ETH and USDT on Ethereum or TRON. Keys and signing stay in your browser; you control publication to the network. Selecting a USDT network is not a swap or bridge.',
+    walletTilesHint: 'Choose an asset and network for public balances and browser-local signing.',
+    securityText: 'Seed phrases, WIF and private keys remain in browser memory. Symfony neither signs nor broadcasts transactions or custodies funds. Publish through your chosen direct provider or export the signed transaction.',
     reloadWarning: 'Save the seed before reloading or closing the page. The unlocked wallet exists only in this browser tab.',
   },
   ru: {
-    subtitle: 'Dogecoin, Bitcoin, Ethereum и USDT ERC-20 работают как non-custodial кошельки. ETH и ERC-20 используют один локальный Ethereum-кошелёк, а ключи подписи остаются в браузере.',
-    walletTilesHint: 'Для DOGE, BTC, ETH и USDT ERC-20 работают живые балансы и локально подписанные переводы.',
-    securityText: 'Подпись DOGE-, BTC-, ETH- и USDT ERC-20-транзакций выполняется локально в браузере. Seed-фразы, WIF и приватные ключи никогда не отправляются на сервер.',
+    subtitle: 'DOGE, BTC, LTC, ETH и USDT в Ethereum или TRON. Ключи и подпись остаются в браузере; публикацией в сеть управляете вы. Выбор сети USDT — не обмен и не мост.',
+    walletTilesHint: 'Выберите валюту и сеть для просмотра баланса и локальной подписи.',
+    securityText: 'Seed-фразы, WIF и приватные ключи остаются в памяти браузера. Symfony не подписывает, не отправляет транзакции и не хранит средства. Публикуйте через выбранного прямого провайдера или экспортируйте подписанную транзакцию.',
     reloadWarning: 'Сохраните seed до перезагрузки или закрытия страницы. Разблокированный кошелёк существует только в этой вкладке браузера.',
   },
 };

@@ -1,4 +1,5 @@
 parameters:
+    env(TRON_RPC_URL): ''
 
 services:
     _defaults:
@@ -24,6 +25,16 @@ services:
         arguments:
             $recommendedRateBtcPerKb: '%env(string:BTC_RECOMMENDED_FEE_RATE)%'
 
+    App\Blockchain\Infrastructure\TronRpcClient:
+        arguments:
+            $rpcUrl: '%env(string:TRON_RPC_URL)%'
+
+    App\Blockchain\Infrastructure\TronHttpTransport:
+        alias: App\Blockchain\Infrastructure\TronNativeHttpTransport
+
+    App\Blockchain\Application\TronClock:
+        alias: App\Blockchain\Infrastructure\TronSystemClock
+
     App\Blockchain\Infrastructure\EthereumJsonRpcClient:
         arguments:
             $rpcUrl: '%env(string:ETHEREUM_RPC_URL)%'
@@ -37,14 +48,8 @@ services:
     App\Blockchain\Application\DogecoinUtxoProvider:
         alias: App\Blockchain\Infrastructure\BlockCypherDogecoinUtxoProvider
 
-    App\Blockchain\Application\DogecoinTransactionBroadcaster:
-        alias: App\Blockchain\Infrastructure\BlockCypherDogecoinTransactionBroadcaster
-
     App\Blockchain\Application\BitcoinBalanceProvider:
         alias: App\Blockchain\Infrastructure\BlockCypherBitcoinBalanceProvider
 
     App\Blockchain\Application\BitcoinUtxoProvider:
         alias: App\Blockchain\Infrastructure\BlockCypherBitcoinUtxoProvider
-
-    App\Blockchain\Application\BitcoinTransactionBroadcaster:
-        alias: App\Blockchain\Infrastructure\BlockCypherBitcoinTransactionBroadcaster

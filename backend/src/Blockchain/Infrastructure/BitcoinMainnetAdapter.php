@@ -7,25 +7,21 @@ namespace App\Blockchain\Infrastructure;
 use App\Blockchain\Application\AddressBalanceCapability;
 use App\Blockchain\Application\BitcoinBalanceProvider;
 use App\Blockchain\Application\BitcoinFeePolicy;
-use App\Blockchain\Application\BitcoinTransactionBroadcaster;
 use App\Blockchain\Application\BitcoinUtxoProvider;
 use App\Blockchain\Application\ChainAdapter;
-use App\Blockchain\Application\RawTransactionBroadcastCapability;
 use App\Blockchain\Application\UtxoFeeRate;
 use App\Blockchain\Application\UtxoFeeRateCapability;
 use App\Blockchain\Application\UtxoLookupCapability;
 use App\Blockchain\Domain\AddressBalance;
 use App\Blockchain\Domain\BitcoinAddress;
-use App\Blockchain\Domain\BitcoinRawTransaction;
 use App\Blockchain\Domain\BitcoinUtxo;
 
-final readonly class BitcoinMainnetAdapter implements ChainAdapter, AddressBalanceCapability, UtxoLookupCapability, UtxoFeeRateCapability, RawTransactionBroadcastCapability
+final readonly class BitcoinMainnetAdapter implements ChainAdapter, AddressBalanceCapability, UtxoLookupCapability, UtxoFeeRateCapability
 {
     public function __construct(
         private BitcoinBalanceProvider $balanceProvider,
         private BitcoinUtxoProvider $utxoProvider,
         private BitcoinFeePolicy $feePolicy,
-        private BitcoinTransactionBroadcaster $transactionBroadcaster,
     ) {
     }
 
@@ -59,10 +55,5 @@ final readonly class BitcoinMainnetAdapter implements ChainAdapter, AddressBalan
             $this->feePolicy->recommendedRateBtcPerKb,
             BitcoinFeePolicy::UNIT,
         );
-    }
-
-    public function broadcastRawTransaction(string $rawTransaction): string
-    {
-        return $this->transactionBroadcaster->broadcast(BitcoinRawTransaction::fromHex($rawTransaction));
     }
 }

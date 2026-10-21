@@ -5,6 +5,7 @@ import { dogecoinMainnetAssetRouteAdapter, dogecoinMainnetWalletAdapter } from '
 import { ethereumMainnetAssetRouteAdapter, ethereumMainnetWalletAdapter, usdtEthereumMainnetAssetRouteAdapter } from './adapters/ethereumMainnet';
 import { litecoinMainnetAssetRouteAdapter, litecoinMainnetWalletAdapter } from './adapters/litecoinMainnet';
 import type { WalletNetworkAdapter } from './WalletNetworkAdapter';
+import { tronMainnetWalletAdapter, usdtTronMainnetAssetRouteAdapter } from './adapters/tronMainnet';
 
 export type AdapterRegistryOptions = { walletNetworkAdapters?: WalletNetworkAdapter[]; assetRouteAdapters?: AssetRouteAdapter[] };
 
@@ -33,6 +34,6 @@ export class AdapterRegistry {
 export function createAdapterRegistry(options: AdapterRegistryOptions = {}): AdapterRegistry { return new AdapterRegistry(options); }
 
 export const adapterRegistry = createAdapterRegistry({
-  walletNetworkAdapters: [dogecoinMainnetWalletAdapter, bitcoinMainnetWalletAdapter, litecoinMainnetWalletAdapter, ethereumMainnetWalletAdapter],
-  assetRouteAdapters: [dogecoinMainnetAssetRouteAdapter, bitcoinMainnetAssetRouteAdapter, litecoinMainnetAssetRouteAdapter, ethereumMainnetAssetRouteAdapter, usdtEthereumMainnetAssetRouteAdapter],
+  walletNetworkAdapters: [dogecoinMainnetWalletAdapter, bitcoinMainnetWalletAdapter, litecoinMainnetWalletAdapter, ethereumMainnetWalletAdapter, tronMainnetWalletAdapter],
+  assetRouteAdapters: [dogecoinMainnetAssetRouteAdapter, bitcoinMainnetAssetRouteAdapter, litecoinMainnetAssetRouteAdapter, ethereumMainnetAssetRouteAdapter, usdtEthereumMainnetAssetRouteAdapter, usdtTronMainnetAssetRouteAdapter],
 });

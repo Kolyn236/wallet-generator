@@ -6,14 +6,11 @@ namespace App\Blockchain\Presentation\Http;
 
 use App\Blockchain\Application\AddressBalanceCapability;
 use App\Blockchain\Application\BalanceLookupFailed;
-use App\Blockchain\Application\BroadcastFailed;
 use App\Blockchain\Application\ChainAdapterRegistry;
-use App\Blockchain\Application\RawTransactionBroadcastCapability;
 use App\Blockchain\Application\UtxoFeeRateCapability;
 use App\Blockchain\Application\UtxoLookupCapability;
 use App\Blockchain\Application\UtxoLookupFailed;
 use Symfony\Component\HttpFoundation\JsonResponse;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
 final readonly class LitecoinController
@@ -59,25 +56,5 @@ final readonly class LitecoinController
         $rate = $capability->feeRate();
 
         return new JsonResponse(['chain' => 'litecoin', 'network' => 'mainnet', 'kind' => $rate->kind, 'recommendedRate' => $rate->recommendedRate, 'unit' => $rate->unit]);
-    }
-
-    #[Route('/api/chains/litecoin/mainnet/transactions/broadcast', name: 'api_litecoin_broadcast', methods: ['POST'])]
-    public function broadcast(Request $request): JsonResponse
-    {
-        try {
-            $payload = $request->toArray();
-            $raw = $payload['rawTransaction'] ?? null;
-            if (!\is_string($raw)) {
-                throw new \InvalidArgumentException();
-            }
-            $capability = $this->registry->requireCapability('litecoin', 'mainnet', RawTransactionBroadcastCapability::class);
-            $txid = $capability->broadcastRawTransaction($raw);
-        } catch (\InvalidArgumentException) {
-            return new JsonResponse(['error' => 'invalid_transaction'], 400);
-        } catch (BroadcastFailed $e) {
-            return new JsonResponse(['error' => 'provider_unavailable', 'reason' => $e->reason], 502);
-        }
-
-        return new JsonResponse(['chain' => 'litecoin', 'network' => 'mainnet', 'txid' => $txid]);
     }
 }

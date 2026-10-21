@@ -30,7 +30,7 @@ A future own-node adapter can replace BlockCypher without changing browser signi
 2. Define a `UtxoP2pkhProfile` from authoritative chain parameters.
 3. Add the wallet-network and asset-route adapters; register both explicitly.
 4. Add backend `ChainAdapter` capabilities and provider configuration.
-5. Expose balance, confirmed UTXO, fee-policy and signed-raw broadcast endpoints.
+5. Expose public balance, confirmed UTXO and fee-policy endpoints only. Publication uses frontend direct/custom provider transport or signed-payload export; never introduce a Symfony broadcast endpoint.
 6. Add a deterministic BIP39 derivation vector and transaction regression vector before marking the route live.
 7. Extend adapter-registry invariants so unknown/cross-chain routes continue to fail closed.
 8. Keep seed/WIF/private key material browser-memory-only.

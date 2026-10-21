@@ -2,7 +2,7 @@
     "name": "kolyn236/chain-courier-backend",
     "description": "Symfony modular-monolith backend for ChainCourier",
     "type": "project",
-    "license": "proprietary",
+    "license": "MIT",
     "require": {
         "php": ">=8.4",
         "ext-ctype": "*",

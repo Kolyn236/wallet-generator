@@ -7,11 +7,13 @@ Current live frontend routes are:
 ```text
 doge-dogecoin-mainnet-native
 btc-bitcoin-mainnet-native
+ltc-litecoin-mainnet-native
 eth-ethereum-mainnet-native
 usdt-ethereum-mainnet-erc20
+usdt-tron-mainnet-trc20
 ```
 
-USDT TRC-20 remains planned. It must never resolve through the Ethereum ERC-20 runtime.
+USDT TRC-20 has its own TRON runtime and must never resolve through Ethereum ERC-20. Publication uses browser-side user-controlled endpoints/export, never Symfony. See `../SECURITY_MODEL.md`.
 
 ## Core concepts
 
@@ -56,7 +58,8 @@ An **Asset Route** joins one asset to one network and identifies how that asset 
 | `btc-bitcoin-mainnet-native` | BTC | Bitcoin mainnet | native | live |
 | `eth-ethereum-mainnet-native` | ETH | Ethereum mainnet | native | live |
 | `usdt-ethereum-mainnet-erc20` | USDT | Ethereum mainnet | ERC-20 token | live |
-| `usdt-tron-mainnet-trc20` | USDT | Tron mainnet | TRC-20 token | planned |
+| `usdt-tron-mainnet-trc20` | USDT | Tron mainnet | TRC-20 token | live |
+| `ltc-litecoin-mainnet-native` | LTC | Litecoin mainnet | native | live |
 
 The route, not the asset symbol alone, is the runtime selection and balance key.
 
@@ -78,10 +81,12 @@ Current live wallet-network adapters:
 ```text
 dogecoin-mainnet
 bitcoin-mainnet
+litecoin-mainnet
 ethereum-mainnet
+tron-mainnet
 ```
 
-All three live wallet-network adapters support English BIP39 mnemonic recovery using their fixed current derivation path. Import is an explicit network operation: selecting Bitcoin derives the Bitcoin identity, selecting Dogecoin derives the Dogecoin identity, and selecting either ETH or USDT ERC-20 derives the shared `ethereum-mainnet` identity.
+All live wallet-network adapters support English BIP39 recovery at fixed derivation paths. ETH and ERC-20 share `ethereum-mainnet`; TRC-20 uses separate `tron-mainnet` at `m/44'/195'/0'/0/0`.
 
 Wallet sessions are keyed by `networkId` and contain public identity/session state only. They deliberately contain no balance and no mnemonic/private signing material.
 
@@ -187,7 +192,7 @@ The fixed contract and route details are documented in `USDT_ERC20.md`.
 
 `USDT ERC-20` is carried by Ethereum and uses the Ethereum account/address space.
 
-`USDT TRC-20` is carried by Tron and requires a Tron wallet/network runtime. It remains planned and unregistered.
+`USDT TRC-20` is carried by TRON with its own wallet/network runtime, public-intent preparation, local serialization/signing and status lookup. See `TRON_TRC20.md`.
 
 The two routes must never resolve to each other.
 
@@ -215,8 +220,7 @@ UTXO capabilities include:
 
 - `AddressBalanceCapability`;
 - `UtxoLookupCapability`;
-- `UtxoFeeRateCapability`;
-- `RawTransactionBroadcastCapability`.
+- `UtxoFeeRateCapability`.
 
 Ethereum capabilities include:
 
@@ -224,8 +228,7 @@ Ethereum capabilities include:
 - `Erc20BalanceCapability`;
 - `EvmPendingNonceCapability`;
 - `EvmGasEstimateCapability`;
-- `Eip1559FeeQuoteCapability`;
-- `RawTransactionBroadcastCapability`.
+- `Eip1559FeeQuoteCapability`.
 
 Ethereum deliberately does not implement UTXO capabilities.
 
@@ -238,7 +241,9 @@ The USDT HTTP balance use case chooses the fixed USDT contract itself. The publi
 ```text
 dogecoin:mainnet
 bitcoin:mainnet
+litecoin:mainnet
 ethereum:mainnet
+tron:mainnet
 ```
 
 Rules:
@@ -248,18 +253,18 @@ Rules:
 - unsupported capability throws `UnsupportedChainCapability`;
 - no lookup falls back to another chain adapter.
 
-Ethereum verifies the provider reports `eth_chainId == 1` before state/broadcast operations.
+Ethereum verifies `eth_chainId == 1` before state/preparation operations. No backend adapter exposes raw broadcast. Publication belongs to frontend transports, not a controller or backend capability.
 
 ## Automated guardrails
 
 Frontend invariant tests verify that:
 
-- all live DOGE/BTC/ETH/USDT-ERC20 routes have exact route and wallet-network adapters;
+- all live DOGE/BTC/LTC/ETH/USDT-ERC20/USDT-TRC20 routes have exact adapters;
 - every live wallet-network adapter exposes mnemonic recovery;
 - fixed public BIP39 vectors recover the expected DOGE/BTC/Ethereum identity;
 - recovered signing wallets do not retain the entered mnemonic;
 - invalid BIP39 mnemonics fail closed;
-- TRC-20 remains unregistered while planned;
+- TRC-20 resolves only to its own adapter and separate TRON session;
 - ETH and USDT resolve to different route adapters but the same Ethereum wallet-network adapter;
 - built-in registry keys are unique;
 - unknown route/network keys fail closed;

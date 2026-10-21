@@ -33,12 +33,33 @@ phases:
   - id: frontend-bitcoin-vector
     service: node
     command: [npm, run, test:bitcoin-vector]
+  - id: frontend-litecoin-vector
+    service: node
+    command: [npm, run, test:litecoin-vector]
   - id: frontend-ethereum-vector
     service: node
     command: [npm, run, test:ethereum-vector]
   - id: frontend-usdt-erc20-vector
     service: node
     command: [npm, run, test:usdt-erc20-vector]
+  - id: frontend-tron-vector
+    service: node
+    command: [npm, run, test:tron-vector]
+  - id: frontend-tron-flow
+    service: node
+    command: [npm, run, test:tron-flow]
+  - id: frontend-broadcast
+    service: node
+    command: [npm, run, test:broadcast]
+  - id: frontend-usdt-route-chooser
+    service: node
+    command: [npm, run, test:usdt-route-chooser]
+  - id: frontend-transfer-review
+    service: node
+    command: [npm, run, test:transfer-review]
+  - id: frontend-public-runtime
+    service: node
+    command: [npm, run, test:public-runtime]
   - id: frontend-build
     service: node
     command: [npm, run, build]

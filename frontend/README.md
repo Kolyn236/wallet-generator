@@ -6,8 +6,10 @@ Current live frontend routes:
 
 - DOGE / Dogecoin mainnet;
 - BTC / Bitcoin mainnet legacy P2PKH local signing, with P2PKH/P2SH watch-only connections;
+- LTC / Litecoin mainnet legacy P2PKH;
 - ETH / Ethereum mainnet EIP-1559;
-- USDT / Ethereum mainnet ERC-20.
+- USDT / Ethereum mainnet ERC-20;
+- USDT / TRON mainnet TRC-20, with a separate `tron-mainnet` identity.
 
 Wallet sessions are network-scoped and kept in browser memory. DOGE/BTC use WIF-backed UTXO signing; Ethereum uses the BIP39/BIP44 derivation path `m/44'/60'/0'/0/0` and browser-local private-key signing for EIP-1559 Type-2 transactions.
 
@@ -21,7 +23,9 @@ USDT balance loading uses the fixed token contract through the backend `eth_call
 
 Seed phrases, private keys and WIF must never be sent to Symfony or persisted in browser storage. Existing DOGE/BTC senders may enter a matching WIF in the transfer flow; existing Ethereum/USDT senders may enter a matching Ethereum private key. Both remain browser-local.
 
-USDT TRC-20 remains planned and does not resolve through the Ethereum route.
+USDT TRC-20 uses `m/44'/195'/0'/0/0`, fixed official USDT contract and local deterministic TRON serialization/TXID/signing. It never resolves through Ethereum and uses TRX rather than ETH for network resources/fees. The USDT chooser selects the network where funds already reside; it performs no swap or bridge.
+
+All routes separate public preparation/review, explicit local signing and explicit publication. Signed bytes go directly to a user-selected external HTTPS provider/node or through explicit export, never to Symfony for publication. Provider CORS/authentication may require export; there is no bundled provider key or implicit relay. Retries retain identical signed bytes without re-signing. See `../docs/SECURITY_MODEL.md` for hosted-frontend trust and browser-memory limitations.
 
 ## Local development
 
@@ -30,8 +34,15 @@ npm ci
 npm run test:adapter-invariants
 npm run test:dogecoin-vector
 npm run test:bitcoin-vector
+npm run test:litecoin-vector
 npm run test:ethereum-vector
 npm run test:usdt-erc20-vector
+npm run test:tron-vector
+npm run test:tron-flow
+npm run test:broadcast
+npm run test:transfer-review
+npm run test:usdt-route-chooser
+npm run test:public-runtime
 npm run build
 npm run dev
 ```

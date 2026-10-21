@@ -2,6 +2,7 @@
   "name": "chain-courier-frontend",
   "private": true,
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -13,7 +14,13 @@
     "test:bitcoin-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/bitcoin-vector-test.ts",
     "test:litecoin-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/litecoin-vector-test.ts",
     "test:ethereum-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/ethereum-vector-test.ts",
-    "test:usdt-erc20-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/usdt-erc20-vector-test.ts"
+    "test:usdt-erc20-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/usdt-erc20-vector-test.ts",
+    "test:usdt-route-chooser": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/usdt-route-chooser-test.ts",
+    "test:tron-vector": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/tron-vector-test.ts",
+    "test:broadcast": "node --experimental-loader ./scripts/typescript-resolver.mjs scripts/browser-broadcast-test.ts && node --experimental-loader ./scripts/broadcast-ui-loader.mjs scripts/broadcast-controls-test.ts",
+    "test:public-runtime": "node scripts/public-runtime-test.ts",
+    "test:transfer-review": "node scripts/transfer-review-test.ts && node scripts/transfer-signing-behavior-test.ts && node scripts/wallet-identity-reset-test.ts",
+    "test:tron-flow": "node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/tron-api-test.ts && node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/tron-review-test.ts && node --experimental-transform-types --experimental-loader ./scripts/typescript-resolver.mjs scripts/tron-flow-test.ts && node --experimental-transform-types --experimental-loader ./scripts/broadcast-ui-loader.mjs scripts/tron-panel-test.ts"
   },
   "dependencies": {
     "@noble/hashes": "2.3.0",
@@ -28,6 +35,6 @@
     "@types/react-dom": "19.2.5",
     "@vitejs/plugin-react": "6.1.0",
     "typescript": "7.0.2",
-    "vite": "8.2.2"
+    "vite": "8.3.4"
   }
 }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Blockchain;
 
-use App\Blockchain\Application\BroadcastEthereumTransaction;
 use App\Blockchain\Application\ChainAdapter;
 use App\Blockchain\Application\ChainAdapterRegistry;
 use App\Blockchain\Application\Eip1559FeeQuote;
@@ -15,7 +14,6 @@ use App\Blockchain\Application\EvmPendingNonceCapability;
 use App\Blockchain\Application\EvmTransactionIntent;
 use App\Blockchain\Application\GetEthereumAddressBalance;
 use App\Blockchain\Application\PrepareEthereumTransaction;
-use App\Blockchain\Application\RawTransactionBroadcastCapability;
 use PHPUnit\Framework\TestCase;
 
 final class EthereumUseCasesTest extends TestCase
@@ -72,20 +70,9 @@ final class EthereumUseCasesTest extends TestCase
         new EvmTransactionIntent(self::FROM, self::TO, '01', '0x');
     }
 
-    public function testBroadcastDelegatesOnlySignedRawBytes(): void
-    {
-        $registry = new ChainAdapterRegistry([self::adapter()]);
-        $raw = '0x02abcd';
-
-        self::assertSame(
-            '0x'.str_repeat('ab', 32),
-            (new BroadcastEthereumTransaction($registry))($raw),
-        );
-    }
-
     private static function adapter(): ChainAdapter
     {
-        return new class implements ChainAdapter, EvmNativeBalanceCapability, EvmPendingNonceCapability, EvmGasEstimateCapability, Eip1559FeeQuoteCapability, RawTransactionBroadcastCapability {
+        return new class implements ChainAdapter, EvmNativeBalanceCapability, EvmPendingNonceCapability, EvmGasEstimateCapability, Eip1559FeeQuoteCapability {
             public function chain(): string
             {
                 return 'ethereum';
@@ -114,15 +101,6 @@ final class EthereumUseCasesTest extends TestCase
             public function eip1559FeeQuote(): Eip1559FeeQuote
             {
                 return new Eip1559FeeQuote('20000000000', '1000000000', '41000000000');
-            }
-
-            public function broadcastRawTransaction(string $rawTransaction): string
-            {
-                if ('0x02abcd' !== $rawTransaction) {
-                    throw new \LogicException('Unexpected raw transaction.');
-                }
-
-                return '0x'.str_repeat('ab', 32);
             }
         };
     }

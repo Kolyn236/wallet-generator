@@ -1,0 +1,52 @@
+import type { Language } from './i18n';
+const en = {
+  title: 'Send USDT on TRON', description: 'Prepare public intent, review, then sign locally. Signing never publishes the transaction.',
+  fees: 'USDT TRC-20 only. Network energy and bandwidth are paid in TRX, not USDT. No swap or bridge.',
+  from: 'Sender', to: 'Recipient', amount: 'Amount (USDT)', prepare: 'Prepare review', preparing: 'Preparing…',
+  review: 'Unsigned transaction review', sign: 'Sign locally', unsigned: 'Verify every field before signing. This review and its TXID are calculated locally from the exact unsigned bytes.',
+  signed: 'Signed locally. Choose direct publication or export below.', watch: 'Watch-only: preparation is available, but signing is disabled. Recover or create a TRON wallet to sign.',
+  submitted: 'Provider accepted submission. This is not proof of inclusion or successful execution.',
+  check: 'Check execution status', checking: 'Checking…', unknown: 'Unknown — not yet observed', observed: 'Observed by provider — not confirmed',
+  included: 'Included — not solidified', solidified: 'Included and solidified — execution not yet verified', success: 'Execution successful (solidified)', failure: 'Execution failed (solidified)',
+  error: 'Preparation or signing failed. Check the intent, wallet, balances and provider, then prepare again.',
+  expired: 'Preparation expired or is too old to sign. Prepare and review again explicitly; the app will not rebuild or re-sign automatically.',
+  expiredUnknown: 'The locally known expiry has passed and this provider has no observation. Execution before expiry is still unknown; check another trusted source before explicitly preparing a replacement.',
+  broadcastError: 'Submission failed or its result is uncertain. The identical signed bytes are retained. Check the TXID before retrying or export.',
+  statusError: 'Status lookup failed. Submission does not establish execution success.',
+  mismatch: 'Signing key does not match the selected TRON sender.', funds: 'Insufficient USDT or TRX for the conservative network fee limit.',
+  active: 'Active', inactive: 'Inactive — activation/resources may affect execution',
+  labels: {
+    network: 'Network', route: 'Asset route', contract: 'USDT contract', decimals: 'Token decimals', units: 'Token base units',
+    energy: 'Estimated energy', energyPrice: 'Energy price (SUN)', bandwidthPrice: 'Bandwidth price (SUN/byte)', bandwidth: 'Charged bandwidth bytes (conservative)',
+    energyFee: 'Estimated energy fee (SUN)', feeLimit: 'Energy fee limit (SUN)', bandwidthFee: 'Maximum bandwidth fee (SUN)', maxFee: 'Maximum network fee (SUN)',
+    trxFee: 'Maximum network fee (TRX)', trx: 'Sender TRX balance (SUN)', tokens: 'Sender USDT balance (base units)', recipientActive: 'Recipient account',
+    block: 'TAPOS block number', blockId: 'TAPOS block ID', blockBytes: 'TAPOS reference bytes', blockHash: 'TAPOS reference hash', timestamp: 'Timestamp (Unix ms)', expiration: 'Expiry (Unix ms)', txId: 'Locally calculated TXID',
+    blockNumber: 'Included block', actualFee: 'Actual fee (SUN)', energyUsed: 'Energy used', failureCode: 'Execution failure code',
+  },
+};
+type Copy = { [K in keyof typeof en]: K extends 'labels' ? {[L in keyof typeof en.labels]: string} : string };
+const ru: Copy = {
+  title: 'Отправить USDT в TRON', description: 'Подготовьте публичные параметры, проверьте их и подпишите локально. Подпись не отправляет транзакцию.',
+  fees: 'Только USDT TRC-20. Энергия и пропускная способность оплачиваются в TRX, не USDT. Это не обмен и не мост.',
+  from: 'Отправитель', to: 'Получатель', amount: 'Сумма (USDT)', prepare: 'Подготовить для проверки', preparing: 'Подготовка…',
+  review: 'Проверка неподписанной транзакции', sign: 'Подписать локально', unsigned: 'Проверьте все поля перед подписью. Параметры и TXID рассчитаны локально из точных неподписанных байтов.',
+  signed: 'Подписано локально. Выберите прямую отправку или экспорт ниже.', watch: 'Только просмотр: подготовка доступна, подпись отключена. Восстановите или создайте кошелёк TRON для подписи.',
+  submitted: 'Провайдер принял отправку. Это не подтверждение включения в блок или успешного исполнения.',
+  check: 'Проверить исполнение', checking: 'Проверка…', unknown: 'Неизвестно — транзакция пока не обнаружена', observed: 'Обнаружено провайдером — не подтверждено',
+  included: 'Включено в блок — без финализации', solidified: 'Блок финализирован — исполнение ещё не проверено', success: 'Исполнено успешно (финализировано)', failure: 'Ошибка исполнения (финализировано)',
+  error: 'Не удалось подготовить или подписать. Проверьте параметры, кошелёк, балансы и провайдера, затем повторите подготовку.',
+  expired: 'Подготовка истекла или устарела для подписи. Явно подготовьте и проверьте заново. Автоматической пересборки или подписи нет.',
+  expiredUnknown: 'Локально известный срок истёк, а у провайдера нет наблюдения. Исполнение до истечения срока остаётся неизвестным; проверьте другой доверенный источник перед явной подготовкой замены.',
+  broadcastError: 'Ошибка отправки или неопределённый результат. Те же подписанные байты сохранены. Проверьте TXID перед повтором или экспортом.',
+  statusError: 'Не удалось проверить статус. Отправка не означает успешное исполнение.', mismatch: 'Ключ подписи не соответствует выбранному адресу TRON.', funds: 'Недостаточно USDT или TRX для консервативного лимита комиссии.',
+  active: 'Активен', inactive: 'Неактивен — активация и ресурсы могут повлиять на исполнение',
+  labels: {
+    network: 'Сеть', route: 'Маршрут актива', contract: 'Контракт USDT', decimals: 'Десятичные знаки токена', units: 'Минимальные единицы токена',
+    energy: 'Оценка энергии', energyPrice: 'Цена энергии (SUN)', bandwidthPrice: 'Цена полосы (SUN/байт)', bandwidth: 'Расчётные байты полосы (консервативно)',
+    energyFee: 'Оценка комиссии энергии (SUN)', feeLimit: 'Лимит комиссии энергии (SUN)', bandwidthFee: 'Максимальная комиссия полосы (SUN)', maxFee: 'Максимальная комиссия сети (SUN)',
+    trxFee: 'Максимальная комиссия сети (TRX)', trx: 'Баланс TRX отправителя (SUN)', tokens: 'Баланс USDT отправителя (мин. единицы)', recipientActive: 'Аккаунт получателя',
+    block: 'Номер блока TAPOS', blockId: 'ID блока TAPOS', blockBytes: 'Опорные байты TAPOS', blockHash: 'Опорный хеш TAPOS', timestamp: 'Время (Unix мс)', expiration: 'Истечение (Unix мс)', txId: 'Локально рассчитанный TXID',
+    blockNumber: 'Блок включения', actualFee: 'Фактическая комиссия (SUN)', energyUsed: 'Использовано энергии', failureCode: 'Код ошибки исполнения',
+  },
+};
+export const tronMessages: Record<Language, Copy> = {en, ru};

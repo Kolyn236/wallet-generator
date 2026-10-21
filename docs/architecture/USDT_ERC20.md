@@ -91,8 +91,8 @@ compare provider transaction hash with local hash
 
 ## Non-custodial boundary
 
-The private key and seed stay in browser memory. Symfony receives only public addresses, token balance calls, public transaction intent and already-signed raw transaction bytes.
+The private key and seed stay in browser memory. Symfony receives only public addresses, token balance calls and unsigned public transaction intent. Signed transaction publication goes directly from the browser to a user-selected Ethereum RPC endpoint or through explicit export for external publication, never through Symfony.
 
 ETH and USDT route balances are stored independently by asset route. Replacing the shared Ethereum wallet identity invalidates both balances together.
 
-USDT TRC-20 is not part of this runtime and remains a separate planned Tron route.
+USDT TRC-20 uses a separate `tron-mainnet` wallet identity and asset-route adapter. Selecting USDT's network is neither swap nor bridge and never converts or moves tokens. See `TRON_TRC20.md` and `../SECURITY_MODEL.md`.

@@ -1,6 +1,6 @@
 # Ethereum Mainnet backend contract
 
-The Ethereum backend is a non-custodial public-state and broadcast gateway for browser-local signers.
+The Ethereum backend is a public-state and preparation gateway for browser-local signers. It does not receive signed transactions for publication or broadcast them.
 
 ## Runtime identity
 
@@ -10,7 +10,7 @@ The backend registry key is exactly:
 ethereum:mainnet
 ```
 
-The adapter exposes EVM-specific capabilities for native ETH balance, ERC-20 balance reads, pending nonce, gas estimation and EIP-1559 fee quoting, plus signed raw transaction broadcast. It deliberately does not expose UTXO capabilities.
+The adapter exposes EVM-specific capabilities for native ETH balance, ERC-20 balance reads, pending nonce, gas estimation and EIP-1559 fee quoting. It deliberately exposes neither UTXO nor broadcast capabilities.
 
 ## Provider boundary
 
@@ -23,8 +23,7 @@ Only RPC methods required by live Ethereum routes are used:
 - `eth_call` for ERC-20 balance reads;
 - `eth_getTransactionCount` with the `pending` tag;
 - `eth_estimateGas`;
-- `eth_feeHistory`;
-- `eth_sendRawTransaction`.
+- `eth_feeHistory`.
 
 Every operation fails closed unless `eth_chainId` resolves to chain ID `1`.
 
@@ -50,10 +49,9 @@ This is wallet policy, not a protocol constant. Missing or malformed EIP-1559 da
 GET  /api/chains/ethereum/mainnet/addresses/{address}/balance
 GET  /api/chains/ethereum/mainnet/tokens/usdt/addresses/{address}/balance
 POST /api/chains/ethereum/mainnet/transactions/prepare
-POST /api/chains/ethereum/mainnet/transactions/broadcast
 ```
 
-Prepare accepts only public transaction intent fields: `from`, `to`, `valueWei` and `data`. The same prepare endpoint supports native ETH and token contract calls. Broadcast accepts only an already-signed `rawTransaction`.
+Prepare accepts only public transaction intent fields: `from`, `to`, `valueWei` and `data`. The same prepare endpoint supports native ETH and token contract calls. There is no Symfony broadcast endpoint. Browser publication uses a user-selected direct JSON-RPC endpoint or signed-payload export; see `../SECURITY_MODEL.md`.
 
 Symfony never receives an Ethereum mnemonic or private key and never signs Ethereum transactions.
 

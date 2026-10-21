@@ -1,12 +1,15 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { broadcastLitecoinTransaction, getLitecoinFeePolicy, getLitecoinUtxos, WalletApiError } from './api';
+import { transferReviewMessages } from './transferReviewI18n';
+import { BroadcastControls } from './broadcast/BroadcastControls';
+import { broadcastSignedTransaction, type BroadcastDestination } from './broadcast/browserBroadcast';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { getLitecoinFeePolicy, getLitecoinUtxos, WalletApiError } from './api';
 import { getAsset } from './assets';
 import { type Language, messages } from './i18n';
 import { isLitecoinMainnetAddress, type CreatedLitecoinWallet } from './wallet/litecoin';
 import { buildSignedLitecoinTransfer, type SignedLitecoinTransfer } from './wallet/litecoinTransaction';
 
 type WalletMode = 'none' | 'created' | 'watch-only';
-type TransferState = 'idle' | 'preparing' | 'prepared' | 'broadcasting' | 'broadcasted';
+type TransferState = 'idle' | 'preparing' | 'review' | 'prepared' | 'broadcasting' | 'broadcasted';
 type FeePolicyState = 'idle' | 'loading' | 'loaded' | 'error';
 type TransferError = 'form' | 'sender-invalid' | 'recipient-invalid' | 'wif-required' | 'wif-invalid' | 'wif-mismatch' | 'fee-rate-invalid' | 'fee-policy' | 'utxo' | 'insufficient-funds' | 'amount-below-dust' | 'same-address' | 'signing' | 'broadcast';
 
@@ -14,6 +17,7 @@ type Props = { language: Language; networkName: string; networkStandard: string;
 
 export function LitecoinTransferPanel({ language, networkName, networkStandard, sourceAddress, walletMode, createdWallet }: Props) {
   const copy = messages[language];
+  const reviewCopy = transferReviewMessages[language];
   const network = getAsset('ltc').networks.find((candidate) => candidate.standard === networkStandard);
   const feePolicy = network?.feePolicy?.kind === 'utxo-rate-per-kb' ? network.feePolicy : null;
   const feeUnit = feePolicy?.unit ?? '';
@@ -26,6 +30,8 @@ export function LitecoinTransferPanel({ language, networkName, networkStandard, 
   const [feePolicyState, setFeePolicyState] = useState<FeePolicyState>('idle');
   const [state, setState] = useState<TransferState>('idle');
   const [error, setError] = useState<TransferError | null>(null);
+  const generation = useRef(0);
+  const [publicPreparation, setPublicPreparation] = useState<Readonly<Omit<Parameters<typeof buildSignedLitecoinTransfer>[0], 'wif'>> | null>(null);
   const [signedTransfer, setSignedTransfer] = useState<SignedLitecoinTransfer | null>(null);
   const [broadcastTxid, setBroadcastTxid] = useState<string | null>(null);
 
@@ -56,10 +62,25 @@ export function LitecoinTransferPanel({ language, networkName, networkStandard, 
     }
   }, [copy, error]);
 
-  function resetResult() { setSignedTransfer(null); setBroadcastTxid(null); setState('idle'); setError(null); }
+  function resetResult() {
+    generation.current += 1;
+    setPublicPreparation(null);
+    setSignedTransfer(null);
+    setBroadcastTxid(null);
+    setState('idle');
+    setError(null);
+  }
+
+  useEffect(() => {
+    resetResult();
+    setSender(sourceAddress);
+    setWif(createdWallet?.wif ?? '');
+    return () => { generation.current += 1; };
+  }, [sourceAddress, createdWallet?.address, createdWallet?.wif, walletMode, networkName, networkStandard]);
 
   async function prepareTransfer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); resetResult();
+    const requestGeneration = generation.current;
     if (!feePolicy || feePolicyState !== 'loaded') { setError('fee-policy'); return; }
     const source = sender.trim(); const destination = recipient.trim(); const signingWif = wif.trim(); const selectedFeeRate = feeRate.trim();
     if (!source || !destination || !amount.trim()) { setError('form'); return; }
@@ -70,9 +91,36 @@ export function LitecoinTransferPanel({ language, networkName, networkStandard, 
     setState('preparing');
     try {
       const response = await getLitecoinUtxos(source);
-      const built = buildSignedLitecoinTransfer({ wif: signingWif, sourceAddress: source, recipientAddress: destination, amount, feeRateLtcPerKb: selectedFeeRate, utxos: response.utxos });
-      setSignedTransfer(built); setState('prepared');
+      if (generation.current !== requestGeneration) return;
+      const utxos = response.utxos.filter((utxo) => utxo.confirmations > 0).map((utxo) => Object.freeze({ ...utxo }));
+      if (utxos.some((utxo) => typeof utxo.valueSmallestUnit !== 'string' || !/^(0|[1-9]\d*)$/.test(utxo.valueSmallestUnit))) throw new Error('invalid_utxo');
+      Object.freeze(utxos);
+      setPublicPreparation(Object.freeze({
+        sourceAddress: source, recipientAddress: destination, amount,
+        feeRateLtcPerKb: selectedFeeRate, utxos,
+      }));
+      setState('review');
     } catch (caught: unknown) {
+      if (generation.current !== requestGeneration) return;
+      handleTransferError(caught);
+    }
+  }
+
+  function signTransfer() {
+    if (!publicPreparation || state !== 'review') return;
+    setError(null);
+    try {
+      // Use only the reviewed public snapshot and the current in-memory key.
+      // The canonical builder rechecks key/source ownership before signing.
+      const signed = buildSignedLitecoinTransfer({ ...publicPreparation, wif: wif.trim() });
+      setSignedTransfer(signed);
+      setState('prepared');
+    } catch (caught: unknown) {
+      handleTransferError(caught);
+    }
+  }
+
+  function handleTransferError(caught: unknown) {
       setState('idle');
       if (caught instanceof WalletApiError) { setError('utxo'); return; }
       if (caught instanceof Error) {
@@ -83,17 +131,19 @@ export function LitecoinTransferPanel({ language, networkName, networkStandard, 
         return;
       }
       setError('signing');
-    }
   }
 
-  async function broadcastPreparedTransfer() {
+  async function broadcastPreparedTransfer(destination: BroadcastDestination) {
     if (!signedTransfer || state !== 'prepared') return;
+    const requestGeneration = generation.current;
     setState('broadcasting'); setError(null);
     try {
-      const result = await broadcastLitecoinTransaction(signedTransfer.rawTransaction);
+      const result = await broadcastSignedTransaction(destination, { rawTransaction: signedTransfer.rawTransaction, txid: signedTransfer.txid });
+      if (generation.current !== requestGeneration) return;
       if (result.txid.toLowerCase() !== signedTransfer.txid.toLowerCase()) throw new Error('broadcast_txid_mismatch');
       setBroadcastTxid(result.txid); setState('broadcasted');
-    } catch { setState('prepared'); setError('broadcast'); }
+    } catch {
+      if (generation.current !== requestGeneration) return; setState('prepared'); setError('broadcast'); }
   }
 
   return <section className="transfer-card" id="transfer">
@@ -106,10 +156,31 @@ export function LitecoinTransferPanel({ language, networkName, networkStandard, 
       <label><span>{copy.feeRate}</span><div className="amount-field"><input value={feeRate} onChange={(e) => { setFeeRate(e.target.value); resetResult(); }} inputMode="decimal" placeholder={recommendedFeeRate || '—'} autoComplete="off" disabled={busy || feePolicyState !== 'loaded'} /><strong>{feeUnit}</strong></div>{feePolicyState === 'loading' && <small className="transfer-policy">{copy.checking}</small>}{feePolicyState === 'loaded' && <small className="transfer-policy">{copy.recommendedFeeRate}: {recommendedFeeRate} {feeUnit}</small>}{feePolicyState === 'error' && <small className="form-error">{copy.transferUnavailable}</small>}</label></div>
       {customFeeRate && <><p className="transfer-notice">{copy.customFeeWarning}</p><button className="text-button" type="button" onClick={() => { setFeeRate(recommendedFeeRate); resetResult(); }} disabled={busy}>{copy.useRecommendedFeeRate}</button></>}
       {walletMode === 'watch-only' && <p className="transfer-notice">{copy.transferWatchOnly}</p>}{walletMode === 'none' && <p className="transfer-notice">{copy.transferAnySender}</p>}{errorMessage && <p className="form-error">{errorMessage}</p>}
-      <button className="submit-button" type="submit" disabled={busy || !canPrepare}>{state === 'preparing' ? copy.preparingTransfer : copy.previewTransfer}</button>
+      <button className="submit-button" type="submit" disabled={busy || !canPrepare}>{state === 'preparing' ? copy.preparingTransfer : reviewCopy.prepare}</button>
     </form>
+      {publicPreparation && !signedTransfer && (
+        <div className="transfer-preview">
+          <div className="preview-header"><strong>{reviewCopy.review}</strong><span>{networkStandard}</span></div>
+          <p>{reviewCopy.unsigned}</p>
+          <dl>
+            <div><dt>{copy.from}</dt><dd>{publicPreparation.sourceAddress}</dd></div>
+            <div><dt>{copy.recipient}</dt><dd>{publicPreparation.recipientAddress}</dd></div>
+            <div><dt>{copy.amount}</dt><dd>{publicPreparation.amount} LTC</dd></div>
+            <div><dt>{copy.network}</dt><dd>{networkName} · {networkStandard}</dd></div>
+            <div><dt>{copy.feeRate}</dt><dd>{publicPreparation.feeRateLtcPerKb} {feeUnit}</dd></div>
+            <div><dt>{reviewCopy.total}</dt><dd>{publicPreparation.utxos.reduce((total, utxo) => total + BigInt(utxo.valueSmallestUnit), 0n).toString()}</dd></div>
+            <div><dt>{reviewCopy.inputs}</dt><dd><ul>{publicPreparation.utxos.map((utxo) => <li key={`${utxo.txid}:${utxo.vout}`}>{utxo.txid}:{utxo.vout} · {utxo.valueSmallestUnit} · {utxo.confirmations} · {utxo.scriptPubKey}</li>)}</ul></dd></div>
+          </dl>
+          <p>{reviewCopy.provisional}</p>
+          <button className="submit-button" type="button" onClick={signTransfer} disabled={busy || state !== 'review'}>{reviewCopy.sign}</button>
+        </div>
+      )}
+
     {signedTransfer && <div className="transfer-preview"><div className="preview-header"><strong>{copy.preview}</strong><span>{networkStandard}</span></div><dl>
       <div><dt>{copy.from}</dt><dd>{sender.trim()}</dd></div><div><dt>{copy.recipient}</dt><dd>{recipient.trim()}</dd></div><div><dt>{copy.amount}</dt><dd>{signedTransfer.amount} LTC</dd></div><div><dt>{copy.feeRate}</dt><dd>{signedTransfer.feeRate} {feeUnit}</dd></div><div><dt>{copy.fee}</dt><dd>{signedTransfer.fee} LTC</dd></div><div><dt>{copy.change}</dt><dd>{signedTransfer.change} LTC</dd></div><div><dt>{copy.inputCount}</dt><dd>{signedTransfer.inputCount}</dd></div><div className="preview-txid"><dt>{copy.txid}</dt><dd>{signedTransfer.txid}</dd></div><div><dt>{copy.network}</dt><dd>{networkName}</dd></div>
-    </dl><small>{copy.previewSignedLocal}</small><div className="broadcast-actions"><button className="broadcast-button" type="button" onClick={() => void broadcastPreparedTransfer()} disabled={state === 'broadcasting' || state === 'broadcasted'}>{state === 'broadcasting' ? copy.broadcasting : copy.sendToNetwork}</button>{state === 'broadcasted' && broadcastTxid && <div className="broadcast-success"><strong>{copy.broadcastSuccess}</strong><span>{copy.broadcastedTxid}: <code>{broadcastTxid}</code></span></div>}</div></div>}
+    </dl><small>{copy.previewSignedLocal}</small><div className="broadcast-actions"><BroadcastControls language={language} kind="utxo-blockcypher"
+              rawTransaction={signedTransfer.rawTransaction} txid={signedTransfer.txid}
+              busy={state === 'broadcasting'} disabled={state === 'broadcasted'}
+              onBroadcast={broadcastPreparedTransfer} />{state === 'broadcasted' && broadcastTxid && <div className="broadcast-success"><strong>{copy.broadcastSuccess}</strong><span>{copy.broadcastedTxid}: <code>{broadcastTxid}</code></span></div>}</div></div>}
   </section>;
 }

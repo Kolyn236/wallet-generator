@@ -16,11 +16,13 @@ The initial relationships are:
 ```text
 dogecoin-mainnet -> Dogecoin -> UTXO
 bitcoin-mainnet  -> Bitcoin  -> UTXO
+litecoin-mainnet -> Litecoin -> UTXO
 ethereum-mainnet -> Ethereum -> EVM
 tron-mainnet     -> Tron     -> TRON
 
 DOGE -> dogecoin-mainnet -> native
 BTC  -> bitcoin-mainnet  -> native
+LTC  -> litecoin-mainnet -> native
 ETH  -> ethereum-mainnet -> native
 USDT -> ethereum-mainnet -> token / ERC-20
 USDT -> tron-mainnet     -> token / TRC-20
@@ -37,12 +39,13 @@ Current state:
 ```text
 doge-dogecoin-mainnet-native -> live
 btc-bitcoin-mainnet-native   -> live
-eth-ethereum-mainnet-native  -> planned
-usdt-ethereum-mainnet-erc20  -> planned
-usdt-tron-mainnet-trc20      -> planned
+ltc-litecoin-mainnet-native  -> live
+eth-ethereum-mainnet-native  -> live
+usdt-ethereum-mainnet-erc20  -> live
+usdt-tron-mainnet-trc20      -> live
 ```
 
-The asset-level badge shown by the UI is derived from route status. If any route for an asset is live, the asset may be shown as available, but a selected planned route stays unavailable. This prevents a future `USDT ERC-20 = live` change from accidentally enabling the still-planned TRC-20 route.
+The asset-level badge is derived from route status; each live route requires its own complete runtime. The USDT chooser reads existing route/session/balance state without render-time provider requests. Ethereum/ERC-20 uses ETH gas; TRON/TRC-20 uses TRX resources/fees. Selection is not conversion, swap or bridge.
 
 `getDefaultAssetRoute(assetId)` chooses a live route when one exists. If none is live it uses the deterministic first catalog route. This decision is based on catalog availability only and does not inspect the runtime adapter registry.
 

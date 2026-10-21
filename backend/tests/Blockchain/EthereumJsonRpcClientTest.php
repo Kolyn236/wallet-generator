@@ -176,52 +176,6 @@ final class EthereumJsonRpcClientTest extends TestCase
         }
     }
 
-    public function testBroadcastValidatesReturnedTransactionHash(): void
-    {
-        $transport = new QueueEthereumTransport([
-            self::rpcResult('0x1'),
-            self::rpcResult('0x1234'),
-        ]);
-
-        try {
-            self::client($transport)->broadcast('0x02abcd');
-            self::fail('Malformed provider transaction hash must be rejected.');
-        } catch (EthereumRpcFailed $exception) {
-            self::assertSame('provider_invalid_tx_hash', $exception->reason);
-        }
-    }
-
-    public function testBroadcastFailureLogDoesNotContainRawTransaction(): void
-    {
-        $logFile = tempnam(sys_get_temp_dir(), 'ethereum-log-');
-        self::assertIsString($logFile);
-        $oldLog = \ini_get('error_log');
-        ini_set('error_log', $logFile);
-
-        try {
-            $transport = new QueueEthereumTransport([
-                self::rpcResult('0x1'),
-                self::rpcError(-32000),
-            ]);
-            $rawTransaction = '0x02'.str_repeat('ab', 64);
-
-            try {
-                self::client($transport)->broadcast($rawTransaction);
-                self::fail('Provider broadcast error must be explicit.');
-            } catch (EthereumRpcFailed $exception) {
-                self::assertSame('broadcast_failed', $exception->reason);
-            }
-
-            $log = file_get_contents($logFile);
-            self::assertIsString($log);
-            self::assertStringNotContainsString($rawTransaction, $log);
-            self::assertStringContainsString('broadcast', $log);
-        } finally {
-            ini_set('error_log', false === $oldLog ? '' : $oldLog);
-            @unlink($logFile);
-        }
-    }
-
     private static function client(QueueEthereumTransport $transport): EthereumJsonRpcClient
     {
         return new EthereumJsonRpcClient(

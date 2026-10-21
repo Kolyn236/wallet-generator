@@ -14,6 +14,8 @@ import {
 import { getHealth } from './api';
 import { type Language, messages } from './i18n';
 import { platformCopy } from './platformCopy';
+import { UsdtRouteChooser } from './UsdtRouteChooser';
+import './usdtRoutes.css';
 import { adapterRegistry } from './runtime/adapterRegistry';
 import {
   createAssetRouteBalances,
@@ -145,9 +147,9 @@ export function App() {
   }
 
   function selectRoute(nextRouteId: AssetRouteId) {
+    if (!getAssetRoutes(assetId).some((candidate) => candidate.id === nextRouteId)) return;
     setRouteId(nextRouteId);
-    setAddressError(null);
-    setMnemonicError(null);
+    resetWalletUi();
   }
 
   async function refreshBalance(nextRouteId: AssetRouteId, address: string): Promise<boolean> {
@@ -447,13 +449,15 @@ export function App() {
               )}
             </section>
 
-            <section className="network-card">
+            {assetId === 'usdt' ? (
+              <UsdtRouteChooser language={language} selectedRoute={route.id} sessions={sessions} balances={routeBalances} onSelect={selectRoute} />
+            ) : <section className="network-card">
               <div><span className="muted-label">{copy.route}</span><h3>{network.name}</h3><p>{copy.routeHint}</p></div>
               <label className="network-select"><span>{copy.network}</span><select value={route.id} onChange={(event) => selectRoute(event.target.value as AssetRouteId)}>{routes.map((candidateRoute) => {
                 const candidateNetwork = getNetwork(candidateRoute.networkId);
                 return <option key={candidateRoute.id} value={candidateRoute.id}>{candidateNetwork.name} · {candidateRoute.standard}</option>;
               })}</select></label>
-            </section>
+            </section>}
           </div>
         </section>
 

@@ -2,13 +2,15 @@
 
 The backend is the supported Symfony 7.4 LTS / PHP 8.4 blockchain API gateway for ChainCourier.
 
-It is intentionally non-custodial: wallet creation and transaction signing stay in the browser. Symfony receives public chain data requests and already-signed raw transactions only.
+Wallet creation and transaction signing stay in browser memory. Symfony receives public state queries and unsigned public intent only, never signed transactions for publication. It exposes no broadcast API; browser direct/custom endpoints or explicit signed-payload export own publication.
 
 Current backend chain registrations:
 
 - `dogecoin:mainnet`;
 - `bitcoin:mainnet`;
-- `ethereum:mainnet`.
+- `litecoin:mainnet`;
+- `ethereum:mainnet`;
+- `tron:mainnet`.
 
 Chain behavior is exposed through capability-specific adapters. UTXO and EVM behavior are intentionally not forced into one universal blockchain interface.
 
@@ -54,9 +56,12 @@ The backend reads operator configuration from environment variables, including:
 DOGE_RECOMMENDED_FEE_RATE=0.01
 BTC_RECOMMENDED_FEE_RATE=0.00010000
 ETHEREUM_RPC_URL=
+TRON_RPC_URL=
 ```
 
 `ETHEREUM_RPC_URL` is required only for Ethereum endpoints. Provider credentials must remain outside Git and must not be logged.
+
+`TRON_RPC_URL` enables fixed-USDT TRC-20 balance, public preparation/resource data and full/solidity status lookup. It defaults to empty. Both RPC settings are backend public-state configuration, not browser broadcast credentials. See `../docs/architecture/TRON_TRC20.md` and `../docs/SECURITY_MODEL.md`.
 
 ## Architecture
 

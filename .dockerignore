@@ -1,0 +1,14 @@
+.git
+.worktrees
+.env
+.env.*
+**/.env
+**/.env.*
+**/node_modules
+**/vendor
+frontend/dist
+backend/var
+backend/.phpunit.cache
+backend/.php-cs-fixer.cache
+*.wif
+*.tx

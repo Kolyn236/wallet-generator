@@ -28,7 +28,8 @@ jobs:
           tools: composer:v2
 
       - name: Assert patched PHP runtime
-        run: php -r 'exit(version_compare(PHP_VERSION, "8.4.27", ">=") ? 0 : 1);'
+        run: |
+          php -r 'exit(version_compare(PHP_VERSION, "8.4.27", ">=") ? 0 : 1);'
 
       - name: Lint PHP syntax
         working-directory: backend

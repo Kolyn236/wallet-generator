@@ -1,6 +1,6 @@
 FROM composer:2.8 AS composer
 
-FROM php:8.4-fpm-alpine
+FROM php:8.4.27-fpm-alpine
 
 RUN docker-php-ext-install opcache
 

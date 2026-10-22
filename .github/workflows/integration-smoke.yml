@@ -60,7 +60,8 @@ jobs:
           trap 'docker compose down -v; rm -f .env' EXIT
 
           for attempt in $(seq 1 30); do
-            if docker compose exec -T --user www-data php sh -c 'test -w var/cache && test -w var/log' \
+            if docker compose exec -T php php -r 'exit(version_compare(PHP_VERSION, "8.4.27", ">=") ? 0 : 1);' \
+              && docker compose exec -T --user www-data php sh -c 'test -w var/cache && test -w var/log' \
               && docker compose exec -T php php bin/console debug:router api_dogecoin_fee_policy >/dev/null 2>&1 \
               && docker compose exec -T php php bin/console debug:router api_bitcoin_fee_policy >/dev/null 2>&1 \
               && docker compose exec -T php php bin/console debug:router api_ethereum_balance >/dev/null 2>&1 \

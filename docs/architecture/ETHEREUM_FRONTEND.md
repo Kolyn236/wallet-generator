@@ -26,7 +26,50 @@ The live native route is:
 eth-ethereum-mainnet-native
 ```
 
-It owns native ETH balance loading and transfer behavior. Future ERC-20 routes may share the same `ethereum-mainnet` wallet identity but must have independent asset-route adapters and balances.
+It owns native ETH balance loading and transfer behavior. USDT ERC-20 shares the same `ethereum-mainnet` wallet identity with an independent asset-route adapter and balance.
+
+## End-to-end transaction flow
+
+Native ETH and ERC-20 token transfers share the same EIP-1559 signing engine.
+
+```text
+Browser public intent
+from / to / valueWei / data
+        |
+        v
+Symfony -> Ethereum Mainnet JSON-RPC
+        |
+        +--> verify chainId = 1
+        +--> sender native ETH balance
+        +--> pending nonce
+        +--> eth_estimateGas
+        +--> eth_feeHistory
+        |
+        v
+public preparation snapshot
+        |
+        v
+Browser
+verify private key <-> sender
+verify returned intent exactly
+sign Type-2 transaction locally
+calculate local transaction hash
+        |
+        v
+human-readable review
+        |
+        v
+explicit broadcast
+        |
+        v
+Browser -> selected direct RPC -> eth_sendRawTransaction
+        |
+        v
+compare provider hash with local hash
+```
+
+
+See the [backend contract](ETHEREUM_BACKEND.md) for public preparation and fee policy, and [USDT ERC-20](USDT_ERC20.md) for token intent and balance checks.
 
 ## Transfer preparation
 
@@ -64,11 +107,11 @@ Native ETH transfers use EIP-1559 Type-2 envelopes:
 ])
 ```
 
-Current scope is:
+The shared native ETH / ERC-20 signing engine uses:
 
 - chain ID `1`;
-- native ETH only;
-- `data = 0x`;
+- recipient `to`, native `valueWei` and `data = 0x` for native ETH;
+- fixed token-contract `to`, `valueWei = 0` and locally encoded transfer calldata for USDT ERC-20;
 - empty access list;
 - low-S secp256k1 ECDSA;
 - EIP-1559 fee values supplied by the backend preparation snapshot.
@@ -91,7 +134,15 @@ The UI reviews:
 - maximum total debit (`valueWei + maximum network fee`);
 - local transaction hash.
 
-The conservative maximum-fee balance check must pass before signing.
+EVM quantities cross backend Application/HTTP boundaries as canonical decimal strings. Browser arithmetic uses `bigint`; wei/gas/nonce/fee/token-unit values never pass through JavaScript `number` or PHP floating point.
+
+The conservative native ETH balance check must pass before signing:
+
+```text
+valueWei + gasLimit * maxFeePerGas <= sender ETH balance
+```
+
+USDT checks token balance and native ETH gas capacity independently; see [USDT ERC-20](USDT_ERC20.md).
 
 ## Broadcast
 

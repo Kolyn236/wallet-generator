@@ -2,6 +2,40 @@
 
 The platform treats UTXO as a chain family, not as one universal blockchain implementation. New Bitcoin-like legacy P2PKH networks reuse cryptographic/serialization primitives through explicit network profiles while keeping chain/network adapters separate and fail-closed.
 
+## DOGE / BTC transfer flow
+
+DOGE and BTC are UTXO integrations and keep chain-specific address/WIF/serialization rules isolated.
+
+```text
+Sender + matching WIF
+        |
+        v
+Recipient + amount + fee rate
+        |
+        v
+Symfony -> confirmed UTXOs
+        |
+        v
+Browser -> verify key/address + UTXO scripts
+        |
+        v
+Browser -> coin selection + local P2PKH signing
+        |
+        v
+Review amount / fee / change / local TXID
+        |
+        v
+Explicit broadcast
+        |
+        v
+Browser -> user-selected provider, or signed-payload export
+```
+
+Amounts use integer smallest units internally (`koinu` / `satoshi`). DOGE/BTC spend confirmed UTXOs only. The browser calculates the local TXID and verifies the provider-returned TXID.
+
+Bitcoin source and change outputs remain legacy P2PKH in the current runtime. BTC recipient outputs accept legacy P2PKH and native SegWit P2WPKH (`bc1q...`) addresses. P2WPKH source wallets/signing are not implemented yet.
+
+
 ## Browser profile
 
 A new legacy P2PKH network defines a `UtxoP2pkhProfile` with:

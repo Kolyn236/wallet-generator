@@ -100,6 +100,22 @@ watch-only
 
 `local-signing` intentionally covers both locally generated wallets and wallets recovered from a mnemonic. Signing capability, rather than how the key was obtained, is the session-level distinction.
 
+## Wallet derivation
+
+Locally created wallets use BIP39 mnemonics and BIP44 derivation:
+
+```text
+DOGE  m/44'/3'/0'/0/0
+BTC   m/44'/0'/0'/0/0
+LTC   m/44'/2'/0'/0/0
+ETH   m/44'/60'/0'/0/0
+TRON  m/44'/195'/0'/0/0
+USDT  Ethereum identity for ERC-20; separate TRON identity for TRC-20
+```
+
+DOGE/BTC/LTC expose WIF signing material for their legacy P2PKH runtime. Ethereum and TRON routes use browser-local secp256k1 private keys. All signing material remains in the active browser session only.
+
+
 ## Browser signing material
 
 The generic `BrowserSigningWallet` contract discriminates signing material explicitly:
